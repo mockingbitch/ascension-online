@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(make help)",
+      "Bash(make test)",
+      "Bash(make test-go)",
+      "Bash(make test-web)",
+      "Bash(make lint)",
+      "Bash(make check)",
+      "Bash(make sqlc)",
+      "Bash(make content-check)",
+      "Bash(make fmt)",
+      "Bash(go test:*)",
+      "Bash(go vet:*)",
+      "Bash(go build:*)",
+      "Bash(go run ./cmd/balancesim:*)",
+      "Bash(gofmt:*)",
+      "Bash(npm run check)",
+      "Bash(npm run build)",
+      "Bash(npm test)",
+      "Bash(docker compose -f deployments/docker-compose.yml ps:*)",
+      "Bash(docker compose -f deployments/docker-compose.yml logs:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Edit(services/game/internal/db/**)",
+      "Write(services/game/internal/db/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/format.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

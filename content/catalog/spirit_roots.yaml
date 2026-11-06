@@ -1,0 +1,11 @@
+# Spirit roots (P1). rate_bonus_bp is applied to base cultivation rate, capped by design.
+# Rare roots must not be mandatory for competitive viability (GDD §4.3).
+version: 1
+roots:
+  - { id: kim,       name: Kim Linh Căn,   element: kim,  rate_bonus_bp: 0 }
+  - { id: moc,       name: Mộc Linh Căn,   element: moc,  rate_bonus_bp: 0 }
+  - { id: thuy,      name: Thủy Linh Căn,  element: thuy, rate_bonus_bp: 0 }
+  - { id: hoa,       name: Hỏa Linh Căn,   element: hoa,  rate_bonus_bp: 0 }
+  - { id: tho,       name: Thổ Linh Căn,   element: tho,  rate_bonus_bp: 0 }
+  - { id: song_linh, name: Song Linh Căn,  element: dual, rate_bonus_bp: 500 }
+  - { id: di_linh,   name: Dị Linh Căn,    element: rare, rate_bonus_bp: 1000 }

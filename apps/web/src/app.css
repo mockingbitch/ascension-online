@@ -1,0 +1,188 @@
+/*
+ * Tiên Đạo design system — tokens + base materials.
+ * Source of truth for colour/typography/motion. See .claude/rules/graphic-design.md.
+ * Components must use these tokens (Tailwind utilities or var(--…)); no raw hex in components.
+ */
+@import 'tailwindcss';
+
+@theme {
+	/* Typography */
+	--font-display: 'Cormorant Garamond', 'Noto Serif', serif; /* tiêu đề, tên cảnh giới */
+	--font-sans: 'Be Vietnam Pro', system-ui, sans-serif; /* UI, số liệu */
+
+	/* Base palette — "Ngọc bích & Cổ kim": deep jade surfaces, antique gold, warm ivory text.
+	   ink-* = surfaces (midnight → dark emerald), mist-* = text (warm ivory scale). */
+	--color-ink-950: #0a0f10;
+	--color-ink-900: #101416; /* midnight */
+	--color-ink-850: #0f201e;
+	--color-ink-800: #102b28; /* deep jade */
+	--color-ink-700: #153c35; /* dark emerald */
+	--color-ink-600: #24524a;
+	--color-mist-100: #e9e1cf; /* warm ivory */
+	--color-mist-300: #c3baa5;
+	--color-mist-500: #958d7b;
+
+	--color-jade-300: #8fd6c0;
+	--color-jade-500: #3a9c84;
+	--color-jade-700: #1e6b5b;
+	--color-gold-300: #e8d19a; /* light gold */
+	--color-gold-500: #c9a45c; /* antique gold */
+	--color-gold-700: #8c6c34;
+	--color-cinnabar-300: #e08a83; /* failure text (readable on ink) */
+	--color-cinnabar-500: #b94a48; /* thất bại, cảnh báo */
+	--color-spirit-cyan: #65c9d1; /* mystical effects */
+	--color-spirit-violet: #9b82d5; /* rare / arcane */
+	--color-silver-300: #cfd6d2; /* rank 2 */
+	--color-bronze-500: #b07a4f; /* rank 3 */
+
+	/* Motion */
+	--ease-qi: cubic-bezier(0.22, 1, 0.36, 1);
+	--animate-qi-breathe: qi-breathe 4s var(--ease-qi) infinite;
+
+	@keyframes qi-breathe {
+		0%, 100% { opacity: 0.55; transform: scale(1); }
+		50% { opacity: 1; transform: scale(1.04); }
+	}
+}
+
+/* Referenced dynamically (var(--color-aura-{aura})) so Tailwind can't see them: always emit. */
+@theme static {
+	/* Realm auras — keyed by realms.yaml visual.aura */
+	--color-aura-none: #a39c8a;
+	--color-aura-mist: #b4cdd6;
+	--color-aura-jade: #5cc7a4;
+	--color-aura-golden: #e3bf6a;
+	--color-aura-azure: #65a9e3;
+	--color-aura-violet: #9b82d5;
+	--color-aura-void: #7d8bb0;
+	--color-aura-crimson: #d0605a;
+	--color-aura-radiant: #f1e2a8;
+	--color-aura-thunder: #65c9d1;
+	--color-aura-celestial: #fbf7ec;
+	--color-aura-earth: #c49a62;
+	--color-aura-aureate: #f2c14e;
+	--color-aura-primal: #c48fe0;
+	--color-aura-chaos: #e8956f;
+	--color-aura-saint: #fff1c7;
+	--color-aura-blood: #c2443d;
+
+	/* Item rarity — keyed by items.yaml rarity */
+	--color-rarity-pham: #c3baa5;
+	--color-rarity-linh: #5cc7a4;
+	--color-rarity-huyen: #65a9e3;
+	--color-rarity-dia: #9b82d5;
+	--color-rarity-thien: #e3bf6a;
+	--color-rarity-tien: #e9876a;
+}
+
+@layer base {
+	html {
+		color-scheme: dark;
+	}
+	body {
+		@apply min-h-dvh bg-ink-950 font-sans text-mist-100 antialiased;
+	}
+	h1, h2, h3 {
+		@apply font-display font-semibold tracking-wide;
+	}
+	:focus-visible {
+		@apply outline-2 outline-offset-2 outline-gold-500;
+	}
+}
+
+@layer components {
+	/* Carved jade panel: dark emerald slab, faint paper grain, gold hairline with ornamental corners. */
+	.panel {
+		position: relative;
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
+		border-radius: 3px;
+		background:
+			var(--grain),
+			linear-gradient(180deg, color-mix(in oklab, var(--color-ink-800) 88%, transparent), color-mix(in oklab, var(--color-ink-900) 92%, transparent));
+		box-shadow:
+			inset 0 1px 0 color-mix(in oklab, var(--color-gold-300) 8%, transparent),
+			0 18px 40px -24px var(--color-ink-950);
+	}
+	.panel::before {
+		/* four L-shaped gold corner brackets drawn with gradients — no extra DOM */
+		content: '';
+		position: absolute;
+		inset: -1px;
+		pointer-events: none;
+		--c: var(--color-gold-500);
+		--l: 14px;
+		background:
+			linear-gradient(var(--c), var(--c)) top left / var(--l) 1px,
+			linear-gradient(var(--c), var(--c)) top left / 1px var(--l),
+			linear-gradient(var(--c), var(--c)) top right / var(--l) 1px,
+			linear-gradient(var(--c), var(--c)) top right / 1px var(--l),
+			linear-gradient(var(--c), var(--c)) bottom left / var(--l) 1px,
+			linear-gradient(var(--c), var(--c)) bottom left / 1px var(--l),
+			linear-gradient(var(--c), var(--c)) bottom right / var(--l) 1px,
+			linear-gradient(var(--c), var(--c)) bottom right / 1px var(--l);
+		background-repeat: no-repeat;
+		opacity: 0.85;
+	}
+
+	/* Section heading: serif title flanked by a fading gold rule. */
+	.panel-title {
+		@apply flex items-center gap-3 font-display text-xl font-semibold text-gold-300;
+	}
+	.panel-title::after {
+		content: '';
+		flex: 1;
+		height: 1px;
+		background: linear-gradient(90deg, color-mix(in oklab, var(--color-gold-500) 45%, transparent), transparent);
+	}
+
+	/* Buttons: jade = act / progress, gold seal = breakthrough & prestige. */
+	.btn {
+		@apply inline-flex h-11 items-center justify-center gap-2 px-5 font-semibold tracking-wide transition
+			duration-200 disabled:cursor-not-allowed disabled:opacity-45;
+		border-radius: 2px;
+	}
+	.btn-jade {
+		@apply text-mist-100;
+		border: 1px solid color-mix(in oklab, var(--color-jade-300) 35%, transparent);
+		background: linear-gradient(180deg, var(--color-jade-500), var(--color-jade-700));
+		box-shadow: inset 0 1px 0 color-mix(in oklab, var(--color-jade-300) 35%, transparent);
+	}
+	.btn-jade:not(:disabled):hover {
+		filter: brightness(1.12);
+	}
+	.btn-gold {
+		@apply text-ink-950;
+		border: 1px solid var(--color-gold-300);
+		background: linear-gradient(180deg, var(--color-gold-300), var(--color-gold-500) 55%, var(--color-gold-700));
+		box-shadow: inset 0 1px 0 color-mix(in oklab, white 35%, transparent);
+	}
+	.btn-gold:not(:disabled):hover {
+		filter: brightness(1.08);
+	}
+	.btn-ghost {
+		@apply h-10 px-4 text-sm text-gold-300;
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 40%, transparent);
+		background: color-mix(in oklab, var(--color-ink-950) 40%, transparent);
+	}
+	.btn-ghost:not(:disabled):hover {
+		background: color-mix(in oklab, var(--color-gold-500) 12%, transparent);
+	}
+
+	/* Small caps label above values */
+	.eyebrow {
+		@apply text-xs font-medium tracking-[0.18em] text-mist-500 uppercase;
+	}
+}
+
+:root {
+	/* Subtle paper grain (alpha-only noise, colour-neutral). */
+	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

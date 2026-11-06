@@ -1,0 +1,19 @@
+# Server story clock (decisions 2026-11-06 "Phase 0" #4 + "bổ sung" B, H). Loaded by internal/world.
+# Reference: docs/design/data-model-the-gioi-chung.md §5.
+#
+# Phase 1 ships only `settings` (used by the worker's per-day totals and day close / server median).
+# Eras and milestones land in Phase 2 (factions, milestone effects); the loader accepts empty lists until then.
+version: 1
+
+settings:
+  progress_mode: per_active_capita        # only mode supported
+  world_credit_cap_points: 100            # per character per game day, toward world progress only
+  exclude_catch_up_bonus: true            # ×2 portion never counts (the grant never reaches daily_contribution)
+  reference_points_per_active_day: 67     # a_ref; default threshold = target_day × a_ref (re-measure in beta)
+  min_pct_bp: 7000                        # never before 70% of target day
+  max_pct_bp: 15000                       # always by 150% of target day
+  day_close_grace_seconds: 300            # a game day is closed 5 min after midnight (late commits)
+  median_window_days: 7                   # server median over characters with points in the last N game days
+
+eras: []
+milestones: []

@@ -1,0 +1,31 @@
+# VIP ladder — permanent level from cumulative VIP points (1 point per top-up of point_value_vnd).
+#
+# FAIRNESS (GDD §10, .claude/rules/economy-balance.md):
+#   VIP never multiplies cultivation rate, never changes breakthrough odds, never adds ranking points.
+#   Nobody can bank more than 24h of cultivation per day → VIP lowers how often you must log in,
+#   it does not raise the progression ceiling. Caps above 24h only help players who skip a day.
+#
+# perks: NEW perks unlocked at this tier (cumulative upward). Allowed keys (loader-enforced):
+#   title:<id> · avatar_frame:<id> · chat_aura:<id> · cave_decoration:<id> · breakthrough_fx:<id>
+#   alchemy_slot (stackable, +1 each) · garden_auto_harvest
+# daily_gift: spirit stones claimable per day at this tier (absolute, not cumulative). Budget: VIP12 gift
+#   ≤ ~15% of an active free player's daily spirit-stone income (verify in balance-sim when income exists).
+version: 2
+point_value_vnd: 1000          # PLACEHOLDER pricing — business decision
+hard_max_offline_cap_hours: 36
+daily_cultivation_ceiling_hours: 24
+
+tiers:
+  - { tier: 0,  name: Tán Tu, points_required: 0,     offline_cap_hours: 8,  daily_gift: 0,   perks: [] }
+  - { tier: 1,  name: VIP 1,  points_required: 10,    offline_cap_hours: 10, daily_gift: 0,   perks: ["title:vip_1"] }
+  - { tier: 2,  name: VIP 2,  points_required: 50,    offline_cap_hours: 12, daily_gift: 50,  perks: ["title:vip_2"] }
+  - { tier: 3,  name: VIP 3,  points_required: 100,   offline_cap_hours: 14, daily_gift: 50,  perks: ["title:vip_3", "avatar_frame:ngoc", alchemy_slot] }
+  - { tier: 4,  name: VIP 4,  points_required: 200,   offline_cap_hours: 16, daily_gift: 50,  perks: ["title:vip_4", garden_auto_harvest] }
+  - { tier: 5,  name: VIP 5,  points_required: 500,   offline_cap_hours: 18, daily_gift: 100, perks: ["title:vip_5", "chat_aura:linh_quang"] }
+  - { tier: 6,  name: VIP 6,  points_required: 1000,  offline_cap_hours: 20, daily_gift: 100, perks: ["title:vip_6", "avatar_frame:kim", alchemy_slot] }
+  - { tier: 7,  name: VIP 7,  points_required: 2000,  offline_cap_hours: 22, daily_gift: 100, perks: ["title:vip_7", "cave_decoration:van_hac"] }
+  - { tier: 8,  name: VIP 8,  points_required: 5000,  offline_cap_hours: 24, daily_gift: 200, perks: ["title:vip_8"] }
+  - { tier: 9,  name: VIP 9,  points_required: 10000, offline_cap_hours: 26, daily_gift: 200, perks: ["title:vip_9", "avatar_frame:thien", alchemy_slot] }
+  - { tier: 10, name: VIP 10, points_required: 20000, offline_cap_hours: 28, daily_gift: 200, perks: ["title:vip_10", "chat_aura:tu_quang"] }
+  - { tier: 11, name: VIP 11, points_required: 35000, offline_cap_hours: 30, daily_gift: 300, perks: ["title:vip_11"] }
+  - { tier: 12, name: VIP 12, points_required: 50000, offline_cap_hours: 32, daily_gift: 300, perks: ["title:chi_ton", "breakthrough_fx:chi_ton"] }

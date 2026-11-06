@@ -1,0 +1,11 @@
+.env
+!.env.example
+node_modules/
+.svelte-kit/
+build/
+dist/
+bin/
+coverage.out
+.DS_Store
+.claude/settings.local.json
+graphify-out/

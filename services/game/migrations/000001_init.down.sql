@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS admin_audit_logs;
+DROP TABLE IF EXISTS outbox_events;
+DROP TABLE IF EXISTS inventory_transactions;
+DROP TABLE IF EXISTS inventory_items;
+DROP TABLE IF EXISTS currency_ledger;
+DROP TABLE IF EXISTS currency_accounts;
+DROP TABLE IF EXISTS vip_entitlements;
+DROP TABLE IF EXISTS progression_events;
+DROP TABLE IF EXISTS breakthrough_attempts;
+DROP TABLE IF EXISTS cultivation_settlements;
+DROP TABLE IF EXISTS character_progressions;
+DROP TABLE IF EXISTS characters;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS users;

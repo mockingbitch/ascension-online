@@ -1,0 +1,71 @@
+# Local/dev stack (GDD §25). Run `make up` from the repo root; app at http://localhost:8000
+name: tiendao
+
+x-game-env: &game-env
+  APP_ENV: dev
+  DATABASE_URL: postgres://tiendao:tiendao@postgres:5432/tiendao?sslmode=disable
+  REDIS_URL: redis://redis:6379/0
+  CONTENT_DIR: /app/content/catalog
+  STORY_DIR: /app/content/story
+  AUTH_DEV_HEADER: "true"
+  TRUST_PROXY: "true"                       # behind our Nginx
+  PUBLIC_BASE_URL: http://localhost:8000
+  GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}   # from repo-root .env (compose --env-file)
+  GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+  JWT_SECRET: ${JWT_SECRET:-}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tiendao
+      POSTGRES_PASSWORD: tiendao
+      POSTGRES_DB: tiendao
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tiendao"]
+      interval: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "no", "--maxmemory-policy", "allkeys-lru"]
+    ports: ["6379:6379"]
+
+  migrate:
+    image: migrate/migrate:v4.18.1
+    depends_on: { postgres: { condition: service_healthy } }
+    volumes: [../services/game/migrations:/migrations:ro]
+    command: ["-path=/migrations", "-database=postgres://tiendao:tiendao@postgres:5432/tiendao?sslmode=disable", "up"]
+
+  api:
+    build: { context: .., dockerfile: deployments/game.Dockerfile }
+    command: ["/app/api"]
+    environment: *game-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_started }
+    ports: ["8080:8080"]
+
+  worker:
+    build: { context: .., dockerfile: deployments/game.Dockerfile }
+    command: ["/app/worker"]
+    environment: *game-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  web:
+    build: { context: ../apps/web, dockerfile: ../../deployments/web.Dockerfile }
+    environment:
+      ORIGIN: http://localhost:8000
+    depends_on: [api]
+
+  nginx:
+    image: nginx:1.27-alpine
+    volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
+    ports: ["8000:80"]
+    depends_on: [web, api]
+
+volumes:
+  pgdata:

@@ -1,0 +1,30 @@
+# Item definitions. IDs are stable slugs referenced by DB (inventory_items.item_id) and realms.yaml.
+# category: pill | herb | material | fragment | currency_bundle | cosmetic
+# rarity:   pham | linh | huyen | dia | thien | tien   (maps to design tokens --rarity-*)
+version: 1
+items:
+  - id: truc_co_dan
+    name: Trúc Cơ Đan
+    category: pill
+    rarity: linh
+    tradable: false
+    description: Đan dược giúp tu sĩ Luyện Khí Viên Mãn đặt nền móng Trúc Cơ.
+  - id: ket_dan_qua
+    name: Kết Đan Quả
+    category: herb
+    rarity: huyen
+    tradable: false
+    description: Linh quả ngàn năm, ngưng tụ chân nguyên thành Kim Đan.
+  - id: linh_thao
+    name: Linh Thảo
+    category: herb
+    rarity: pham
+    tradable: true
+    description: Thảo dược phổ biến trong Linh Viên, nguyên liệu luyện đan cơ bản.
+  - id: tu_linh_phu
+    name: Tụ Linh Phù
+    category: consumable
+    rarity: linh
+    tradable: false
+    offline_cap_bonus_hours: 4
+    description: Lá bùa tụ linh khí quanh động phủ, kéo dài thời gian bế quan thêm 4 canh giờ trong ngày (không vượt 24 canh giờ).

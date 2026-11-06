@@ -1,0 +1,12 @@
+# World announcement templates (GDD §6.4). Placeholders: {name}, {realm}, {stage}, {rank}
+# Server picks one template at random per event. Keep ≤ 90 chars after substitution.
+version: 1
+templates:
+  major_breakthrough:
+    - "Thiên địa chấn động! {name} đã đột phá {realm}!"
+    - "Linh khí cuồn cuộn, {name} bước vào cảnh giới {realm}."
+    - "Một luồng hào quang xé mây — {name} chính thức thành tựu {realm}."
+  first_to_realm:
+    - "Thiên Bảng khắc tên: {name} là người đầu tiên đạt {realm} trong thiên hạ!"
+  rank_top10:
+    - "{name} leo lên hạng {rank} Thiên Bảng."

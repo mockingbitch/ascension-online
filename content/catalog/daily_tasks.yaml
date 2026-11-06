@@ -1,0 +1,37 @@
+# Daily tasks — reset at 00:00 game time (UTC+7, internal/gameday).
+#
+# kind:
+#   checkin               complete on first visit of the day
+#   settle                counts settlements with elapsed ≥ min_elapsed_seconds (nudges returning, not spamming)
+#   breakthrough_attempt  counts breakthrough attempts (success or failure)
+# rewards: { item_id, quantity } or { currency, amount }. Only soft currency (spirit_stone) may be rewarded.
+#
+# Tụ Linh Phù comes from the CHECK-IN task on purpose: it exists to help players who log in once a day
+# (docs/decisions.md — VIP fairness). Budget: tasks are the main spirit-stone source until the economy lands.
+version: 1
+tasks:
+  - id: diem_danh
+    name: Điểm danh
+    description: Ghé thăm động phủ hôm nay.
+    kind: checkin
+    target: 1
+    rewards:
+      - { item_id: tu_linh_phu, quantity: 1 }
+      - { currency: spirit_stone, amount: 100 }
+
+  - id: van_cong
+    name: Vận công
+    description: Thu hoạch tu vi 3 lần trong ngày, mỗi lần cách nhau ít nhất 1 canh giờ.
+    kind: settle
+    target: 3
+    min_elapsed_seconds: 3600
+    rewards:
+      - { currency: spirit_stone, amount: 150 }
+
+  - id: trung_kich
+    name: Trùng kích bình cảnh
+    description: Thử đột phá 1 lần.
+    kind: breakthrough_attempt
+    target: 1
+    rewards:
+      - { currency: spirit_stone, amount: 200 }

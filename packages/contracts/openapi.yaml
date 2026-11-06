@@ -1,0 +1,461 @@
+openapi: 3.1.0
+info:
+  title: Tiên Đạo Online API
+  version: 0.3.0
+  description: |
+    REST/JSON API (GDD §17). Server is authoritative: every mutation returns the new
+    authoritative state. Mutations require an `Idempotency-Key` header.
+servers:
+  - url: /api/v1
+paths:
+  /realms:
+    get:
+      summary: Realm catalogue
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RealmCatalogue" }
+  /vip/tiers:
+    get:
+      summary: VIP tiers and offline caps
+      responses:
+        "200": { description: OK }
+  /items:
+    get:
+      summary: Item definitions
+      responses: { "200": { description: OK } }
+  /auth/google/start:
+    get:
+      summary: Start Google sign-in (302 to Google). Sets a short-lived signed flow cookie.
+      parameters:
+        - { name: return, in: query, schema: { type: string, example: /cultivate }, description: same-origin path to return to }
+      responses: { "302": { description: Redirect to Google }, "503": { $ref: "#/components/responses/Error" } }
+  /auth/google/callback:
+    get:
+      summary: Google redirect target. Sets the refresh cookie and 302s to PUBLIC_BASE_URL + return path (or /login?error=...).
+      responses: { "302": { description: Redirect to the web app } }
+  /auth/refresh:
+    post:
+      summary: Rotate the refresh cookie and return a new in-memory access token
+      parameters:
+        - { name: X-Requested-With, in: header, required: true, schema: { type: string, enum: [tiendao] } }
+      responses:
+        "200":
+          description: Session
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Session" }
+        "401": { $ref: "#/components/responses/Error" }
+  /auth/logout:
+    post:
+      summary: Revoke the session family and clear the cookie
+      responses: { "204": { description: Signed out } }
+  /me:
+    get:
+      summary: Current account
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { $ref: "#/components/schemas/User" } } }
+  /character:
+    get:
+      summary: Character view (cultivation projected to now, read-only)
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Create the account's single character
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [name], properties: { name: { type: string, minLength: 2, maxLength: 24 } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /breakthrough/preview:
+    get:
+      summary: >-
+        Realm (major) breakthrough quote: readiness, missing requirements, disclosed odds breakdown and — for
+        tribulations — the cultivation that a failure would lose. Includes the pending idle settlement, so the shown
+        loss equals the loss the attempt would apply now.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/BreakthroughPreview" } } } }
+  /breakthrough/attempt:
+    post:
+      summary: >-
+        Attempt the realm breakthrough (items consumed on success and failure). Pre-tribulation failure keeps
+        cultivation (+pity, cooldown); a failed tribulation loses lossBp of the current stage's stored cultivation
+        (never a stage), +1 streak, 24h cooldown; guaranteed after guaranteeAfter consecutive fails.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                acceptLossMilli:
+                  type: integer
+                  format: int64
+                  minimum: 0
+                  description: >-
+                    Guard only (never used as a value): send the preview's tribulation.maxLossMilli. If the loss the
+                    server would apply exceeds it, nothing is written and the response is 409 quote_changed with a
+                    fresh preview. Required for a non-guaranteed tribulation (400 quote_required otherwise).
+      responses:
+        "200": { description: Result, content: { application/json: { schema: { $ref: "#/components/schemas/BreakthroughResult" } } } }
+        "400": { description: "invalid_body | quote_required — for quote_required error.details is a BreakthroughPreview" }
+        "409": { description: "not_ready | quote_changed — error.details is a BreakthroughPreview" }
+  /leaderboards/global:
+    get:
+      summary: Thiên Bảng page
+      parameters:
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        "200": { description: OK }
+        "503": { $ref: "#/components/responses/Error" }
+  /leaderboards/global/me:
+    get:
+      summary: Caller's rank
+      security: [{ bearer: [] }]
+      responses: { "200": { description: "{ rank, score, characterId } — rank 0 = unranked" } }
+  /vip/status:
+    get:
+      summary: Caller's VIP points, level benefits and distance to next level
+      security: [{ bearer: [] }]
+      responses: { "200": { description: OK } }
+  /admin/vip/grant:
+    post:
+      summary: "Admin: add/remove VIP points (audited, idempotent)"
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, properties: { userId: { type: string, format: uuid }, delta: { type: integer }, note: { type: string } } }
+      responses: { "200": { description: VIP status }, "403": { $ref: "#/components/responses/Error" } }
+  /admin/world/start:
+    post:
+      summary: Start the world clock (server day 0). Idempotent; audited.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: World state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  startedAt: { type: [string, "null"], format: date-time }
+                  serverDay: { type: integer }
+                  progressMilli: { type: integer, format: int64 }
+                  closedThroughDay: { type: string, format: date }
+                  medianPositionMilli: { type: integer, format: int64 }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/inventory/grant:
+    post:
+      summary: "Admin: grant items to a character (audited, idempotent)"
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { characterId: { type: string, format: uuid }, itemId: { type: string }, quantity: { type: integer, minimum: 1 }, note: { type: string } }
+      responses: { "200": { description: "{ itemId, quantity }" }, "403": { $ref: "#/components/responses/Error" } }
+  /inventory:
+    get:
+      summary: Caller's wallet and items
+      security: [{ bearer: [] }]
+      responses: { "200": { description: "{ currencies: {spirit_stone, premium}, items: [{itemId, quantity}] }" } }
+  /items/{itemId}/use:
+    post:
+      summary: Use an item. Currently offline-bonus items (tu_linh_phu) — 1/game day, no stacking.
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: itemId, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: "{ itemId, remaining, offlineBonusSeconds, replayed }" }
+        "409": { description: "no_item | bonus_active | used_today" }
+  /vip/daily-gift:
+    post:
+      summary: Claim today's VIP spirit-stone gift (once per game day, UTC+7)
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: "{ tier, amount, currency, balance, nextResetAt }" }
+        "409": { description: "no_gift | already_claimed" }
+  /tasks/daily:
+    get:
+      summary: Today's daily tasks with progress
+      security: [{ bearer: [] }]
+      responses: { "200": { description: "{ gameDay, resetsAt, tasks: [{id, name, description, kind, target, rewards, progress, complete, claimed}] }" } }
+  /tasks/daily/{taskId}/claim:
+    post:
+      summary: Claim a completed daily task (once per game day)
+      security: [{ bearer: [] }]
+      parameters: [{ name: taskId, in: path, required: true, schema: { type: string } }]
+      responses:
+        "200": { description: Task view }
+        "409": { description: "not_complete | already_claimed" }
+  /cultivation/settle:
+    post:
+      summary: >-
+        Settle accumulated idle cultivation through the single credit path (catch-up ×2, bucket caps, 150/day
+        ceiling, bình cảnh, automatic minor stages, late-join reserve release)
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Authoritative cultivation state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CultivationStatus" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+components:
+  securitySchemes:
+    bearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,64}$" }
+  responses:
+    Error:
+      description: Error envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code: { type: string, example: character_not_found }
+                  message: { type: string }
+  schemas:
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        displayName: { type: string }
+        avatarUrl: { type: string }
+        role: { type: string, enum: [player, admin] }
+    Session:
+      type: object
+      properties:
+        accessToken: { type: string }
+        expiresIn: { type: integer, description: seconds }
+        user: { $ref: "#/components/schemas/User" }
+    BucketView:
+      type: object
+      properties:
+        milli: { type: integer, format: int64 }
+        capMilli: { type: integer, format: int64 }
+    Today:
+      type: object
+      description: Points credited this game day (UTC+7). 1 point = 1000 milli.
+      properties:
+        gameDay: { type: string, format: date }
+        pointsMilli: { type: integer, format: int64 }
+        ceilingMilli: { type: integer, format: int64 }
+        buckets:
+          type: object
+          properties:
+            idle: { $ref: "#/components/schemas/BucketView" }
+            activity: { $ref: "#/components/schemas/BucketView" }
+            community: { $ref: "#/components/schemas/BucketView" }
+        speedItems: { $ref: "#/components/schemas/BucketView" }
+        catchUp:
+          type: object
+          properties:
+            active: { type: boolean }
+            multiplierBp: { type: integer }
+        resetsAt: { type: string, format: date-time }
+    CultivationSnapshot:
+      type: object
+      properties:
+        stageId: { type: string, example: luyen_hu.so_ky_2 }
+        path: { type: string, enum: [tien, vu] }
+        tier: { type: integer }
+        cultivationMilli: { type: integer, format: int64, description: stored in the current stage }
+        requiredMilli: { type: integer, format: int64 }
+        capMilli: { type: integer, format: int64, description: "> 0 only on a realm's last stage (bình cảnh)" }
+        bottleneckRoomMilli: { type: integer, format: int64 }
+        grantReserveMilli: { type: integer, format: int64 }
+        idleRateMilliPerHour: { type: integer, format: int64 }
+        offlineCapSeconds: { type: integer }
+        lastCultivatedAt: { type: string, format: date-time }
+        today: { $ref: "#/components/schemas/Today" }
+    CharacterView:
+      allOf:
+        - $ref: "#/components/schemas/CultivationSnapshot"
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            createdAt: { type: string, format: date-time }
+            realmId: { type: string }
+            failStreak: { type: integer }
+            cooldownUntil: { type: [string, "null"], format: date-time }
+            stageReachedAt: { type: string, format: date-time }
+            offlineBonusSeconds: { type: integer }
+            bonusUsedToday: { type: boolean }
+    OddsPart:
+      type: object
+      properties:
+        source: { type: string, enum: [base, pity, surplus, items, protector] }
+        bp: { type: integer }
+    BreakthroughPreview:
+      type: object
+      properties:
+        from: { type: string }
+        to: { type: string }
+        kind: { type: string, enum: [major] }
+        ready: { type: boolean }
+        settlementIncluded: { type: boolean }
+        projectedCultivationMilli: { type: integer, format: int64 }
+        successBp: { type: integer }
+        odds: { type: array, items: { $ref: "#/components/schemas/OddsPart" } }
+        cooldownSeconds: { type: integer }
+        consumes: { type: array, items: { type: object } }
+        tribulation:
+          type: object
+          properties:
+            name: { type: string }
+            guaranteed: { type: boolean }
+            failStreak: { type: integer }
+            guaranteeAfter: { type: integer }
+            lossBp: { type: integer }
+            lossMilli: { type: integer, format: int64, description: loss if attempted now (display) }
+            maxLossMilli:
+              type: integer
+              format: int64
+              description: >-
+                Guard bound to send as acceptLossMilli: the loss after realms.yaml tribulation.quote_window_seconds of
+                further idle accrual (capped by bình cảnh). ≥ lossMilli.
+            cooldownSeconds: { type: integer }
+        missing:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [cultivation, item, cooldown, final_stage] }
+              itemId: { type: string }
+              have: { type: integer, description: "cultivation: milli from the start of the realm" }
+              need: { type: integer }
+              readyAt: { type: string, format: date-time }
+    BreakthroughResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        kind: { type: string, enum: [major] }
+        from: { type: string }
+        to: { type: string }
+        successBp: { type: integer }
+        consumed: { type: [array, "null"], items: { type: object } }
+        tribulation: { type: boolean }
+        guaranteed: { type: boolean }
+        lossMilli: { type: integer, format: int64 }
+        stageId: { type: string }
+        cultivationMilli: { type: integer, format: int64 }
+        stagesAdvanced: { type: array, items: { type: string } }
+        failStreak: { type: integer }
+        cooldownUntil: { type: [string, "null"], format: date-time }
+        replayed: { type: boolean }
+    Stage:
+      type: object
+      required: [id, realmId, path, tier, name, stageOrder, stageCount, index, requiredMilli, capMilli, cumulativeBeforeMilli, breakthrough]
+      properties:
+        id: { type: string, example: luyen_khi.tang_3 }
+        realmId: { type: string }
+        path: { type: string, enum: [tien, vu] }
+        tier: { type: integer }
+        name: { type: string }
+        stageOrder: { type: integer }
+        stageCount: { type: integer }
+        index: { type: integer, description: 0-based ordinal within the path (-1 for reserved tiers) }
+        requiredMilli: { type: integer, format: int64 }
+        capMilli: { type: integer, format: int64 }
+        cumulativeBeforeMilli: { type: integer, format: int64 }
+        nextKind: { type: string, enum: [auto, major] }
+        tribulation: { type: boolean }
+        reserved: { type: boolean }
+        breakthrough:
+          type: object
+          properties:
+            successBp: { type: integer, minimum: 0, maximum: 10000 }
+            pityStepBp: { type: integer }
+            cooldownSeconds: { type: integer }
+            requirements:
+              type: [array, "null"]
+              items:
+                type: object
+                properties:
+                  itemId: { type: string }
+                  quantity: { type: integer }
+    Realm:
+      type: object
+      properties:
+        id: { type: string }
+        path: { type: string, enum: [tien, vu] }
+        tier: { type: integer }
+        name: { type: string }
+        namePlaceholder: { type: boolean }
+        title: { type: string }
+        reserved: { type: boolean }
+        visual:
+          type: object
+          properties:
+            badge: { type: string }
+            aura: { type: string }
+        stages: { type: array, items: { $ref: "#/components/schemas/Stage" } }
+    RealmCatalogue:
+      type: object
+      properties:
+        version: { type: integer }
+        settings:
+          type: object
+          properties:
+            overflowCapBp: { type: integer }
+            pityMaxBonusBp: { type: integer }
+        paths:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              default: { type: boolean }
+              namePlaceholder: { type: boolean }
+        tribulation: { type: object, description: "realms.yaml tribulation block (camelCase)" }
+        realms: { type: array, items: { $ref: "#/components/schemas/Realm" } }
+    CultivationStatus:
+      allOf:
+        - $ref: "#/components/schemas/CultivationSnapshot"
+        - type: object
+          properties:
+            earnedMilli: { type: integer, format: int64, description: credited by this settlement }
+            rawMilli: { type: integer, format: int64, description: idle amount before caps }
+            stagesAdvanced: { type: array, items: { type: string } }
+            hitOfflineCap: { type: boolean }
+            hitDailyCap: { type: boolean }
+            hitBottleneck: { type: boolean }
+            replayed: { type: boolean }

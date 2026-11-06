@@ -1,0 +1,44 @@
+# Daily points pacing (D5 + decisions 2026-11-06 "Phase 0" #1, #5, #6, #8). Loaded by internal/contribution.
+# Reference: docs/design/data-model-the-gioi-chung.md §4 · Balance: `make balance`.
+#
+# Every source of tu vi goes through ONE credit path (cultivation.CreditLocked):
+#   raw → ×catch-up (before the ceiling) → bucket cap + daily ceiling → bình cảnh room → auto-advance minor stages.
+# Units: *_points whole points (1 point = 1000 milli), *_bp basis points, rate in milli per hour.
+version: 1
+
+daily_ceiling_points: 150             # per character per game day (UTC+7), all buckets together
+
+buckets:                              # decision #8: caps kept
+  idle:      { target_points: 50, daily_cap_points: 75 }
+  activity:  { target_points: 30, daily_cap_points: 45 }   # lectures, tasks, ritual, fortune, trial, speed items
+  community: { target_points: 20, daily_cap_points: 30 }   # faction merit, hộ pháp, song tu, shared room
+
+idle:
+  rate_milli_per_hour: 2083           # 50 points / 24 h of eligible time; window = Tiên Duyên offline cap (8 h at 0)
+
+speed_items:                          # decision #5
+  daily_cap_points: 10                # Σ instant points from speed items used per character per game day
+
+catch_up:                             # late joiner ×2, applied BEFORE the ceiling
+  multiplier_bp: 20000
+  until: server_median                # eligible while ladder position < world_state.median_position_milli
+  min_server_day: 3
+  applies_to: [idle, activity, community]
+
+late_join_grant:                      # decision #6
+  after_server_day: 14                # characters created on server day > 14
+  median_share_bp: 5000               # one-time grant = 50% of the server median ladder position
+  per_account: 1                      # one grant per Google account, ever
+
+sources:                              # bucket mapping (amounts live in the owning catalogue)
+  settle:           { bucket: idle }
+  lecture:          { bucket: activity }
+  daily_task:       { bucket: activity }
+  ritual:           { bucket: activity }
+  fortune:          { bucket: activity }
+  trial:            { bucket: activity }
+  item:             { bucket: activity }
+  faction:          { bucket: community }
+  protector:        { bucket: community }
+  dual_cultivation: { bucket: community }
+  event:            { bucket: community }
