@@ -67,7 +67,7 @@ VIP hiển thị là Tiên Duyên 12 cấp; chỉ đăng nhập Google; chính s
 
 - **Skills** (`.claude/skills/`): `new-migration`, `add-endpoint`, `game-transaction`, `content-catalog`,
   `data-structure-design`, `balance-sim`, `story-creator`, `graphic-design`.
-- **Agents** (`.claude/agents/`): `data-architect`, `db-architect`, `graphic-designer`, `story-creator`,
+- **Agents** (`.claude/agents/`): `data-architect`, `db-architect`, `graphic-designer`, `art-generator`, `story-creator`,
   `game-balancer`, `anti-cheat-reviewer`.
 - Hook: Go files are `gofmt`-ed after every edit.
 
