@@ -1,12 +1,20 @@
-// Read-only WebSocket for world announcements. Reconnects with capped exponential backoff + jitter.
-import type { Announcement } from '$lib/game/types';
+// Receive-only WebSocket: world announcements + chat. Reconnects with capped exponential backoff + jitter.
+// Delivery is at-most-once, so every (re)connect backfills chat from REST (merged by id).
+import { loadChat, onChatHidden, onChatMessage } from '$lib/game/chat.svelte';
+import type { Announcement, ChatEvent } from '$lib/game/types';
 
 export const feed = $state<{ items: Announcement[]; connected: boolean }>({ items: [], connected: false });
 
 const MAX_ITEMS = 5;
 let started = false;
+let chatEnabled = false;
 
-export function startRealtime() {
+/** Start the socket. `withChat` (game shell, signed in) also backfills chat history on every (re)connect. */
+export function startRealtime(withChat = false) {
+	if (withChat && !chatEnabled) {
+		chatEnabled = true;
+		if (feed.connected) void loadChat();
+	}
 	if (started || typeof window === 'undefined') return;
 	started = true;
 	let attempt = 0;
@@ -16,14 +24,25 @@ export function startRealtime() {
 		ws.onopen = () => {
 			attempt = 0;
 			feed.connected = true;
+			if (chatEnabled) void loadChat();
 		};
 		ws.onmessage = (e) => {
+			let msg: Announcement | ChatEvent;
 			try {
-				const msg = JSON.parse(e.data) as Announcement;
-				if (msg.type !== 'announcement.major_breakthrough' || feed.items.some((m) => m.id === msg.id)) return;
-				feed.items = [msg, ...feed.items].slice(0, MAX_ITEMS);
+				msg = JSON.parse(e.data);
 			} catch {
-				/* ignore malformed frames */
+				return; // ignore malformed frames
+			}
+			switch (msg.type) {
+				case 'announcement.major_breakthrough':
+					if (!feed.items.some((m) => m.id === msg.id)) feed.items = [msg, ...feed.items].slice(0, MAX_ITEMS);
+					break;
+				case 'chat.message':
+					if (chatEnabled) onChatMessage(msg.data);
+					break;
+				case 'chat.hidden':
+					onChatHidden(msg.data.id);
+					break;
 			}
 		};
 		ws.onclose = () => {

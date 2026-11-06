@@ -13,7 +13,7 @@
 		try {
 			await api.createCharacter(name);
 			await invalidateAll();
-			await goto('/cultivate');
+			await goto('/play');
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'Không tạo được nhân vật';
 		} finally {
@@ -29,6 +29,9 @@
 		<h1 class="text-4xl font-bold text-gold-300">Lập Đạo Hiệu</h1>
 		<p class="mt-2 text-sm text-mist-300">
 			Mỗi tài khoản có một nhân vật. Đạo hiệu sẽ được khắc trên Thiên Bảng — chọn kỹ nhé.
+		</p>
+		<p class="mt-2 text-xs text-mist-500">
+			Không dùng từ tục tĩu, không giả danh ban quản trị, nhân vật cốt truyện hay nhân vật tín ngưỡng. Đạo hiệu vi phạm có thể bị đổi.
 		</p>
 	</div>
 	<label class="block">

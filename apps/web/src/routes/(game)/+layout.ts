@@ -18,6 +18,6 @@ export const load: LayoutLoad = async ({ fetch, url }) => {
 		if (!(e instanceof ApiError && e.status === 404)) throw e;
 	}
 	if (!character && url.pathname !== '/create') redirect(307, '/create');
-	if (character && url.pathname === '/create') redirect(307, '/cultivate');
+	if (character && url.pathname === '/create') redirect(307, '/play');
 	return { catalogue: new CatalogueIndex(cat, items.items), character };
 };

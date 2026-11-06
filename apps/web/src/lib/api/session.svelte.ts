@@ -48,7 +48,7 @@ export async function ensureSession(f: typeof fetch = fetch): Promise<boolean> {
 	return refreshSession(f);
 }
 
-export function googleLoginUrl(returnTo = '/cultivate'): string {
+export function googleLoginUrl(returnTo = '/play'): string {
 	return `/api/v1/auth/google/start?return=${encodeURIComponent(returnTo)}`;
 }
 

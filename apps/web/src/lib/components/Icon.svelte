@@ -22,6 +22,12 @@
 		// Seal (VIP)
 		seal: 'M12 3 14 5h3v3l2 2-2 2v3h-3l-2 2-2-2H7v-3l-2-2 2-2V5h3l2-2ZM9.5 10h5M12 10v4.5M10 14.5h4',
 		gift: 'M4 10h16v3H4zM5 13h14v8H5zM12 10v11M12 10c-1-3-4.5-4-5.5-2.5S8 10 12 10Zm0 0c1-3 4.5-4 5.5-2.5S16 10 12 10Z',
+		// Speech scroll — truyền âm (chat)
+		chat: 'M4 5h16v11H9l-4 4v-4H4V5ZM8 9h8M8 12h5',
+		// Gear — tùy chỉnh
+		gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1',
+		// Pennant — báo cáo
+		flag: 'M6 21V4M6 4h11l-2 4 2 4H6',
 		lock: 'M7 11V8a5 5 0 0 1 10 0v3M5 11h14v10H5zM12 15v2',
 		check: 'm5 12.5 4.5 4.5L19 7.5',
 		cross: 'M6 6l12 12M18 6 6 18',

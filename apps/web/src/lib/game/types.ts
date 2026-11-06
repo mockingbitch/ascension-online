@@ -284,6 +284,72 @@ export interface Announcement {
 	data: { characterId: string; characterName: string; realmId: string; stageId: string; text: string };
 }
 
+// ───── reports / moderation ─────
+export type ReportReason = 'offensive_name' | 'harassment';
+export type ReportStatus = 'open' | 'dismissed' | 'actioned';
+export interface Report {
+	id: string;
+	targetCharacterId: string;
+	/** name at report time */
+	targetName: string;
+	reason: ReportReason;
+	note: string;
+	status: ReportStatus;
+	createdAt: string;
+	chatMessageId: number | null;
+}
+export interface AdminReport extends Report {
+	reporterUserId: string;
+	reporterName: string;
+	targetUserId: string;
+	targetCurrentName: string;
+	openAgainstTarget: number;
+	resolutionNote: string;
+	resolvedAt: string | null;
+	/** original chat text at report time */
+	evidence: string;
+}
+export interface AdminReportPage {
+	reports: AdminReport[];
+	limit: number;
+	offset: number;
+}
+export interface ReportResolution {
+	report: Report;
+	resolutionNote: string;
+	renamedFrom?: string;
+	renamedTo?: string;
+	alsoResolved: string[];
+}
+
+// ───── chat ─────
+export interface ChatChannel {
+	id: string;
+	name: string;
+	/** stage needed to post (display hint; the server enforces) */
+	minStage: string;
+}
+export interface ChatMessage {
+	id: number;
+	channel: string;
+	characterId: string;
+	/** sender name at send time */
+	name: string;
+	stageId: string;
+	/** masked text */
+	text: string;
+	sentAt: string;
+}
+export interface ChatHistory {
+	channel: ChatChannel;
+	messages: ChatMessage[];
+	maxChars: number;
+}
+/** WS envelopes other than announcements */
+export type ChatEvent =
+	| { v: number; type: 'chat.message'; id: string; ts: string; data: ChatMessage }
+	| { v: number; type: 'chat.hidden'; id: string; ts: string; data: { id: number; channel: string } };
+
 // ───── leaderboard ─────
 export interface LeaderboardEntry {
 	rank: number;

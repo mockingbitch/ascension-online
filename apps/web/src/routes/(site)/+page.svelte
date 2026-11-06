@@ -16,7 +16,7 @@
 	<p class="eyebrow">Thiên Nguyên Giới</p>
 	<h1 class="mt-3 text-6xl font-bold text-gold-300 sm:text-8xl">Tiên Đạo</h1>
 	<p class="mx-auto mt-4 max-w-lg text-lg text-mist-300">Bế quan tu luyện, vượt bình cảnh, tranh đoạt thiên hạ đệ nhất.</p>
-	<a href="/cultivate" class="btn btn-gold mt-8 h-12 px-8 text-base"><Icon name="lotus" size={18} /> Bước vào tu luyện</a>
+	<a href="/play" class="btn btn-gold mt-8 h-12 px-8 text-base"><Icon name="lotus" size={18} /> Bước vào tu luyện</a>
 </section>
 
 {#if data.error}

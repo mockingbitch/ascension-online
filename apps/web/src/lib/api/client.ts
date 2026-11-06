@@ -15,7 +15,14 @@ import type {
 	RealmCatalogue,
 	User,
 	VipStatus,
-	VipTier
+	VipTier,
+	AdminReportPage,
+	ChatHistory,
+	ChatMessage,
+	Report,
+	ReportReason,
+	ReportResolution,
+	ReportStatus
 } from '$lib/game/types';
 import { ensureSession, refreshSession, session } from './session.svelte';
 
@@ -103,5 +110,52 @@ export const api = {
 	claimVipGift: (f: Fetch = fetch) => request<GiftResult>(f, '/vip/daily-gift', { method: 'POST', auth: true }),
 	dailyTasks: (f: Fetch = fetch) => request<DailyBoard>(f, '/tasks/daily', { auth: true }),
 	claimTask: (taskId: string, f: Fetch = fetch) =>
-		request<DailyTask>(f, `/tasks/daily/${encodeURIComponent(taskId)}/claim`, { method: 'POST', auth: true })
+		request<DailyTask>(f, `/tasks/daily/${encodeURIComponent(taskId)}/claim`, { method: 'POST', auth: true }),
+
+	// chat
+	chatHistory: (channel: string, before = 0, f: Fetch = fetch) =>
+		request<ChatHistory>(f, `/chat/${encodeURIComponent(channel)}/messages${before ? `?before=${before}` : ''}`, { auth: true }),
+	/** Reuse `key` when retrying the same message after a network error (idempotent). */
+	chatSend: (channel: string, text: string, key: string, f: Fetch = fetch) => {
+		const init = mutate(key);
+		return request<ChatMessage>(f, `/chat/${encodeURIComponent(channel)}/messages`, {
+			...init,
+			headers: { ...init.headers, 'Content-Type': 'application/json' },
+			body: JSON.stringify({ text })
+		});
+	},
+
+	// moderation
+	/** Reuse the same key when retrying the same report (idempotent). */
+	report: (targetCharacterId: string, reason: ReportReason, note: string, key: string, chatMessageId = 0, f: Fetch = fetch) => {
+		const init = mutate(key);
+		return request<Report>(f, '/reports', {
+			...init,
+			headers: { ...init.headers, 'Content-Type': 'application/json' },
+			body: JSON.stringify({ targetCharacterId, reason, note, chatMessageId })
+		});
+	},
+	adminHideChat: (messageId: number, reason: string, f: Fetch = fetch) =>
+		request<{ id: number; hidden: boolean }>(f, `/admin/chat/messages/${messageId}/hide`, {
+			method: 'POST',
+			auth: true,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ reason })
+		}),
+	adminMuteChat: (userId: string, hours: number, reason: string, f: Fetch = fetch) =>
+		request<{ userId: string; mutedUntil: string }>(f, '/admin/chat/mutes', {
+			method: 'POST',
+			auth: true,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ userId, hours, reason })
+		}),
+	adminReports: (status: ReportStatus = 'open', offset = 0, limit = 50, f: Fetch = fetch) =>
+		request<AdminReportPage>(f, `/admin/reports?status=${status}&offset=${offset}&limit=${limit}`, { auth: true }),
+	adminResolveReport: (id: string, outcome: 'dismissed' | 'actioned', note: string, renameTo = '', f: Fetch = fetch) =>
+		request<ReportResolution>(f, `/admin/reports/${encodeURIComponent(id)}/resolve`, {
+			method: 'POST',
+			auth: true,
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ outcome, note, renameTo })
+		})
 };

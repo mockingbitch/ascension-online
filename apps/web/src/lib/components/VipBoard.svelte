@@ -2,7 +2,10 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import { progressRatio } from '$lib/game/format';
 
-	let { data } = $props();
+	import type { VipStatus, VipTier } from '$lib/game/types';
+
+	/** compact: inside the game window (no page hero). */
+	let { tiers, status, compact = false }: { tiers: VipTier[]; status: VipStatus | null; compact?: boolean } = $props();
 
 	const perkLabel = (p: string) => {
 		const [k, id] = p.split(':');
@@ -14,23 +17,22 @@
 	};
 	// Show only perks NEW at each tier.
 	const newPerks = (i: number) => {
-		const cur = data.tiers[i]!.benefits;
-		const prev = i > 0 ? data.tiers[i - 1]!.benefits : null;
+		const cur = tiers[i]!.benefits;
+		const prev = i > 0 ? tiers[i - 1]!.benefits : null;
 		const out = cur.cosmetics.filter((c) => !prev?.cosmetics.includes(c)).map(perkLabel);
 		if (prev && cur.alchemySlots > prev.alchemySlots) out.push('+1 ô luyện đan');
 		for (const f of cur.flags) if (!prev?.flags.includes(f)) out.push(f === 'garden_auto_harvest' ? 'Linh Viên tự thu hoạch' : f);
 		return out;
 	};
-	const cur = $derived(data.status?.benefits.tier ?? -1);
-	const nextReq = $derived(data.tiers.find((t) => t.tier === data.status?.nextTier)?.pointsRequired);
-	const curReq = $derived(data.tiers.find((t) => t.tier === cur)?.pointsRequired ?? 0);
+	const cur = $derived(status?.benefits.tier ?? -1);
+	const nextReq = $derived(tiers.find((t) => t.tier === status?.nextTier)?.pointsRequired);
+	const curReq = $derived(tiers.find((t) => t.tier === cur)?.pointsRequired ?? 0);
 	const toNext = $derived(
-		data.status && nextReq !== undefined ? progressRatio(data.status.points - curReq, nextReq - curReq) : 1
+		status && nextReq !== undefined ? progressRatio(status.points - curReq, nextReq - curReq) : 1
 	);
 </script>
 
-<svelte:head><title>VIP · Tiên Đạo</title></svelte:head>
-
+{#if !compact}
 <header class="mb-8 text-center">
 	<p class="eyebrow">Tiên Duyên Lệnh</p>
 	<h1 class="mt-2 text-5xl font-bold text-gold-300">Đặc quyền VIP</h1>
@@ -39,28 +41,33 @@
 		độ tu luyện, tỉ lệ đột phá hay điểm Thiên Bảng.
 	</p>
 </header>
+{:else}
+<p class="mb-4 text-sm text-mist-300">
+	Tiên Duyên kéo dài thời gian bế quan và mở đặc quyền ngoại hình. <strong class="text-mist-100">Không</strong> tăng tốc độ tu luyện, tỉ lệ đột phá hay điểm Thiên Bảng.
+</p>
+{/if}
 
-{#if data.status}
+{#if status}
 	<section class="panel mx-auto mb-8 flex max-w-3xl flex-col items-center gap-6 p-6 sm:flex-row" aria-label="Cấp VIP hiện tại">
 		<div class="seal grid size-28 shrink-0 place-items-center rounded-full text-gold-300">
 			<div class="text-center">
 				<Icon name="seal" size={30} class="mx-auto" />
-				<p class="mt-1 font-display text-xl leading-none font-bold">{data.status.benefits.name}</p>
+				<p class="mt-1 font-display text-xl leading-none font-bold">{status.benefits.name}</p>
 			</div>
 		</div>
 		<div class="w-full min-w-0 flex-1">
 			<p class="eyebrow">Cấp hiện tại</p>
-			<p class="mt-1 font-display text-3xl font-bold text-gold-300">{data.status.benefits.name}</p>
+			<p class="mt-1 font-display text-3xl font-bold text-gold-300">{status.benefits.name}</p>
 			<p class="mt-1 text-sm text-mist-300">
-				{data.status.points.toLocaleString('vi-VN')} điểm · Bế quan tối đa
-				<span class="font-semibold text-mist-100">{data.status.benefits.offlineCapHours} canh giờ</span>
+				{status.points.toLocaleString('vi-VN')} điểm · Bế quan tối đa
+				<span class="font-semibold text-mist-100">{status.benefits.offlineCapHours} canh giờ</span>
 			</p>
-			{#if data.status.nextTier !== undefined}
-				<div class="mt-3 h-2 bg-ink-950" role="progressbar" aria-label="Tiến độ lên VIP {data.status.nextTier}" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(toNext * 100)}>
+			{#if status.nextTier !== undefined}
+				<div class="mt-3 h-2 bg-ink-950" role="progressbar" aria-label="Tiến độ lên VIP {status.nextTier}" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(toNext * 100)}>
 					<div class="h-full bg-gradient-to-r from-gold-700 to-gold-300" style:width="{toNext * 100}%"></div>
 				</div>
 				<p class="mt-2 text-sm text-mist-300">
-					Còn <span class="font-semibold text-mist-100 tabular-nums">{data.status.pointsToNext?.toLocaleString('vi-VN')}</span> điểm để lên VIP {data.status.nextTier}
+					Còn <span class="font-semibold text-mist-100 tabular-nums">{status.pointsToNext?.toLocaleString('vi-VN')}</span> điểm để lên VIP {status.nextTier}
 				</p>
 			{/if}
 		</div>
@@ -70,7 +77,7 @@
 <section class="panel mx-auto max-w-5xl p-2 sm:p-4" aria-labelledby="tiers-title">
 	<h2 id="tiers-title" class="panel-title px-2 pt-2">Các cấp Tiên Duyên</h2>
 	<ol class="mt-3 divide-y divide-gold-500/10">
-		{#each data.tiers as t, i (t.tier)}
+		{#each tiers as t, i (t.tier)}
 			{@const perks = newPerks(i)}
 			<li class="tier grid grid-cols-[56px_1fr] items-center gap-x-4 gap-y-1 px-3 py-3 sm:grid-cols-[56px_150px_110px_110px_1fr]" class:is-current={cur === t.tier} class:is-reached={cur > t.tier}>
 				<span class="row-span-2 grid size-12 place-items-center rounded-full border text-base font-semibold sm:row-span-1 tier-seal">{t.tier}</span>

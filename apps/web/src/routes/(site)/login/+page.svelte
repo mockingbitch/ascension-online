@@ -12,7 +12,7 @@
 		server_error: 'Máy chủ gặp sự cố, vui lòng thử lại sau.'
 	};
 	const error = $derived(errors[page.url.searchParams.get('error') ?? ''] ?? null);
-	const returnTo = $derived(page.url.searchParams.get('return') ?? '/cultivate');
+	const returnTo = $derived(page.url.searchParams.get('return') ?? '/play');
 </script>
 
 <svelte:head><title>Đăng nhập · Tiên Đạo</title></svelte:head>
@@ -38,4 +38,8 @@
 		</svg>
 		Đăng nhập bằng Google
 	</a>
+	<p class="mt-4 text-xs text-mist-500">
+		Chúng tôi chỉ nhận email, tên và ảnh đại diện Google của bạn.
+		<a href="/chinh-sach-du-lieu" class="text-gold-300 underline underline-offset-2">Chính sách dữ liệu</a>
+	</p>
 </section>

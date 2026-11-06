@@ -3,6 +3,9 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import RankMedal from '$lib/components/RankMedal.svelte';
 	import RealmBadge from '$lib/components/RealmBadge.svelte';
+	import ReportDialog from '$lib/components/ReportDialog.svelte';
+	import { api } from '$lib/api/client';
+	import { session } from '$lib/api/session.svelte';
 
 	let { data } = $props();
 	const cat = $derived(data.catalogue);
@@ -13,6 +16,21 @@
 	// Source order = rank order (mobile stacks 1·2·3); from `sm` the podium reads 2 · 1 · 3.
 	const podiumOrder = $derived(podium);
 	const smOrder = ['', 'sm:order-2', 'sm:order-1', 'sm:order-3'];
+	// Report: signed-in players only, never on their own row.
+	let myCharacterId = $state<string | null>(null);
+	let reportTarget = $state<{ characterId: string; name: string } | null>(null);
+	$effect(() => {
+		if (!session.user) {
+			myCharacterId = null;
+			return;
+		}
+		api.myRank().then(
+			(r) => (myCharacterId = r.characterId),
+			() => (myCharacterId = null) // no character yet / not ranked
+		);
+	});
+	const canReport = (characterId: string) => !!session.user && characterId !== myCharacterId;
+
 	const stageOnly = (stageId: string) => {
 		const s = cat.stages.get(stageId);
 		const r = cat.realmOf(stageId);
@@ -48,6 +66,11 @@
 					<p class="mt-4 w-full truncate font-display text-2xl font-bold text-mist-100">{e.name}</p>
 					<div class="mt-2">{#if realm}<RealmBadge name={realm.name} {aura} size="sm" />{/if}</div>
 					<p class="mt-2 text-sm text-mist-300">{stageOnly(e.stageId)}</p>
+					{#if canReport(e.characterId)}
+						<button class="report-btn mt-2" onclick={() => (reportTarget = { characterId: e.characterId, name: e.name })}>
+							<Icon name="flag" size={16} label="Báo cáo {e.name}" />
+						</button>
+					{/if}
 				</li>
 			{/each}
 		</ol>
@@ -62,6 +85,13 @@
 					<span class="min-w-0 flex-1 truncate font-medium text-mist-100">{e.name}</span>
 					<span class="hidden text-sm text-mist-300 sm:inline">{stageOnly(e.stageId)}</span>
 					{#if realm}<RealmBadge name={realm.name} aura={realm.visual.aura} size="sm" />{/if}
+					{#if canReport(e.characterId)}
+						<button class="report-btn -mr-2" onclick={() => (reportTarget = { characterId: e.characterId, name: e.name })}>
+							<Icon name="flag" size={16} label="Báo cáo {e.name}" />
+						</button>
+					{:else if session.user}
+						<span class="w-8 shrink-0" aria-hidden="true"></span>
+					{/if}
 				</li>
 			{/each}
 		</ol>
@@ -79,7 +109,21 @@
 	</nav>
 {/if}
 
+<ReportDialog target={reportTarget} onclose={() => (reportTarget = null)} />
+
 <style>
+	.report-btn {
+		display: inline-flex;
+		width: 40px;
+		height: 40px;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-mist-500);
+		transition: color 150ms;
+	}
+	.report-btn:hover {
+		color: var(--color-cinnabar-300);
+	}
 	.podium {
 		background:
 			radial-gradient(ellipse at 50% 0%, color-mix(in oklab, var(--aura) 16%, transparent), transparent 60%),
