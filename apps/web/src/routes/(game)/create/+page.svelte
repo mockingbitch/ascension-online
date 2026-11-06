@@ -13,7 +13,7 @@
 		try {
 			await api.createCharacter(name);
 			await invalidateAll();
-			await goto('/play');
+			await goto('/chon-the-luc');
 		} catch (err) {
 			error = err instanceof ApiError ? err.message : 'Không tạo được nhân vật';
 		} finally {

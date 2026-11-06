@@ -1,7 +1,10 @@
 <!-- Round character portrait: bust crop of the cultivator art inside a double gold ring, tinted by realm aura. -->
 <script lang="ts">
+	import { art } from '$lib/game/art';
 	import type { Aura } from '$lib/game/types';
 	import CultivatorFigure from './CultivatorFigure.svelte';
+
+	const avatar = art('characters/avatar'); // raster slot (docs/design/art-prompts.md §4), SVG otherwise
 
 	interface Props {
 		aura: Aura;
@@ -16,7 +19,11 @@
 	style:height="{size}px"
 	style:--aura="var(--color-aura-{aura})"
 >
-	<CultivatorFigure {aura} crop="bust" class="size-full" />
+	{#if avatar}
+		<img src={avatar.src} srcset={avatar.srcset} alt="" class="size-full object-cover" draggable="false" />
+	{:else}
+		<CultivatorFigure {aura} crop="bust" class="size-full" />
+	{/if}
 </span>
 
 <style>

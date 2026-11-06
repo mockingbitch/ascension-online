@@ -43,6 +43,7 @@ class GameStore {
 	#settleKey: string | null = null;
 	#attemptKey: string | null = null;
 	#floatSeq = 0;
+	#initFrom: CharacterView | null = null;
 
 	get phuCount() {
 		return this.inventory?.items.find((i) => i.itemId === PHU)?.quantity ?? 0;
@@ -55,8 +56,10 @@ class GameStore {
 		return this.board?.tasks.filter((t) => t.complete && !t.claimed).length ?? 0;
 	}
 
-	/** Called by the game layout with the data it loaded; fetches the rest in the background. */
+	/** Called by the game layout with the data it loaded; fetches the rest in the background. Idempotent. */
 	init(catalogue: CatalogueIndex, character: CharacterView) {
+		if (this.catalogue === catalogue && this.character?.id === character.id && this.#initFrom === character) return;
+		this.#initFrom = character;
 		this.catalogue = catalogue;
 		this.character = character;
 		void this.refreshSide();

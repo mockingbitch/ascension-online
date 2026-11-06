@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { feed } from '$lib/api/realtime.svelte';
 	import { logout, session } from '$lib/api/session.svelte';
+	import { formatPoints, progressRatio } from '$lib/game/format';
 	import { game } from '$lib/game/store.svelte';
 	import { openWindow } from '$lib/game/windows';
 	import Icon from './Icon.svelte';
@@ -12,6 +13,8 @@
 	const ch = $derived(game.character);
 	const realm = $derived(ch && game.catalogue ? game.catalogue.realmOf(ch.stageId) : undefined);
 	let menu = $state<HTMLDetailsElement>();
+	const pending = $derived(game.claimable + (game.preview?.ready ? 1 : 0) + (game.vip && game.vip.benefits.dailyGift > 0 && !game.vip.giftClaimedToday ? 1 : 0));
+	const ratio = $derived(ch ? progressRatio(ch.cultivationMilli, ch.requiredMilli) : 0);
 
 	async function signOut() {
 		await logout();
@@ -35,6 +38,12 @@
 			</span>
 		</button>
 		{#if realm}<span class="hidden lg:block"><RealmBadge name={realm.name} aura={realm.visual.aura} size="sm" /></span>{/if}
+		<div class="hidden w-44 md:block" title="Tu vi tầng hiện tại (máy chủ)">
+			<div class="flex justify-between text-xs text-mist-500"><span>Tu vi</span><span class="text-mist-300 tabular-nums">{formatPoints(ch.cultivationMilli)}/{formatPoints(ch.requiredMilli)}</span></div>
+			<div class="mt-1 h-1.5 bg-ink-950" role="progressbar" aria-label="Tu vi" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(ratio * 100)}>
+				<div class="h-full" style:width="{ratio * 100}%" style:background="var(--color-aura-{realm?.visual.aura ?? 'jade'})"></div>
+			</div>
+		</div>
 	{/if}
 
 	<div class="ml-auto flex items-center gap-1.5 sm:gap-3">
@@ -50,6 +59,10 @@
 			<Icon name="seal" size={16} class="text-gold-300" />
 			<span class="hidden sm:inline">{game.vip?.benefits.name ?? 'Tiên Duyên'}</span>
 			{#if game.vip && game.vip.benefits.dailyGift > 0 && !game.vip.giftClaimedToday}<span class="dot" aria-label="Có quà chưa nhận"></span>{/if}
+		</button>
+		<button type="button" class="relative inline-flex size-10 items-center justify-center text-mist-300 hover:text-mist-100" onclick={() => openWindow({ kind: 'notifications' })}>
+			<Icon name="bell" label="Thông báo" />
+			{#if pending}<span class="count tabular-nums">{pending}</span>{/if}
 		</button>
 		<span class="conn" class:on={feed.connected} title={feed.connected ? 'Đã kết nối truyền âm' : 'Đang kết nối lại…'}></span>
 
@@ -103,6 +116,20 @@
 		width: 8px;
 		height: 8px;
 		border-radius: 9999px;
+		background: var(--color-cinnabar-500);
+	}
+	.count {
+		position: absolute;
+		top: 2px;
+		right: 0;
+		min-width: 17px;
+		height: 17px;
+		padding: 0 4px;
+		border-radius: 9999px;
+		font-size: 0.65rem;
+		font-weight: 700;
+		line-height: 17px;
+		color: var(--color-mist-100);
 		background: var(--color-cinnabar-500);
 	}
 	.conn {

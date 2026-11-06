@@ -22,6 +22,16 @@
 		// Seal (VIP)
 		seal: 'M12 3 14 5h3v3l2 2-2 2v3h-3l-2 2-2-2H7v-3l-2-2 2-2V5h3l2-2ZM9.5 10h5M12 10v4.5M10 14.5h4',
 		gift: 'M4 10h16v3H4zM5 13h14v8H5zM12 10v11M12 10c-1-3-4.5-4-5.5-2.5S8 10 12 10Zm0 0c1-3 4.5-4 5.5-2.5S16 10 12 10Z',
+		// Folded map — thế giới
+		map: 'M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20V6.5ZM9 4v13.5M15 6.5V20',
+		// Robed figure — nhân vật
+		person: 'M12 3.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6ZM5.5 20.5c.6-4.6 3.2-7 6.5-7s5.9 2.4 6.5 7M9.5 14l2.5 3 2.5-3',
+		// Two hearts entwined — đạo lữ
+		heart: 'M12 20s-7-4.3-7-9.5A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.5C19 15.7 12 20 12 20Z',
+		// Moon gate — bí cảnh
+		portal: 'M5 21V11a7 7 0 0 1 14 0v10M3 21h18M9 21v-8a3 3 0 0 1 6 0v8',
+		// Temple bell — thông báo
+		bell: 'M12 3.5c3.3 0 5.5 2.6 5.5 6v3.5l1.5 3H5l1.5-3V9.5c0-3.4 2.2-6 5.5-6ZM10 19a2 2 0 0 0 4 0',
 		// Speech scroll — truyền âm (chat)
 		chat: 'M4 5h16v11H9l-4 4v-4H4V5ZM8 9h8M8 12h5',
 		// Gear — tùy chỉnh

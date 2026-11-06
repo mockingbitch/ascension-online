@@ -110,6 +110,18 @@ Plan: [design/ke-hoach-trien-khai-hong-hoang.md](design/ke-hoach-trien-khai-hong
 - **Reincarnation (G4).** Luân hồi keeps **50%** of cultivation.
 - Deferred: Đại chiến Vu Yêu gameplay (G2), Yêu tộc path (G3). Still open: G5–G8 — proposals in the plan.
 
+## 2026-11-06 — Game UI round 1 (art brief "Tu Tiên Hồng Hoang Online", reconciled)
+- The brief's conflicting asks were decided by the product owner: **real API where it exists + clearly labelled
+  previews elsewhere** (no client-side rewards/odds); **keep the jade/gold palette**; **original faction names**
+  (D2 kept: Huyền Khung Môn, Kim Sa Môn, Thương Lan Tiên Đình, Tinh Hà Yêu Đình, Vu Tộc — drafts in
+  `content/story/factions/`); Google-only sign-in and one shared world stay (no register form / server picker).
+- `/play` is a persistent shell layout (HUD with tu vi + notifications, world chat, 6-item dock) and screens are
+  nested routes: Thế Giới (world map, home), Tu Luyện, Nhân Vật, Túi Đồ, Thế Lực, Xếp Hạng, Đột Phá, Thiên Đạo Sử,
+  Đạo Lữ; unbuilt places (Bí Cảnh, Đại Chiến) render an in-world "sealed" screen, never a dead link.
+- Preview screens read `apps/web/src/lib/mock/*` and show the "Bản xem trước" ribbon; the preview faction choice
+  lives only in localStorage. No invented combat stats (no combat system). Mini games, Vu body-refining UI and the
+  trial realm are the next rounds (server-issued sessions per D6).
+
 ## 2026-11-06 — One-page game shell + world chat
 - **Web = one game screen** (`/play`): fixed viewport, no page scroll; HUD (identity, resources, Tiên Duyên),
   cultivation scene, dock. Features open as **windows over the scene** via SvelteKit shallow routing (Back closes

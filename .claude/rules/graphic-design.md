@@ -40,5 +40,6 @@ cinnabar (chu sa) for danger/failure. Calm, spacious, readable; effects are subt
 
 ## Assets
 - Icons/badges: inline SVG using `currentColor`, viewBox 0 0 24 24 (icons) or 64 64 (emblems), optimized (no editor
-  metadata). Raster art: WebP/AVIF, sized ×1 and ×2, stored in `static/` (later R2).
+  metadata). Raster art: WebP/AVIF/PNG, ×1 and `@2x`, in `apps/web/src/lib/assets/art/` (slots + SVG fallback via
+  `lib/game/art.ts`; list in its README, prompts in docs/design/art-prompts.md). Later R2.
 - Don't imitate a specific existing game's art, logos or UI; the style must be original.

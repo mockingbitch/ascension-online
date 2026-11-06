@@ -5,9 +5,8 @@ import { page } from '$app/state';
 
 export type WindowState =
 	| { kind: 'tasks' }
-	| { kind: 'leaderboard' }
 	| { kind: 'vip' }
-	| { kind: 'breakthrough' }
+	| { kind: 'notifications' }
 	| { kind: 'chat' } // mobile: the chat panel is docked on desktop
 	| { kind: 'profile'; characterId: string; name: string; stageId: string; messageId?: number };
 

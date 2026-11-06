@@ -10,5 +10,7 @@ later be loaded by the server/client. IDs are stable slugs and may be referenced
 | `quests/` | Nhiệm vụ / thử thách đột phá đại cảnh giới | `quest` |
 | `events/` | Sự kiện giới hạn thời gian | `event` |
 | `announcements/` | Mẫu thông báo toàn server (đột phá, top rank) | `announcement` |
+| `factions/` | Thế lực (file name = faction ID trong `factions.yaml`) | `faction` |
+| `timeline/` | Biên niên mốc cốt truyện server (slug = `world_milestones.yaml` ID) | `timeline` |
 
 See `.claude/rules/story-writing.md` for tone, glossary and constraints.

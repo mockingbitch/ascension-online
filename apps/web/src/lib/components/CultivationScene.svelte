@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import type { Aura } from '$lib/game/types';
+	import { art } from '$lib/game/art';
 	import CultivatorFigure from './CultivatorFigure.svelte';
 	import FormationCircle from './FormationCircle.svelte';
 
@@ -14,6 +15,7 @@
 		backlash?: number;
 	}
 	let { aura, ready = false, backlash = 0 }: Props = $props();
+	const meditate = art('characters/meditate'); // raster slot; includes its own rune array
 
 	// Deterministic mote spawn ring (no Math.random → stable SSR/hydration, no layout jitter).
 	const motes = Array.from({ length: 16 }, (_, i) => {
@@ -28,12 +30,16 @@
 	<div class="halo absolute inset-0" aria-hidden="true"></div>
 	{#if ready}<div class="pillar absolute inset-y-0 left-1/2" aria-hidden="true"></div>{/if}
 
-	<!-- formation on the floor, in perspective -->
-	<div class="floor absolute left-1/2 w-[86%]" aria-hidden="true">
-		<div class="spin"><FormationCircle color={ready ? 'var(--color-gold-300)' : 'var(--aura)'} class="size-full" /></div>
-	</div>
+	{#if meditate}
+		<img src={meditate.src} srcset={meditate.srcset} alt="" class="art absolute inset-x-0 bottom-0 mx-auto h-[92%] object-contain" draggable="false" />
+	{:else}
+		<!-- formation on the floor, in perspective -->
+		<div class="floor absolute left-1/2 w-[86%]" aria-hidden="true">
+			<div class="spin"><FormationCircle color={ready ? 'var(--color-gold-300)' : 'var(--aura)'} class="size-full" /></div>
+		</div>
 
-	<CultivatorFigure {aura} class="figure absolute inset-x-0 bottom-[8%] mx-auto h-[62%]" />
+		<CultivatorFigure {aura} class="figure absolute inset-x-0 bottom-[8%] mx-auto h-[62%]" />
+	{/if}
 
 	<!-- converging qi motes; anchor = the pearl -->
 	<div class="anchor absolute" aria-hidden="true">
@@ -48,6 +54,10 @@
 {/key}
 
 <style>
+	.art {
+		filter: drop-shadow(0 0 18px color-mix(in oklab, var(--aura) 45%, transparent));
+		animation: var(--animate-qi-breathe);
+	}
 	.halo {
 		background:
 			radial-gradient(circle at 50% 62%, color-mix(in oklab, var(--aura) 34%, transparent) 0, transparent 34%),
