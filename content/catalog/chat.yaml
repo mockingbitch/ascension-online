@@ -1,0 +1,26 @@
+# Chat channels (decisions 2026-11-06: world chat, masked profanity, Luyện Khí 3+ to post, 90-day retention).
+# Loaded by internal/chat; cross-checked against realms.yaml (min_stage) and moderation.yaml (mask_categories).
+#
+# Flow: POST /chat/{channel}/messages (REST, authenticated, rate limited) → Postgres chat_messages → Redis pub/sub
+# → every API instance → WebSocket `chat.message`. Delivery is at-most-once; clients backfill from
+# GET /chat/{channel}/messages. Faction/sect channels arrive with Phase 2 (factions).
+version: 1
+
+channels:
+  - id: world                    # permanent slug, stored in chat_messages.channel
+    name: Thế Giới
+    min_stage: luyen_khi.tang_3  # posting needs this stage (or its equivalent tier on another path); reading is open
+
+max_chars: 200                   # per message, after trimming
+history_size: 50                 # messages returned per history page
+retention_days: 90               # worker deletes older messages (legal review pending)
+duplicate_window_seconds: 30     # the same text from the same player within this window is refused
+mask_categories: [profanity]     # moderation.yaml categories masked with *** in chat text
+
+rate:                            # per player, shared across API instances (Redis GCRA)
+  messages: 1
+  per_seconds: 3
+  burst: 5
+
+mute:
+  max_hours: 720                 # longest admin mute (30 days); 0 hours = lift the mute

@@ -68,7 +68,9 @@ paths:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
         "404": { $ref: "#/components/responses/Error" }
     post:
-      summary: Create the account's single character
+      summary: >-
+        Create the account's single character. 400 `invalid_name` (format) or `name_not_allowed` (moderation filter,
+        content/catalog/moderation.yaml — message says the category, never the matched term).
       security: [{ bearer: [] }]
       requestBody:
         content:
@@ -225,6 +227,136 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /reports:
+    post:
+      summary: Report a character (offensive name or harassment). Idempotent; one open report per target+reason.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetCharacterId, reason]
+              properties:
+                targetCharacterId: { type: string, format: uuid }
+                reason: { type: string, enum: [offensive_name, harassment] }
+                note: { type: string, maxLength: 500 }
+                chatMessageId: { type: integer, format: int64, description: "Optional: a message sent by the target (its text is kept as evidence)" }
+      responses:
+        "200": { description: The report (existing one on replay/duplicate), content: { application/json: { schema: { $ref: "#/components/schemas/Report" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /admin/reports:
+    get:
+      summary: "Admin: report queue, oldest first"
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, dismissed, actioned], default: open } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reports: { type: array, items: { $ref: "#/components/schemas/AdminReport" } }
+                  limit: { type: integer }
+                  offset: { type: integer }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/reports/{reportId}/resolve:
+    post:
+      summary: >-
+        Admin: resolve a report (audited). `renameTo` (actioned only) renames the character through the same name
+        filter and closes every other open offensive_name report against it.
+      security: [{ bearer: [] }]
+      parameters: [{ name: reportId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [dismissed, actioned] }
+                note: { type: string, maxLength: 1000 }
+                renameTo: { type: string }
+      responses:
+        "200":
+          description: Resolution
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  report: { $ref: "#/components/schemas/Report" }
+                  resolutionNote: { type: string }
+                  renamedFrom: { type: string }
+                  renamedTo: { type: string }
+                  alsoResolved: { type: array, items: { type: string, format: uuid } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /chat/{channel}/messages:
+    parameters: [{ name: channel, in: path, required: true, schema: { type: string, example: world } }]
+    get:
+      summary: Chat history (visible messages, oldest first). Live updates arrive over /ws (chat.message, chat.hidden).
+      security: [{ bearer: [] }]
+      parameters: [{ name: before, in: query, schema: { type: integer, format: int64 }, description: "Message id; omit for newest" }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  channel: { $ref: "#/components/schemas/ChatChannel" }
+                  messages: { type: array, items: { $ref: "#/components/schemas/ChatMessage" } }
+                  maxChars: { type: integer }
+        "404": { $ref: "#/components/responses/Error" }
+    post:
+      summary: >-
+        Post a message. Idempotent per Idempotency-Key. Profanity is masked with *** (moderation.yaml).
+        403 stage_too_low (details.minStage) | muted (details.mutedUntil) | no_character; 429 rate_limited | duplicate_message.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [text], properties: { text: { type: string, maxLength: 200 } } }
+      responses:
+        "200": { description: The stored message, content: { application/json: { schema: { $ref: "#/components/schemas/ChatMessage" } } } }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+  /admin/chat/messages/{messageId}/hide:
+    post:
+      summary: "Admin: hide a chat message for everyone (audited, idempotent; broadcasts chat.hidden)"
+      security: [{ bearer: [] }]
+      parameters: [{ name: messageId, in: path, required: true, schema: { type: integer, format: int64 } }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses: { "200": { description: "{ id, hidden }" }, "403": { $ref: "#/components/responses/Error" }, "404": { $ref: "#/components/responses/Error" } }
+  /admin/chat/mutes:
+    post:
+      summary: "Admin: mute an account in chat for N hours (0 lifts; max chat.yaml mute.max_hours). Audited."
+      security: [{ bearer: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [userId, hours], properties: { userId: { type: string, format: uuid }, hours: { type: integer, minimum: 0 }, reason: { type: string } } }
+      responses:
+        "200": { description: "{ userId, mutedUntil }" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -250,6 +382,43 @@ components:
                   code: { type: string, example: character_not_found }
                   message: { type: string }
   schemas:
+    Report:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        targetCharacterId: { type: string, format: uuid }
+        targetName: { type: string, description: Name at report time }
+        reason: { type: string, enum: [offensive_name, harassment] }
+        note: { type: string }
+        status: { type: string, enum: [open, dismissed, actioned] }
+        createdAt: { type: string, format: date-time }
+        chatMessageId: { type: [integer, "null"], format: int64 }
+    AdminReport:
+      allOf:
+        - { $ref: "#/components/schemas/Report" }
+        - type: object
+          properties:
+            reporterUserId: { type: string, format: uuid }
+            reporterName: { type: string, description: "Reporter's character name ('' if none)" }
+            targetUserId: { type: string, format: uuid }
+            targetCurrentName: { type: string }
+            openAgainstTarget: { type: integer, format: int64 }
+            resolutionNote: { type: string }
+            resolvedAt: { type: [string, "null"], format: date-time }
+            evidence: { type: string, description: Original chat text at report time }
+    ChatChannel:
+      type: object
+      properties: { id: { type: string }, name: { type: string }, minStage: { type: string, description: Stage needed to post } }
+    ChatMessage:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        channel: { type: string }
+        characterId: { type: string, format: uuid }
+        name: { type: string, description: Sender name at send time }
+        stageId: { type: string, description: Sender stage at send time }
+        text: { type: string, description: Masked text }
+        sentAt: { type: string, format: date-time }
     User:
       type: object
       properties:

@@ -43,17 +43,61 @@ type View struct {
 	BonusUsedToday      bool       `json:"bonusUsedToday"`
 }
 
+// NameChecker is the moderation filter (moderation.Catalogue). It receives a format-normalised name and returns
+// an error wrapping moderation.ErrNameNotAllowed when the name is blocked. Nil → no filtering.
+type NameChecker interface {
+	CheckName(name string) error
+}
+
 // Service creates and reads characters.
 type Service struct {
 	Pool        *pgxpool.Pool
 	Cultivation *cultivation.Service
+	Names       NameChecker
+}
+
+// ValidName normalises the format, then applies the moderation filter.
+func ValidName(raw string, names NameChecker) (string, error) {
+	name, err := NormalizeName(raw)
+	if err != nil {
+		return "", err
+	}
+	if names != nil {
+		if err := names.CheckName(name); err != nil {
+			return "", err
+		}
+	}
+	return name, nil
+}
+
+// Rename sets a character's name inside the caller's transaction (admin moderation). Returns the old and new name.
+// Errors: ErrNotFound, ErrInvalidName, moderation name errors, ErrNameTaken.
+func Rename(ctx context.Context, q *db.Queries, id uuid.UUID, raw string, names NameChecker) (oldName, newName string, err error) {
+	newName, err = ValidName(raw, names)
+	if err != nil {
+		return "", "", err
+	}
+	ch, err := q.GetCharacterForUpdate(ctx, id)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", ErrNotFound
+	} else if err != nil {
+		return "", "", err
+	}
+	if ch.Name == newName {
+		return ch.Name, newName, nil
+	}
+	// A unique violation aborts the caller's transaction: it must roll back (the whole resolution fails).
+	if err := q.RenameCharacter(ctx, db.RenameCharacterParams{ID: id, Name: newName}); err != nil {
+		return "", "", mapUnique(err)
+	}
+	return ch.Name, newName, nil
 }
 
 // Create makes the account's (single) character at the first stage of the default path. If the world started
 // more than late_join_grant.after_server_day days ago, the one-time late-join grant (50% of the server median) is
 // stored as grant_reserve_milli — at most once per account (late_join_grants PK), released by the credit path.
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, rawName string) (View, error) {
-	name, err := NormalizeName(rawName)
+	name, err := ValidName(rawName, s.Names)
 	if err != nil {
 		return View{}, err
 	}

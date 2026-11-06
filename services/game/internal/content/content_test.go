@@ -17,7 +17,7 @@ func TestShippedContentIsConsistent(t *testing.T) {
 
 func TestUnknownItemReferenceFails(t *testing.T) {
 	dir := t.TempDir()
-	for _, f := range []string{"realms.yaml", "vip.yaml", "spirit_roots.yaml", "daily_tasks.yaml", "contribution.yaml", "world_milestones.yaml"} {
+	for _, f := range []string{"realms.yaml", "vip.yaml", "spirit_roots.yaml", "daily_tasks.yaml", "contribution.yaml", "world_milestones.yaml", "moderation.yaml", "chat.yaml"} {
 		b, err := os.ReadFile(filepath.Join(shippedDir, f))
 		if err != nil {
 			t.Fatal(err)

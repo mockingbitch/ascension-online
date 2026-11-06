@@ -68,6 +68,29 @@ type CharacterProgression struct {
 	GrantReserveMilli         int64       `json:"grant_reserve_milli"`
 }
 
+type ChatMessage struct {
+	ID             int64       `json:"id"`
+	Channel        string      `json:"channel"`
+	UserID         uuid.UUID   `json:"user_id"`
+	CharacterID    uuid.UUID   `json:"character_id"`
+	CharacterName  string      `json:"character_name"`
+	StageID        string      `json:"stage_id"`
+	Body           string      `json:"body"`
+	RawBody        pgtype.Text `json:"raw_body"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	HiddenAt       *time.Time  `json:"hidden_at"`
+	HiddenBy       pgtype.UUID `json:"hidden_by"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type ChatMute struct {
+	UserID     uuid.UUID `json:"user_id"`
+	MutedUntil time.Time `json:"muted_until"`
+	Reason     string    `json:"reason"`
+	MutedBy    uuid.UUID `json:"muted_by"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
 type CultivationCredit struct {
 	ID          int64       `json:"id"`
 	CharacterID uuid.UUID   `json:"character_id"`
@@ -214,6 +237,23 @@ type RefreshToken struct {
 	ReplacedBy pgtype.UUID `json:"replaced_by"`
 	UserAgent  pgtype.Text `json:"user_agent"`
 	LastUsedAt *time.Time  `json:"last_used_at"`
+}
+
+type Report struct {
+	ID                uuid.UUID   `json:"id"`
+	ReporterUserID    uuid.UUID   `json:"reporter_user_id"`
+	TargetCharacterID uuid.UUID   `json:"target_character_id"`
+	TargetName        string      `json:"target_name"`
+	Reason            string      `json:"reason"`
+	Note              string      `json:"note"`
+	Status            string      `json:"status"`
+	ResolutionNote    string      `json:"resolution_note"`
+	ResolvedBy        pgtype.UUID `json:"resolved_by"`
+	ResolvedAt        *time.Time  `json:"resolved_at"`
+	IdempotencyKey    string      `json:"idempotency_key"`
+	CreatedAt         time.Time   `json:"created_at"`
+	ChatMessageID     pgtype.Int8 `json:"chat_message_id"`
+	Evidence          string      `json:"evidence"`
 }
 
 type User struct {

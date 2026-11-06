@@ -16,6 +16,7 @@ import (
 	"tiendao/game/internal/auth"
 	"tiendao/game/internal/breakthrough"
 	"tiendao/game/internal/character"
+	"tiendao/game/internal/chat"
 	"tiendao/game/internal/config"
 	"tiendao/game/internal/content"
 	"tiendao/game/internal/cultivation"
@@ -25,6 +26,7 @@ import (
 	"tiendao/game/internal/platform/postgres"
 	"tiendao/game/internal/platform/redisx"
 	"tiendao/game/internal/realtime"
+	"tiendao/game/internal/report"
 	"tiendao/game/internal/vip"
 	"tiendao/game/internal/world"
 )
@@ -86,7 +88,9 @@ func run(log *slog.Logger) error {
 		deps.Pool = pool
 		deps.Cultivation = cult
 		deps.Auth = &auth.Service{Pool: pool, Issuer: issuer, RefreshTTL: cfg.RefreshTokenTTL, Now: time.Now}
-		deps.Characters = &character.Service{Pool: pool, Cultivation: cult}
+		deps.Characters = &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation}
+		deps.Chat = &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: time.Now}
+		deps.Reports = &report.Service{Pool: pool, Cat: cb.Moderation, Now: time.Now}
 		deps.Breakthrough = &breakthrough.Service{Pool: pool, Cultivation: cult, RNG: breakthrough.NewRNG()}
 		deps.VIP = &vip.Service{Pool: pool, Table: cb.VIP, Now: time.Now}
 		deps.DailyTasks = &dailytask.Service{Pool: pool, Cat: cb.DailyTasks, Now: time.Now}
@@ -100,6 +104,9 @@ func run(log *slog.Logger) error {
 			defer rdb.Close()
 			deps.Leaderboard = &leaderboard.Service{Pool: pool, Redis: rdb, Realms: cb.Realms}
 			deps.Redis = rdb
+			deps.Chat.Publish = func(ctx context.Context, typ, id string, data any) error {
+				return realtime.Publish(ctx, rdb, realtime.Envelope{Type: typ, ID: id, TS: time.Now().UTC(), Data: data})
+			}
 			origin, err := url.Parse(cfg.PublicBaseURL)
 			if err != nil {
 				return err

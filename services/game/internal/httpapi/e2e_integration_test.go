@@ -70,7 +70,7 @@ func TestEndToEnd(t *testing.T) {
 		Log: slog.New(slog.DiscardHandler), Pool: pool, Content: cb, Now: time.Now,
 		Auth: &auth.Service{Pool: pool, Issuer: iss, RefreshTTL: time.Hour, Now: time.Now}, Issuer: iss,
 		Google: fakeGoogle{callback: srv.URL + "/api/v1/auth/google/callback"}, Flow: auth.NewFlowSigner(secret),
-		Cultivation: cult, Characters: &character.Service{Pool: pool, Cultivation: cult},
+		Cultivation: cult, Characters: &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation},
 		Breakthrough: &breakthrough.Service{Pool: pool, Cultivation: cult, RNG: breakthrough.NewRNG()},
 		Leaderboard:  lb, VIP: &vip.Service{Pool: pool, Table: cb.VIP},
 		PublicBaseURL: srv.URL,
@@ -103,6 +103,13 @@ func TestEndToEnd(t *testing.T) {
 
 	// 3. No character yet → 404; create; duplicate → 409.
 	do(t, c, "GET", srv.URL+"/api/v1/character", tok, "", nil, 404, nil)
+	var blocked struct {
+		Error struct{ Code, Message string }
+	}
+	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Nữ Oa Nương Nương"}`, nil, 400, &blocked)
+	if blocked.Error.Code != "name_not_allowed" || strings.Contains(blocked.Error.Message, "Nữ Oa") {
+		t.Fatalf("blocked name: %+v", blocked)
+	}
 	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh"}`, nil, 201, nil)
 	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh"}`, nil, 409, nil)
 

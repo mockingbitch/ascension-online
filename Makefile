@@ -48,7 +48,7 @@ test-integration: ## DB/Redis integration tests (needs `make db-up`)
 	cd $(GAME) && go test -tags integration -race -count=1 ./...
 
 content-check: ## Validate content/catalog/*.yaml (each loader + cross-references)
-	cd $(GAME) && go test ./internal/realm/ ./internal/vip/ ./internal/item/ ./internal/spiritroot/ ./internal/contribution/ ./internal/world/ ./internal/content/ -run Shipped -count=1
+	cd $(GAME) && go test ./internal/realm/ ./internal/vip/ ./internal/item/ ./internal/spiritroot/ ./internal/contribution/ ./internal/world/ ./internal/moderation/ ./internal/chat/ ./internal/content/ -run Shipped -count=1
 
 balance: ## Progression matrix (sessions × VIP) from the real catalogue
 	cd $(GAME) && go run ./cmd/balancesim

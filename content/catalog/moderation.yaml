@@ -1,0 +1,138 @@
+# Name moderation + player reports (Phase 1.5). Loaded by internal/moderation, validated at startup.
+#
+# NAME RULES — checked on character creation and on admin rename (after the format check in character.NormalizeName).
+# Every name and every term is normalised the same way before comparing:
+#   NFKD (folds fullwidth/compat letters) → lowercase → Latin lookalikes folded (ø→o, ł→l, ß→ss…) → runs of the same
+#   letter squeezed ("fuuuck" → "fuck", "lồnnn" → "lồn").
+# match:
+#   word        accent-insensitive whole-word sequence. "dit me" blocks "Địt Mẹ", "Dit Me", "Ông Đít Mẹ Hai".
+#               Use only when the accentless form is not an ordinary name syllable.
+#   word_exact  tone-sensitive whole-word sequence (tone-mark placement "hoà"/"hòa" does not matter; đ ≠ d).
+#               Use for single syllables whose accentless form is common in names (lồn ≠ Long/Lôn, đĩ ≠ Di).
+#               The term must carry at least one diacritic.
+#   name_exact  tone-sensitive, the WHOLE name equals the term. For story names that are also common real names
+#               ("Hồng Quân" is blocked, "Nguyễn Hồng Quân" is allowed).
+#   contains    accent-insensitive substring after removing spaces ("Đ ị t M ẹ" → "ditme"). Min 4 letters; use only
+#               for strings that cannot appear inside a decent name.
+# category: profanity | impersonation | story | religion | political — picks the error message shown to the player.
+#
+# Story names follow cot-truyen.md; when Phase 0 renames characters (D2), update this list in the same PR.
+# The political/religion lists must be reviewed by legal + the faith reviewer (plan Phase 0) before open beta.
+version: 1
+
+names:
+  rules:
+    # ── profanity: Vietnamese, tone-sensitive single syllables ──
+    - { term: "địt",   match: word_exact, category: profanity }
+    - { term: "đụ",    match: word_exact, category: profanity }
+    - { term: "đéo",   match: word_exact, category: profanity }
+    - { term: "lồn",   match: word_exact, category: profanity }
+    - { term: "cặc",   match: word_exact, category: profanity }
+    - { term: "buồi",  match: word_exact, category: profanity }
+    - { term: "đĩ",    match: word_exact, category: profanity }
+    - { term: "điếm",  match: word_exact, category: profanity }
+    - { term: "phò",   match: word_exact, category: profanity }
+    - { term: "chịch", match: word_exact, category: profanity }
+    - { term: "nứng",  match: word_exact, category: profanity }
+    - { term: "đù",    match: word_exact, category: profanity }
+    # ── profanity: accent-insensitive phrases / abbreviations ──
+    - { term: "dit",       match: word, category: profanity }
+    - { term: "dit me",    match: word, category: profanity }
+    - { term: "du ma",     match: word, category: profanity }
+    - { term: "du me",     match: word, category: profanity }
+    - { term: "deo me",    match: word, category: profanity }
+    - { term: "mẹ mày",    match: word_exact, category: profanity }
+    - { term: "cha mày",   match: word_exact, category: profanity }
+    - { term: "oc cho",    match: word, category: profanity }
+    - { term: "cho de",    match: word, category: profanity }
+    - { term: "suc vat",   match: word, category: profanity }
+    - { term: "cave",      match: word, category: profanity }
+    - { term: "loz",       match: word, category: profanity }
+    - { term: "dm",        match: word, category: profanity }
+    - { term: "dcm",       match: word, category: profanity }
+    - { term: "dkm",       match: word, category: profanity }
+    - { term: "vcl",       match: word, category: profanity }
+    - { term: "vkl",       match: word, category: profanity }
+    - { term: "clm",       match: word, category: profanity }
+    - { term: "cmm",       match: word, category: profanity }
+    - { term: "cl",        match: word, category: profanity }
+    - { term: "dick",      match: word, category: profanity }
+    - { term: "cunt",      match: word, category: profanity }
+    - { term: "sex",       match: word, category: profanity }
+    - { term: "sexy",      match: word, category: profanity }
+    - { term: "nazi",      match: word, category: profanity }
+    # ── profanity: no-space evasions ──
+    - { term: "ditme",   match: contains, category: profanity }
+    - { term: "ditmay",  match: contains, category: profanity }
+    - { term: "dume",    match: contains, category: profanity }
+    - { term: "duma",    match: contains, category: profanity }
+    - { term: "fuck",    match: contains, category: profanity }
+    - { term: "shit",    match: contains, category: profanity }
+    - { term: "bitch",   match: contains, category: profanity }
+    - { term: "pussy",   match: contains, category: profanity }
+    - { term: "porn",    match: contains, category: profanity }
+    - { term: "nigger",  match: contains, category: profanity }
+    - { term: "nigga",   match: contains, category: profanity }
+    - { term: "hitler",  match: contains, category: profanity }
+
+    # ── impersonation of staff / system ──
+    - { term: "admin",          match: contains,   category: impersonation }
+    - { term: "moderator",      match: contains,   category: impersonation }
+    - { term: "gm",             match: word,       category: impersonation }
+    - { term: "mod",            match: word,       category: impersonation }
+    - { term: "cskh",           match: word,       category: impersonation }
+    - { term: "support",        match: word,       category: impersonation }
+    - { term: "quan tri",       match: word,       category: impersonation }
+    - { term: "ban quan tri",   match: word,       category: impersonation }
+    - { term: "he thong",       match: word,       category: impersonation }
+    - { term: "thong bao",      match: word,       category: impersonation }
+    - { term: "tiên đạo",       match: word_exact, category: impersonation }
+    - { term: "thiên đạo",      match: word_exact, category: impersonation }
+
+    # ── story characters (cot-truyen.md) ──
+    - { term: "hồng quân",             match: name_exact, category: story }
+    - { term: "hồng quân lão tổ",      match: word_exact, category: story }
+    - { term: "đạo tổ",                match: word_exact, category: story }
+    - { term: "bàn cổ",                match: word_exact, category: story }
+    - { term: "nữ oa",                 match: word_exact, category: story }
+    - { term: "oa hoàng",              match: word_exact, category: story }
+    - { term: "phục hy",               match: name_exact, category: story }
+    - { term: "thần nông",             match: name_exact, category: story }
+    - { term: "hiên viên",             match: name_exact, category: story }
+    - { term: "đông vương công",       match: word_exact, category: story }
+    - { term: "tây vương mẫu",         match: word_exact, category: story }
+    - { term: "đế tuấn",               match: word_exact, category: story }
+    - { term: "thái nhất",             match: name_exact, category: story }
+    - { term: "đông hoàng thái nhất",  match: word_exact, category: story }
+    - { term: "hậu thổ",               match: word_exact, category: story }
+    - { term: "tổ vu",                 match: word_exact, category: story }
+    - { term: "tiếp dẫn",              match: name_exact, category: story }
+    - { term: "chuẩn đề",              match: word_exact, category: story }
+    - { term: "tam thanh",             match: word,       category: story }
+    - { term: "lão tử",                match: name_exact, category: story }
+    - { term: "thái thanh",            match: name_exact, category: story }
+    - { term: "thái thượng lão quân",  match: word_exact, category: story }
+    - { term: "nguyên thủy thiên tôn", match: word_exact, category: story }
+    - { term: "thông thiên giáo chủ",  match: word_exact, category: story }
+
+    # ── worshipped religious figures (D2: never playable / never a player name) ──
+    - { term: "phật tổ",       match: word_exact, category: religion }
+    - { term: "như lai",       match: word_exact, category: religion }
+    - { term: "thích ca",      match: word_exact, category: religion }
+    - { term: "quan âm",       match: word_exact, category: religion }
+    - { term: "quán thế âm",   match: word_exact, category: religion }
+    - { term: "a di đà",       match: word_exact, category: religion }
+    - { term: "di lặc",        match: name_exact, category: religion }
+    - { term: "ngọc hoàng",    match: word_exact, category: religion }
+    - { term: "giê su",        match: word_exact, category: religion }
+    - { term: "jesus",         match: contains,   category: religion }
+    - { term: "allah",         match: word,       category: religion }
+
+    # ── political (legal review pending) ──
+    - { term: "hồ chí minh",   match: word_exact, category: political }
+    - { term: "bác hồ",        match: word_exact, category: political }
+
+# PLAYER REPORTS — POST /reports. Reasons are a fixed enum in code + DB (offensive_name, harassment).
+reports:
+  daily_limit: 10        # reports one account may file per game day (dedupe: one OPEN report per target+reason)
+  note_max_chars: 500    # optional free text; DB hard limit is 1000

@@ -75,6 +75,24 @@ func (q *Queries) EnsureCurrencyAccount(ctx context.Context, arg EnsureCurrencyA
 	return err
 }
 
+const getCharacterByID = `-- name: GetCharacterByID :one
+SELECT id, user_id, name, spirit_root_type, spirit_root_quality, created_at FROM characters WHERE id = $1
+`
+
+func (q *Queries) GetCharacterByID(ctx context.Context, id uuid.UUID) (Character, error) {
+	row := q.db.QueryRow(ctx, getCharacterByID, id)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SpiritRootType,
+		&i.SpiritRootQuality,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getCharacterByUser = `-- name: GetCharacterByUser :one
 SELECT id, user_id, name, spirit_root_type, spirit_root_quality, created_at FROM characters WHERE user_id = $1
 `
@@ -91,4 +109,36 @@ func (q *Queries) GetCharacterByUser(ctx context.Context, userID uuid.UUID) (Cha
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getCharacterForUpdate = `-- name: GetCharacterForUpdate :one
+SELECT id, user_id, name, spirit_root_type, spirit_root_quality, created_at FROM characters WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) GetCharacterForUpdate(ctx context.Context, id uuid.UUID) (Character, error) {
+	row := q.db.QueryRow(ctx, getCharacterForUpdate, id)
+	var i Character
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SpiritRootType,
+		&i.SpiritRootQuality,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const renameCharacter = `-- name: RenameCharacter :exec
+UPDATE characters SET name = $2 WHERE id = $1
+`
+
+type RenameCharacterParams struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+func (q *Queries) RenameCharacter(ctx context.Context, arg RenameCharacterParams) error {
+	_, err := q.db.Exec(ctx, renameCharacter, arg.ID, arg.Name)
+	return err
 }

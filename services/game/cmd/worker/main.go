@@ -21,6 +21,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 
+	"tiendao/game/internal/chat"
 	"tiendao/game/internal/config"
 	"tiendao/game/internal/content"
 	"tiendao/game/internal/db"
@@ -73,7 +74,8 @@ func run(log *slog.Logger) error {
 		return err
 	}
 	w := &worker{log: log, rdb: rdb, realms: cb.Realms, tpl: tpl, lb: &leaderboard.Service{Pool: pool, Redis: rdb, Realms: cb.Realms},
-		world: &world.Service{Pool: pool, Realms: cb.Realms, Cat: cb.World, Contribution: cb.Contribution, Log: log, Now: time.Now}}
+		world: &world.Service{Pool: pool, Realms: cb.Realms, Cat: cb.World, Contribution: cb.Contribution, Log: log, Now: time.Now},
+		chat:  &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: time.Now}}
 
 	// Rebuild once at start: Redis may be empty after a restart, and a catalogue retune changes scores.
 	w.reconcile(ctx)
@@ -93,6 +95,7 @@ func run(log *slog.Logger) error {
 			return nil
 		case <-reconcile.C:
 			w.reconcile(ctx)
+			w.chatSweep(ctx)
 		case <-worldTick.C:
 			w.worldTick(ctx)
 		case <-drain.C:
@@ -120,6 +123,20 @@ type worker struct {
 	realms *realm.Catalogue
 	tpl    realtime.Templates
 	world  *world.Service
+	chat   *chat.Service
+}
+
+// chatSweep deletes chat messages past chat.yaml retention_days. Idempotent; concurrent workers only race on
+// already-deleted rows.
+func (w *worker) chatSweep(ctx context.Context) {
+	n, err := w.chat.Sweep(ctx)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		w.log.Error("chat sweep", "err", err)
+		return
+	}
+	if n > 0 {
+		w.log.Info("chat sweep", "deleted", n)
+	}
 }
 
 func (w *worker) worldTick(ctx context.Context) {

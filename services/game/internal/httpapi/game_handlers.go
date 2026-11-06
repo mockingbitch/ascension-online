@@ -80,6 +80,10 @@ func (d Deps) createCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v, err := d.Characters.Create(r.Context(), userFrom(r.Context()), body.Name)
+	if msg, ok := nameBlockedMessage(err); ok {
+		writeError(w, 400, "name_not_allowed", msg)
+		return
+	}
 	switch {
 	case errors.Is(err, character.ErrInvalidName):
 		writeError(w, 400, "invalid_name", "Tên 2–24 chữ cái, chỉ dùng chữ (có dấu) và khoảng trắng")

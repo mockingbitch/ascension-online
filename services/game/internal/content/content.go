@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"tiendao/game/internal/chat"
 	"tiendao/game/internal/contribution"
 	"tiendao/game/internal/dailytask"
 	"tiendao/game/internal/item"
+	"tiendao/game/internal/moderation"
 	"tiendao/game/internal/realm"
 	"tiendao/game/internal/spiritroot"
 	"tiendao/game/internal/vip"
@@ -25,6 +27,8 @@ type Bundle struct {
 	DailyTasks   *dailytask.Catalogue
 	Contribution *contribution.Config
 	World        *world.Catalogue
+	Moderation   *moderation.Catalogue
+	Chat         *chat.Catalogue
 }
 
 // LoadAll loads content/catalog/*.yaml from dir and validates cross-file references.
@@ -50,6 +54,12 @@ func LoadAll(dir string) (*Bundle, error) {
 		return nil, err
 	}
 	if b.World, err = world.LoadFile(filepath.Join(dir, "world_milestones.yaml")); err != nil {
+		return nil, err
+	}
+	if b.Moderation, err = moderation.LoadFile(filepath.Join(dir, "moderation.yaml")); err != nil {
+		return nil, err
+	}
+	if b.Chat, err = chat.LoadFile(filepath.Join(dir, "chat.yaml")); err != nil {
 		return nil, err
 	}
 	if err := b.crossCheck(); err != nil {
@@ -83,6 +93,16 @@ func (b *Bundle) crossCheck() error {
 			if _, ok := b.Items.Get(r.ItemID); !ok {
 				errs = append(errs, fmt.Errorf("daily task %q rewards unknown item %q", t.ID, r.ItemID))
 			}
+		}
+	}
+	for _, ch := range b.Chat.Channels {
+		if _, err := b.Realms.Stage(ch.MinStage); err != nil {
+			errs = append(errs, fmt.Errorf("chat channel %q: min_stage: %w", ch.ID, err))
+		}
+	}
+	for _, cat := range b.Chat.MaskCategories {
+		if !b.Moderation.HasCategory(cat) {
+			errs = append(errs, fmt.Errorf("chat mask_categories: moderation.yaml has no rule in category %q", cat))
 		}
 	}
 	if len(errs) > 0 {

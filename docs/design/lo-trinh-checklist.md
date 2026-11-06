@@ -110,10 +110,16 @@ chỉ là danh sách việc).
       dock mobile đổi tên.
 
 ### 1.5. Kiểm duyệt cơ bản
-- [ ] `internal/character/name.go`: danh sách từ cấm tiếng Việt (có/không dấu, biến thể ký tự), chặn trùng tên
-      nhân vật cốt truyện.
-- [ ] Bảng `reports` + `POST /reports` (tên, quấy rối) + màn admin xử lý (có audit).
-- [ ] Trang chính sách dữ liệu (chỉ thu email Google + đạo hiệu).
+- [x] Bộ lọc đạo hiệu: `content/catalog/moderation.yaml` + `internal/moderation` (có/không dấu, vị trí dấu thanh,
+      chữ fullwidth/biến thể Latin, lặp ký tự, tách chữ). Chặn trùng nhân vật cốt truyện, nhân vật tín ngưỡng, giả danh
+      ban quản trị. Áp dụng khi tạo nhân vật và khi admin đổi tên.
+      ⚠️ Danh sách nhân vật cốt truyện cập nhật lại khi Phase 0 chốt đổi tên (D2). Nhóm `religion`/`political` chờ
+      pháp lý và người am hiểu tín ngưỡng rà.
+- [x] Bảng `reports` (migration `000006`) + `POST /reports` (tên, quấy rối; idempotent, 1 báo cáo mở/đối tượng/lý do,
+      10/ngày) + `GET /admin/reports`, `POST /admin/reports/{id}/resolve` (bỏ qua / xử lý / đổi tên, ghi
+      `admin_audit_logs`). Web: nút báo cáo trên Thiên Bảng, trang `/admin/reports`.
+- [x] Trang `/chinh-sach-du-lieu`. Quyết định 06/11: giữ tên + ảnh Google và user agent, trang ghi đủ (không chỉ
+      email + đạo hiệu). ⚠️ Cần địa chỉ kênh hỗ trợ cho yêu cầu xóa dữ liệu; chưa có tính năng tự xóa tài khoản.
 
 **Xong khi:** người chơi mới tạo nhân vật, tu luyện, đột phá và vượt lôi kiếp được trên thang mới. `make balance`
 cho trung vị Chuẩn Thánh trong khoảng 300–360 ngày. `anti-cheat-reviewer` không còn lỗi mức cao.

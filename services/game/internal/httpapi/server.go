@@ -21,11 +21,13 @@ import (
 	"tiendao/game/internal/auth"
 	"tiendao/game/internal/breakthrough"
 	"tiendao/game/internal/character"
+	"tiendao/game/internal/chat"
 	"tiendao/game/internal/content"
 	"tiendao/game/internal/cultivation"
 	"tiendao/game/internal/dailytask"
 	"tiendao/game/internal/leaderboard"
 	"tiendao/game/internal/realtime"
+	"tiendao/game/internal/report"
 	"tiendao/game/internal/vip"
 	"tiendao/game/internal/world"
 )
@@ -48,6 +50,8 @@ type Deps struct {
 	VIP          *vip.Service
 	DailyTasks   *dailytask.Service
 	World        *world.Service
+	Reports      *report.Service
+	Chat         *chat.Service
 	Realtime     *realtime.Hub // nil → /ws disabled
 	Redis        *redis.Client // shared rate limits; nil → per-instance limits
 
@@ -69,6 +73,11 @@ func New(d Deps) http.Handler {
 	refreshLimit := lim("refresh", 1, time.Second, 30) // every open tab refreshes; own bucket
 	gameLimit := lim("game", 2, time.Second, 20)       // per user for mutations
 	wsLimit := lim("ws", 1, 2*time.Second, 10)         // per IP connection attempts
+	chatLimit := gameLimit
+	if d.Content != nil && d.Content.Chat != nil { // per user, from chat.yaml
+		cr := d.Content.Chat.Rate
+		chatLimit = lim("chat", cr.Messages, cr.Per, cr.Burst)
+	}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, 200, map[string]string{"status": "ok"}) })
@@ -100,6 +109,9 @@ func New(d Deps) http.Handler {
 	mux.Handle("POST /api/v1/vip/daily-gift", d.authn(gameLimit.byUser(http.HandlerFunc(d.claimVIPGift))))
 	mux.Handle("GET /api/v1/tasks/daily", d.authn(http.HandlerFunc(d.dailyTasks)))
 	mux.Handle("POST /api/v1/tasks/daily/{taskId}/claim", d.authn(gameLimit.byUser(http.HandlerFunc(d.claimDailyTask))))
+	mux.Handle("POST /api/v1/reports", d.authn(gameLimit.byUser(http.HandlerFunc(d.submitReport))))
+	mux.Handle("GET /api/v1/chat/{channel}/messages", d.authn(http.HandlerFunc(d.chatHistory)))
+	mux.Handle("POST /api/v1/chat/{channel}/messages", d.authn(chatLimit.byUser(http.HandlerFunc(d.chatSend))))
 
 	// Realtime (read-only broadcast: world announcements)
 	if d.Realtime != nil {
@@ -110,6 +122,10 @@ func New(d Deps) http.Handler {
 	mux.Handle("POST /api/v1/admin/vip/grant", d.authn(d.admin(http.HandlerFunc(d.adminVIPGrant))))
 	mux.Handle("POST /api/v1/admin/inventory/grant", d.authn(d.admin(http.HandlerFunc(d.adminInventoryGrant))))
 	mux.Handle("POST /api/v1/admin/world/start", d.authn(d.admin(http.HandlerFunc(d.adminWorldStart))))
+	mux.Handle("GET /api/v1/admin/reports", d.authn(d.admin(http.HandlerFunc(d.adminListReports))))
+	mux.Handle("POST /api/v1/admin/reports/{reportId}/resolve", d.authn(d.admin(http.HandlerFunc(d.adminResolveReport))))
+	mux.Handle("POST /api/v1/admin/chat/messages/{messageId}/hide", d.authn(d.admin(http.HandlerFunc(d.adminChatHide))))
+	mux.Handle("POST /api/v1/admin/chat/mutes", d.authn(d.admin(http.HandlerFunc(d.adminChatMute))))
 
 	return withRecover(d.Log, withRequestLog(d.Log, withSecurityHeaders(mux)))
 }

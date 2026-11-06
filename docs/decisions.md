@@ -110,6 +110,22 @@ Plan: [design/ke-hoach-trien-khai-hong-hoang.md](design/ke-hoach-trien-khai-hong
 - **Reincarnation (G4).** Luân hồi keeps **50%** of cultivation.
 - Deferred: Đại chiến Vu Yêu gameplay (G2), Yêu tộc path (G3). Still open: G5–G8 — proposals in the plan.
 
+## 2026-11-06 — One-page game shell + world chat
+- **Web = one game screen** (`/play`): fixed viewport, no page scroll; HUD (identity, resources, Tiên Duyên),
+  cultivation scene, dock. Features open as **windows over the scene** via SvelteKit shallow routing (Back closes
+  them). Shared state in `apps/web/src/lib/game/store.svelte.ts` (still server-authoritative: responses replace
+  state). Out-of-game pages (landing, login, policy, public Thiên Bảng/Tiên Duyên, admin) live in `routes/(site)`;
+  signed-in visitors of `/` go straight to `/play`; `/cultivate` redirects.
+- **World chat** (`content/catalog/chat.yaml`): one channel "Thế Giới"; faction/sect channels with Phase 2.
+  Send = REST (`POST /chat/{channel}/messages`: auth, idempotency, Redis rate limit 1/3s burst 5, duplicate-text
+  window 30s) → Postgres `chat_messages` → Redis pub/sub → WS `chat.message` (socket stays receive-only and
+  unauthenticated). At-most-once; clients backfill from REST on every (re)connect.
+- Posting needs **Luyện Khí tầng 3** (anti-throwaway-account spam); reading is open. Profanity is **masked with
+  `***`** (moderation.yaml `profanity` category, same matcher as names); the unmasked text is kept in `raw_body`
+  only for moderators. Retention **90 days** (worker sweep) — ⚠️ legal to confirm.
+- Moderation: reports can attach a chat message (evidence snapshot survives hiding/retention); admins hide messages
+  (`chat.hidden` broadcast) and mute accounts up to 30 days. All audited.
+
 ## 2026-11-06 — Daily tasks, Tụ Linh Phù, VIP daily gift
 - Game day = 00:00–24:00 Vietnam time (UTC+7, `internal/gameday`) for every daily reset.
 - Daily tasks in `content/catalog/daily_tasks.yaml`; progress recorded inside the gameplay transaction that

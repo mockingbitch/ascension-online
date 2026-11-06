@@ -12,3 +12,12 @@ VALUES (@character_id, @realm_id, @stage_id, @now, @now, @grant_reserve_milli);
 -- name: EnsureCurrencyAccount :exec
 INSERT INTO currency_accounts (character_id, currency) VALUES ($1, $2)
 ON CONFLICT DO NOTHING;
+
+-- name: GetCharacterByID :one
+SELECT * FROM characters WHERE id = $1;
+
+-- name: GetCharacterForUpdate :one
+SELECT * FROM characters WHERE id = $1 FOR UPDATE;
+
+-- name: RenameCharacter :exec
+UPDATE characters SET name = $2 WHERE id = $1;
