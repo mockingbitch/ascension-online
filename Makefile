@@ -3,7 +3,7 @@ GAME := services/game
 WEB  := apps/web
 UID  := $(shell id -u)
 GID  := $(shell id -g)
-DB_URL ?= postgres://tiendao:tiendao@localhost:5432/tiendao?sslmode=disable
+DB_URL ?= postgres://tiendao:tiendao@localhost:2432/tiendao?sslmode=disable
 MIGRATE_IMG := migrate/migrate:v4.18.1
 SQLC_IMG := sqlc/sqlc:1.29.0
 COMPOSE := docker compose --env-file .env -f deployments/docker-compose.yml
@@ -67,7 +67,7 @@ PROFILE ?= smoke
 LT_USERS ?= 4000
 PSQL := $(COMPOSE) exec -T postgres psql -X -q -U tiendao -d tiendao
 
-monitoring-up: ## Start the stack + Prometheus (127.0.0.1:9095) + Grafana (127.0.0.1:3001)
+monitoring-up: ## Start the stack + Prometheus (127.0.0.1:2090) + Grafana (127.0.0.1:2001)
 	$(COMPOSE) --profile monitoring up -d --build
 backup: ## pg_dump -Fc to backups/ (BACKUP_DIR, BACKUP_RETENTION=14)
 	deployments/scripts/backup.sh

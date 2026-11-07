@@ -19,7 +19,7 @@ func TestPresenceNeedsRecentActivity(t *testing.T) {
 	ctx := context.Background()
 	url := os.Getenv("TEST_REDIS_URL")
 	if url == "" {
-		url = "redis://localhost:6379/15"
+		url = "redis://localhost:2379/15"
 	}
 	rdb, err := redisx.Connect(ctx, url)
 	if err != nil {

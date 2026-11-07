@@ -50,7 +50,7 @@ func TestEndToEnd(t *testing.T) {
 	}
 	redisURL := os.Getenv("TEST_REDIS_URL")
 	if redisURL == "" {
-		redisURL = "redis://localhost:6379/15"
+		redisURL = "redis://localhost:2379/15"
 	}
 	rdb, err := redisx.Connect(ctx, redisURL)
 	if err != nil {

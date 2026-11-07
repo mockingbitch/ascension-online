@@ -24,7 +24,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-const defaultURL = "postgres://tiendao:tiendao@localhost:5432/tiendao?sslmode=disable"
+const defaultURL = "postgres://tiendao:tiendao@localhost:2432/tiendao?sslmode=disable"
 
 // New creates a migrated database and returns a pool to it.
 func New(t testing.TB) *pgxpool.Pool {

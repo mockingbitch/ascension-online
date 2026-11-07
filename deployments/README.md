@@ -4,7 +4,7 @@ Docker Compose stack (GDD §25, decisions 2026-11-07 "Vận hành"): nginx → w
 PostgreSQL, Redis. Optional `monitoring` profile: Prometheus + Grafana. No Kubernetes.
 
 ```bash
-make up                 # full stack, app at http://localhost:8000
+make up                 # full stack, app at http://localhost:2000
 make monitoring-up      # same + Prometheus + Grafana (docker compose --profile monitoring up -d --build)
 ```
 
@@ -61,13 +61,13 @@ catalogue/code enums — never user, character or IP.
 docker compose --env-file .env -f deployments/docker-compose.yml --profile monitoring up -d
 ```
 
-- Prometheus: http://127.0.0.1:9095 (targets: Status → Targets; alerts: Alerts). Config `monitoring/prometheus.yml`,
+- Prometheus: http://127.0.0.1:2090 (targets: Status → Targets; alerts: Alerts). Config `monitoring/prometheus.yml`,
   rules `monitoring/alerts.yml`, retention 15 days.
-- Grafana: http://127.0.0.1:3001 — user `admin`, password `GRAFANA_ADMIN_PASSWORD` (default `admin`, change it outside
+- Grafana: http://127.0.0.1:2001 — user `admin`, password `GRAFANA_ADMIN_PASSWORD` (default `admin`, change it outside
   dev). Datasource and the dashboard **Tiên Đạo — Vận hành** (folder Tiên Đạo) are provisioned from
   `monitoring/grafana/`: traffic, p50/p95/p99, status classes, 429s, WS, DB pool, Redis errors, outbox lag, worker
   jobs, dead letters, linh thạch created/destroyed, điểm duyên, game activity.
-- Both bind to 127.0.0.1 only; on a server use an SSH tunnel (`ssh -L 3001:127.0.0.1:3001 host`).
+- Both bind to 127.0.0.1 only; on a server use an SSH tunnel (`ssh -L 2001:127.0.0.1:2001 host`).
 
 Alert rules (rules only, no Alertmanager yet — firing alerts show in Prometheus and Grafana; add an Alertmanager with a
 receiver once someone is on call): `TargetDown`, `ApiHigh5xxRate` (> 2 % for 5 m), `ApiP95LatencyHigh` (> 200 ms),

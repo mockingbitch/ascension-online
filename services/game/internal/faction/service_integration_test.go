@@ -489,7 +489,7 @@ func TestRankingRebuild(t *testing.T) {
 	f := newFixture(t)
 	url := os.Getenv("TEST_REDIS_URL")
 	if url == "" {
-		url = "redis://localhost:6379/15"
+		url = "redis://localhost:2379/15"
 	}
 	rdb, err := redisx.Connect(f.ctx, url)
 	if err != nil {

@@ -12,7 +12,7 @@ cp .env.example .env
 make db-up            # Postgres + Redis + migrations (docker)
 make api              # Go API on :8080
 make web              # SvelteKit on :5173 (proxy /api → :8080)
-# hoặc toàn bộ stack: make up  → http://localhost:8000
+# hoặc toàn bộ stack: make up  → http://localhost:2000
 make test
 ```
 

@@ -7,8 +7,8 @@ export default defineConfig({
 	server: {
 		// Go API (services/game) in dev. In prod Nginx routes /api → api container.
 		proxy: {
-			'/api': process.env.API_ORIGIN ?? 'http://localhost:8080',
-			'/ws': { target: (process.env.API_ORIGIN ?? 'http://localhost:8080').replace(/^http/, 'ws'), ws: true }
+			'/api': process.env.API_ORIGIN ?? 'http://localhost:2080',
+			'/ws': { target: (process.env.API_ORIGIN ?? 'http://localhost:2080').replace(/^http/, 'ws'), ws: true }
 		}
 	},
 	test: { include: ['src/**/*.test.ts'] }
