@@ -29,7 +29,7 @@ chỉ là danh sách việc).
 - [x] **D1a, quà ngày:** giữ linh thạch, cấp Tiên Duyên cao nhận nhiều hơn. Đổi tên VIP thành **Tiên Duyên**.
 - [x] **D1b, điểm duyên:** từ tu luyện online, tương tác người chơi, tương tác hệ thống. Nạp 1.000đ = 10 điểm.
 - [x] **D7, linh thạch:** tiêu vào mua vật phẩm ở cửa hàng.
-- [ ] ⚠️ **Luật trao đổi giữa người chơi** (cần trước Phase 5).
+- [x] **Luật trao đổi giữa người chơi** — chủ dự án chốt 2026-11-07; triển khai Phase 5.2 (`trade.yaml`).
 - [ ] ⚠️ **G2, G3** (Đại chiến, đạo đồ Yêu tộc): chốt trước khoảng ngày 30 sau ra mắt.
 - [ ] ⚠️ **G5 đến G8:** xác nhận các đề xuất trong plan (G5 đã dùng tạm cho D3).
 - [ ] Ghi tất cả vào `docs/decisions.md`.
@@ -95,19 +95,24 @@ chỉ là danh sách việc).
 - [x] Test: bảng tỉ lệ theo cảnh giới, bảo hiểm, idempotency khi gửi lại cùng key.
 
 ### 1.4. VIP thành Tiên Duyên (D1, D1a, D1b)
-- [ ] Đổi mọi chữ hiển thị "VIP" → **Tiên Duyên**, điểm → **điểm duyên** (UI, thông báo, `vip.yaml` `name`).
-      Giữ package `vip` và bảng hiện có để khỏi migrate rủi ro.
-- [ ] Bảng `vip_point_ledger` (nguồn: `topup`, `cultivation`, `lecture`, `interaction`, `task`, `trial`, `event`,
-      `admin`), cấp = tổng điểm. Ghi trong cùng transaction với hoạt động sinh ra điểm.
-- [ ] `vip.yaml`: `points_per_1000_vnd: 10`, điểm duyên cho từng hoạt động, **tính lại ngưỡng 12 cấp** để người
-      chơi miễn phí lên cấp được qua hoạt động (`game-balancer`).
-- [ ] Giữ quà ngày linh thạch theo cấp (D1a). Sửa chú thích ngân sách quà ngày trong `vip.yaml` (đang sai: 67% chứ
-      không phải 15%).
-- [ ] Hoàn tiền: trừ đúng điểm duyên đã cộng, cấp có thể tụt.
-- [ ] Loader vẫn từ chối mọi đặc quyền cộng tu vi, tỉ lệ đột phá/lôi kiếp, điểm xếp hạng.
-- [ ] Balancesim: đo khoảng cách tiến độ Tiên Duyên 12 so với cấp 0 (qua linh thạch). Không ai vượt 150/ngày.
-- [ ] Web: trang `/vip` thành trang **Tiên Duyên** (đổi route `/tien-duyen`, giữ redirect từ `/vip`), nút ở HUD và
-      dock mobile đổi tên.
+- [x] Đổi mọi chữ hiển thị "VIP" → **Tiên Duyên**, điểm → **điểm duyên** (UI, thông báo, `vip.yaml` `name`).
+      Giữ package `vip` và bảng hiện có để khỏi migrate rủi ro. Loader từ chối tên cấp chứa "VIP".
+- [x] Bảng `vip_point_ledger` (nguồn: `topup`, `cultivation`, `lecture`, `interaction`, `task`, `trial`, `event`,
+      `admin`), cấp = tổng điểm. Ghi trong cùng transaction với hoạt động sinh ra điểm. Migration `000009`
+      (`source`, `activity_id`, `game_day`, `reverses_ledger_id`); một hàm `vip.EarnLocked` áp trần theo hoạt động +
+      trần 20/ngày dưới khóa `vip_accounts`. Đã nối: vận công (settle cách ≥ 1 giờ), nghe giảng (mốc 10/20), nhận
+      thưởng nhiệm vụ ngày. Hộ pháp, song tu, thế lực, thí luyện, sự kiện để `live: false` cho tới khi tính năng có.
+- [x] `vip.yaml` v3: `points_per_1000_vnd: 10`, điểm duyên cho từng hoạt động (quyết định D), ngưỡng 12 cấp theo
+      quyết định E.
+- [x] Giữ quà ngày linh thạch theo cấp (D1a). Sửa chú thích ngân sách quà ngày trong `vip.yaml` (67%, ràng buộc
+      B × C của đan tăng tốc).
+- [x] Hoàn tiền: trừ đúng điểm duyên đã cộng, cấp có thể tụt. `POST /admin/vip/refund` (audited, idempotent, mỗi giao
+      dịch nạp hoàn tối đa 1 lần). Webhook nạp (khung + sandbox, Phase 4) gọi `TopupLocked`; hoàn đơn nạp qua `POST /admin/payments/orders/{id}/refund`.
+- [x] Loader vẫn từ chối mọi đặc quyền cộng tu vi, tỉ lệ đột phá/lôi kiếp, điểm xếp hạng.
+- [x] Balancesim: đo khoảng cách tiến độ Tiên Duyên 12 so với cấp 0 (qua linh thạch). Không ai vượt 150/ngày.
+      Thêm bảng cấp Tiên Duyên người miễn phí đạt được từ nguồn đang mở.
+- [x] Web: trang `/vip` thành trang **Tiên Duyên** (đổi route `/tien-duyen`, giữ redirect từ `/vip`), nút ở HUD đổi
+      tên; trang/cửa sổ hiện nguồn điểm duyên và tiến độ hôm nay. Dock mobile chưa có nút Tiên Duyên (mở từ HUD).
 
 ### 1.5. Kiểm duyệt cơ bản
 - [x] Bộ lọc đạo hiệu: `content/catalog/moderation.yaml` + `internal/moderation` (có/không dấu, vị trí dấu thanh,
@@ -132,30 +137,42 @@ cho trung vị Chuẩn Thánh trong khoảng 300–360 ngày. `anti-cheat-review
 **Phụ thuộc:** Phase 1. **Hạn:** trước closed beta.
 
 ### 2.1. Trạng thái thế giới
-- [ ] `content/catalog/world_milestones.yaml`: tất cả mốc cốt truyện (ngày mục tiêu, ngưỡng điểm, `min_pct 7000`,
+- [x] `content/catalog/world_milestones.yaml`: tất cả mốc cốt truyện (ngày mục tiêu, ngưỡng điểm, `min_pct 7000`,
       `max_pct 15000`, hiệu ứng, mẫu thông báo).
-- [ ] Bảng `world_state` (một dòng: kỷ nguyên, mốc hiện tại, `started_at`) + `world_milestones_reached`.
-- [ ] `internal/world`: luật thuần "đạt mốc" theo **tiến độ trung bình mỗi người chơi hoạt động** (Σ điểm đã cộng ÷
+- [x] Bảng `world_state` (một dòng: kỷ nguyên, mốc hiện tại, `started_at`) + `world_milestones_reached`
+      (migration `000010`: + `world_effects`, `world_events`, `world_milestone_overrides`).
+- [x] `internal/world`: luật thuần "đạt mốc" theo **tiến độ trung bình mỗi người chơi hoạt động** (Σ điểm đã cộng ÷
       DAU mỗi ngày, cộng dồn), 70%/150% làm lưới an toàn. Có test bảng.
-- [ ] Worker: **tính lại** tổng ngày + DAU từ `daily_contribution`, đạt mốc thì ghi idempotent + outbox
+- [x] Worker: **tính lại** tổng ngày + DAU từ `daily_contribution`, đạt mốc thì ghi idempotent + outbox
       `world.milestone_reached`.
-- [ ] Thông báo mốc qua WS (`content/story/announcements/`).
-- [ ] `GET /world`: kỷ nguyên, % tới mốc kế tiếp, ngày dự kiến.
-- [ ] Admin: xem tổng, dời mốc thủ công (có audit).
-- [ ] Web: thanh tiến trình thế giới trên HUD, thay thẻ "Thiên hạ truyền âm".
+- [x] Thông báo mốc qua WS (`content/story/announcements/`).
+- [x] `GET /world`: kỷ nguyên, % tới mốc kế tiếp, ngày dự kiến.
+- [x] Admin: xem tổng, dời mốc thủ công (có audit).
+- [x] Web: thanh tiến trình thế giới trên HUD (`WorldProgress`), `/play/thien-dao` chạy dữ liệu thật. (Thẻ "Thiên hạ
+      truyền âm" không còn trong shell hiện tại; tin mốc vào feed thông báo.)
+
+Ghi chú: hiệu ứng `split_faction`/`migrate_faction` được lưu chờ trong `world_effects` — Phase 2.2 thực thi (đã xong).
 
 ### 2.2. Thế lực
-- [ ] `content/catalog/factions.yaml`: 5 thế lực ban đầu (tên nguyên bản theo Phase 0), đạo đồ cho phép, kỷ nguyên
-      mở/đóng.
-- [ ] Bảng `character_faction` + `faction_history`. Đổi phe có thời gian chờ (YAML, đề xuất 7 ngày).
-- [ ] Khóa đổi phe (dùng cho Phong Thần sau này).
-- [ ] Bảng xếp hạng thế lực (Redis ZSET mới, dựng lại được từ Postgres).
-- [ ] Web: trang Thế lực (danh sách thành viên, xếp hạng, đổi phe), mở khóa ô "Tông Môn" trên dock.
+- [x] `content/catalog/factions.yaml`: 5 thế lực ban đầu (tên nguyên bản theo Phase 0), đạo đồ cho phép, kỷ nguyên
+      mở/đóng. + 3 viện Huyền Khung, Kim Sa Giáo, Nhân Tộc (đóng cho đến khi chốt canon). Loader + cross-check
+      (đạo đồ, kỷ nguyên, hiệu ứng chia/đổi tên trong `world_milestones.yaml`).
+- [x] Bảng `character_faction` + `faction_history` (migration `000011`). Đổi phe có thời gian chờ (YAML, 7 ngày).
+- [x] Khóa đổi phe (dùng cho Phong Thần sau này): `POST /admin/factions/lock|unlock`, có audit.
+- [x] Bảng xếp hạng thế lực (Redis ZSET mới, dựng lại được từ Postgres): công thế lực trong kỷ nguyên hiện tại +
+      ZSET thành viên mỗi thế lực + số thành viên.
+- [x] Worker thực thi `split_faction`/`migrate_faction`: báo trước → chọn nhánh → hết hạn xếp vào nhánh ít người nhất.
+- [x] Web: trang Thế lực (danh sách thành viên, xếp hạng, đổi phe, chọn nhánh), mở khóa ô thế lực trên dock,
+      `chon-the-luc` chạy thật.
+- [ ] Điểm duyên "Công thế lực" (`faction_merit`, 1 × 3): chưa có định nghĩa hành động kích hoạt → giữ `live: false`.
 
 ### 2.3. Mở đầu Tử Tiêu Cung
-- [ ] Luồng người mới: video mở đầu (để chỗ, bỏ qua được) → Tử Tiêu Cung → chọn thế lực → chọn đạo đồ → đặt đạo hiệu.
-- [ ] Nội dung lời giảng mở đầu (`story-creator`).
-- [ ] Web: màn Tử Tiêu Cung (cảnh SVG nguyên bản, `graphic-designer`).
+- [x] Luồng người mới: video mở đầu (để chỗ, bỏ qua được) → Tử Tiêu Cung → chọn thế lực → chọn đạo đồ → đặt đạo hiệu.
+      `/create` là wizard phía client, bước cuối gửi một intent `POST /character {name, factionId, path}` (§9.6, một
+      transaction). Có nhân vật mà chưa có thế lực → `/chon-the-luc`; người chơi cũ bỏ qua cả hai.
+- [x] Nội dung lời giảng mở đầu (`content/story/onboarding/mo-dau.md`: 8 cảnh + 8 câu của Hồng Quân, bản nháp D2).
+- [x] Web: màn Tử Tiêu Cung (ảnh tĩnh + CSS từ art đã có; hội trường `/play/tu-tieu-cung` là nơi hạ cánh).
+- [ ] Video mở đầu thật (đồ họa, giọng kể, nhạc, phụ đề) thay chuỗi ảnh tĩnh; xem lại từ menu.
 
 ### 2.4. Giảng đạo trực tiếp & presence
 - [ ] `content/catalog/lectures.yaml`: 2 buổi/ngày (giờ VN), thời lượng, điểm thưởng (thuộc phần 30/ngày).
@@ -166,16 +183,21 @@ cho trung vị Chuẩn Thánh trong khoảng 300–360 ngày. `anti-cheat-review
 - [ ] Load test k6: 3.000 kết nối cùng buổi.
 
 ### 2.5. Hoạt động hằng ngày & chỗ tiêu linh thạch
-- [ ] Dâng hương buổi sáng có chuỗi ngày (mở rộng `dailytask`), không "nhận lộc".
-- [ ] Thay nhiệm vụ `trung_kich` bằng "Nghe giảng đạo".
-- [ ] Ngộ đạo/gieo quẻ: buff nhỏ, công bố tỉ lệ, trong trần 150.
-- [ ] **Cửa hàng** (D7): `content/catalog/shop.yaml` (vật phẩm, giá linh thạch, giới hạn mua/ngày), `POST /shop/buy`
+- [x] Dâng hương buổi sáng có chuỗi ngày (mở rộng `dailytask`), không "nhận lộc".
+- [x] Thay nhiệm vụ `trung_kich` bằng "Nghe giảng đạo".
+- [x] Ngộ đạo/gieo quẻ: buff nhỏ, công bố tỉ lệ, trong trần 150. (Tên trong game: "Gieo quẻ", để khỏi trùng khoảnh khắc ngộ đạo ở Tử Tiêu Cung.)
+- [x] **Cửa hàng** (D7): `content/catalog/shop.yaml` (vật phẩm, giá linh thạch, giới hạn mua/ngày), `POST /shop/buy`
       có idempotency + ledger tiêu/nhận trong một transaction.
-- [ ] Loader từ chối đưa vào cửa hàng vật phẩm có thuộc tính tăng tỉ lệ đột phá/lôi kiếp (được bán vật phẩm *điều kiện*
+- [x] Loader từ chối đưa vào cửa hàng vật phẩm có thuộc tính tăng tỉ lệ đột phá/lôi kiếp (được bán vật phẩm *điều kiện*
       đột phá như Trúc Cơ Đan).
-- [ ] Vật phẩm tăng tốc: tối đa khoảng 10 điểm/ngày mỗi nhân vật (ví dụ Tụ Linh Đan +5, tối đa 2 viên/ngày).
-- [ ] Vật phẩm tăng tốc tu luyện: hiệu lực vẫn bị trần 150/ngày.
-- [ ] Cập nhật `decisions.md`: xóa cảnh báo "spirit stones have no sink" khi cửa hàng lên.
+- [x] Vật phẩm tăng tốc: tối đa khoảng 10 điểm/ngày mỗi nhân vật (ví dụ Tụ Linh Đan +5, tối đa 2 viên/ngày).
+- [x] Vật phẩm tăng tốc tu luyện: hiệu lực vẫn bị trần 150/ngày.
+- [x] Cập nhật `decisions.md`: xóa cảnh báo "spirit stones have no sink" khi cửa hàng lên.
+- [x] **Chỗ tiêu linh thạch định kỳ, không tăng tiến độ** (chủ dự án chốt cả 3, decisions 2026-11-07 "Linh thạch
+      sinks", migration `000014`): `cosmetics.yaml` (danh hiệu, khung chân dung, danh quang chat, trang trí động phủ theo
+      mùa/thời thế, giá leo thang; cùng id với perk Tiên Duyên), `POST /cosmetics/buy|equip`; `faction_works.yaml` +
+      `POST /factions/donate` (trần/ngày, công đức bảng, chỉ mở trang trí sơn môn). Người khác thấy: `GET /character`,
+      tin chat (`nameFx`), Thiên Bảng/thành viên thế lực. ⚠️ Giá và mốc công trình là placeholder — chờ chủ dự án duyệt.
 
 **Xong khi:** một server thử với dữ liệu giả lập đi qua ít nhất 2 mốc (một mốc theo ngưỡng, một mốc theo 150%).
 Buổi giảng chịu được load test. Linh thạch có ít nhất một chỗ tiêu.
@@ -189,31 +211,51 @@ Buổi giảng chịu được load test. Linh thạch có ít nhất một ch�
 **Hạn:** tâm ma **trước ra mắt mở**. Hóa phàm trước ngày 20. Bí cảnh + pháp bảo trước ngày 33.
 
 ### 3.1. Khung mini game
-- [ ] Bảng `trial_runs` (seed, issued_at, expires_at, submitted_at, kết quả, phán quyết).
-- [ ] `POST /trials/{kind}/start` → `{runId, seed, expiresAt}`. `POST /trials/{runId}/submit` → kiểm chứng.
-- [ ] Kiểm chứng: dùng một lần, thời lượng theo giờ server, điểm trong khoảng khả thi, phát lại log input (game
-      tất định).
-- [ ] `content/catalog/trials.yaml`: cảnh giới áp dụng, thời gian chờ khi thua (đề xuất 30 phút), độ khó.
-- [ ] Web: `src/lib/minigames/` (canvas 2D thuần), khung chung: tải, đếm giờ, gửi kết quả, chế độ giảm tốc.
+- [x] Bảng `trial_runs` (seed, issued_at, expires_at, submitted_at, kết quả, phán quyết) — migration `000013`.
+- [x] `POST /trials/{kind}/start` → `{runId, seed, expiresAt, params}`. `POST /trials/{runId}/submit` → kiểm chứng.
+      `GET /trials`: trạng thái từng loại (có thể thử, chờ tới, ấn chứng còn hạn).
+- [x] Kiểm chứng: dùng một lần, thời lượng theo giờ server, điểm trong khoảng khả thi, phát lại log input (game
+      tất định). Idempotency-Key, khóa hàng, thời gian chờ khi thua, phiên bỏ dở cũng tính thua.
+- [x] `content/catalog/trials.yaml`: cảnh giới áp dụng, thời gian chờ khi thua (30 phút), độ khó.
+- [x] Web: `src/lib/minigames/` (canvas 2D thuần), khung chung: tải, đếm giờ, gửi kết quả, chế độ giảm tốc.
 
 ### 3.2. Tâm ma (lên Nguyên Anh, kiểu Tetris)
-- [ ] Luật nguyên bản, tất định theo seed, có phát lại phía server (Go).
-- [ ] Đột phá lên Nguyên Anh yêu cầu phiên tâm ma "qua" còn hiệu lực.
-- [ ] Đồ họa nguyên bản (khối "tâm ma"), không dùng hình/âm thanh của game có thật.
-- [ ] Test gian lận: gửi lại run cũ, sửa điểm, rút ngắn thời gian.
+- [x] Luật nguyên bản, tất định theo seed, có phát lại phía server (Go) — `docs/design/tam-ma-luat-choi.md`,
+      vector vàng chung Go/TS `packages/contracts/golden/tam-ma-v2.json`.
+- [x] Đột phá lên Nguyên Anh yêu cầu phiên tâm ma "qua" còn hiệu lực (giữ qua lần thất bại, dùng khi thành công).
+- [x] Đồ họa nguyên bản (khối "tâm ma"), không dùng hình/âm thanh của game có thật.
+- [x] Test gian lận: gửi lại run cũ, sửa điểm, rút ngắn thời gian, phiên hết hạn, run của nhân vật khác, gửi khi
+      đang chờ, gửi đồng thời.
+- [ ] Beta: hiệu chỉnh độ khó (`trials.yaml` params) theo tỉ lệ qua thật; `anti-cheat-reviewer` duyệt khung trial.
 
 ### 3.3. Hóa phàm (lên Hóa Thần, kiểu chém hoa quả)
-- [ ] Luật nguyên bản, sinh vật thể theo seed, kiểm tra hợp lý phía server.
-- [ ] Gắn vào điều kiện đột phá lên Hóa Thần.
+- [x] Luật nguyên bản, sinh vật thể theo seed, kiểm tra hợp lý phía server — `docs/design/hoa-pham-luat-choi.md`,
+      phát lại log nét (delta, một điểm/tick) bằng Go, vector vàng chung `packages/contracts/golden/hoa-pham-v1.json`,
+      luật nhịp người (bước bút tối đa, cửa sổ trượt quãng/nét, nhấc tay, thời gian qua tối thiểu).
+- [x] Gắn vào điều kiện đột phá lên Hóa Thần (`trials.yaml` `hoa_pham` gate tier 4; mọi đường có đột phá lớn đó).
+- [x] Test gian lận: như tâm ma + dịch chuyển tức thời, tốc độ phi nhân, log quá cỡ.
+- [ ] Beta: hiệu chỉnh độ khó (`pass_score`, đợt, đèn) theo tỉ lệ qua thật; phương án cho người không vuốt được.
 
 ### 3.4. Bí cảnh thử luyện + pháp bảo
-- [ ] `content/catalog/secret_realms.yaml`: thời lượng tối đa, lượt/ngày, bảng rơi, trần phần thưởng/ngày.
-- [ ] `items.yaml`: pháp bảo (độ hiếm, % tăng tỉ lệ vượt kiếp có trần), linh thạch.
-- [ ] Bảng `secret_realm_runs`, phần thưởng qua ledger kho đồ.
-- [ ] Mini game survivor nguyên bản (canvas 2D).
-- [ ] Pháp bảo/đan/hộ pháp cộng vào tỉ lệ lôi kiếp (hoàn thiện 1.3), có trần tổng.
-- [ ] Hộ pháp: đồng môn online, giới hạn lần/ngày.
-- [ ] `game-balancer`: mô phỏng nguồn và chỗ tiêu linh thạch + pháp bảo trước khi mở.
+- [x] `content/catalog/secret_realms.yaml`: thời lượng tối đa (150 s), lượt/ngày (3), bảng rơi theo phẩm điểm, trần
+      phần thưởng/ngày (120 linh thạch · 30 nguyên liệu · 1 pháp bảo). Tách riêng khỏi `trials.yaml` (trial = cửa đột phá,
+      bí cảnh = lượt tài nguyên hằng ngày), cùng khung kiểm chứng. Luật: `docs/design/bi-canh-luat-choi.md`.
+- [x] `items.yaml`: 5 pháp bảo (linh → tiên, lôi kiếp +1% … +5%), loader: không trao đổi, chỉ `tribulation_bonus_bp`,
+      chỉ artifact được tăng tỉ lệ; `content.LoadAll`: ≤ `item_bonus_max_bp`, chỉ rơi từ bí cảnh, không trong shop/nhiệm vụ.
+      Một pháp bảo "hộ thân" được trang bị (`character_artifacts`, `POST /artifacts/equip`).
+- [x] Bảng `secret_realm_runs` + `secret_realm_days` (migration `000015`), phần thưởng qua `currency_ledger` /
+      `inventory_transactions` trong giao dịch nộp, khóa `sr:<run id>`.
+- [x] Mini game survivor nguyên bản (canvas 2D): tất định số nguyên, log hướng 8 phía RLE, server phát lại, luật nhịp
+      người (≤ 8 lần đổi hướng/giây), sàn 30 s, telemetry, hết hạn 240 s; vector vàng `packages/contracts/golden/bi-canh-v1.json`.
+- [x] Pháp bảo/hộ pháp cộng vào tỉ lệ lôi kiếp (hoàn thiện 1.3), có trần tổng (quyết định F), bảng phân tích hiện mọi phần
+      và trần đã cắt (`bonus_cap`, `max_cap`), snapshot trong `breakthrough_attempts.odds`. ⚠️ Đan hộ thân (≤ +2% còn lại
+      của trần đồ 7%) chưa làm.
+- [x] Hộ pháp: đồng môn online (presence Redis TTL qua `POST /presence/ping`), mời → nhận lời trong 30 phút → lần độ
+      kiếp kế tiếp đếm người còn online + cùng thế lực (≤ 3), 2 lần/ngày/người hộ pháp; điểm duyên `protector_assist`
+      `live: true` (worker cộng qua outbox). ⚠️ Chưa cộng tu vi nhóm cộng đồng cho người hộ pháp.
+- [x] `game-balancer`: `make balance` có bảng bí cảnh 60 ngày (nguồn linh thạch/nguyên liệu, pháp bảo, ngân sách linh
+      thạch trước/sau, hiệu ứng lôi kiếp, công bằng Tiên Duyên). Decisions 2026-11-07 "Bí cảnh thử luyện + pháp bảo".
+- [ ] Beta: hiệu chỉnh độ khó/bảng rơi theo số liệu thật; `anti-cheat-reviewer` duyệt bí cảnh + hộ pháp.
 
 **Xong khi:** người chơi đi được từ Luyện Khí đến Luyện Hư qua đủ mini game. `anti-cheat-reviewer` đã duyệt khung
 trial. Kinh tế linh thạch ổn định trong mô phỏng 60 ngày.
@@ -227,10 +269,17 @@ trial. Kinh tế linh thạch ổn định trong mô phỏng 60 ngày.
 
 ### Trước closed beta
 - [ ] Pháp lý: đã có ý kiến luật sư, đủ điều kiện vận hành theo yêu cầu được xác nhận.
-- [ ] ⚠️ **Kênh nạp:** chọn cổng thanh toán, tích hợp webhook idempotent → `vip_point_ledger` (1.000đ = 10 điểm), đối soát. Hiện
-      chỉ có admin grant. Có thể để sau beta nếu beta không thu tiền.
-- [ ] Backup + khôi phục thử Postgres. Dashboard metrics, cảnh báo.
-- [ ] Load test: settle, đột phá, buổi giảng, WS.
+- [x] **Kênh nạp — khung xong, cổng thật còn mở:** đơn nạp, webhook có chữ ký + idempotent → `vip.TopupLocked` (1.000đ = 10
+      điểm), đối soát + hết hạn ở worker, hoàn tiền nối `vip.Refund`, cổng giả lập (sandbox) cho dev/staging
+      (`payments.yaml`, migration 000016, decisions 2026-11-07 "Khung nạp Tiên Duyên").
+  - [ ] ⚠️ Chọn cổng thật (PayOS/VNPay/MoMo) sau hợp đồng + ý kiến pháp lý, viết adapter `payment.Provider`, bật trong
+        `payments.yaml`. Chính sách hoàn tiền chính thức (web đang hiện bản nháp).
+- [x] Backup + khôi phục thử Postgres (`make backup` / `make restore FILE=…` / `make backup-test`). Dashboard metrics,
+      cảnh báo: `/metrics` api (:9090) + worker (:9091), profile compose `monitoring` (Prometheus + Grafana + luật cảnh
+      báo). Xem [deployments/README.md](../../deployments/README.md).
+- [ ] Cảnh báo tới người trực (Alertmanager + kênh nhận) khi có lịch trực; lịch cron backup + chép ra ngoài máy chủ.
+- [x] Load test: settle, đột phá, buổi giảng, WS — kịch bản k6 `loadtest/` (`make loadtest`, smoke 50 VU đạt ngưỡng).
+- [ ] Chạy `make loadtest PROFILE=full` (3.000 người nghe giảng + 3.000 WS) trên máy staging cấu hình như prod.
 
 ### Closed beta (200–500 người)
 - [ ] Đo điểm/ngày thực tế theo nhóm (1, 2, 3 lần đăng nhập/ngày).
@@ -239,7 +288,8 @@ trial. Kinh tế linh thạch ổn định trong mô phỏng 60 ngày.
 - [ ] Thu phản hồi UX: luồng Tử Tiêu Cung, lôi kiếp (mất 25% có gây bỏ game không).
 
 ### Ra mắt mở
-- [ ] Reset dữ liệu beta (thông báo trước), ghi `world_state.started_at` = **ngày 0**.
+- [ ] Reset dữ liệu beta (thông báo trước), ghi `world_state.started_at` = **ngày 0**. Công cụ đã có: `opsctl reset-beta`
+      + `opsctl start-world` (xác nhận gõ tay, chặn prod, ghi audit) — xem deployments/README.md.
 - [ ] Video mở đầu đã có (nếu chưa xong: ảnh tĩnh + chữ, thay sau).
 - [ ] Trực vận hành 2 tuần đầu.
 
@@ -252,17 +302,24 @@ trial. Kinh tế linh thạch ổn định trong mô phỏng 60 ngày.
 **Phụ thuộc:** presence (2.4), kiểm duyệt (1.5).
 
 ### 5.1. Đạo lữ song tu
-- [ ] Bảng `dao_lu_bonds` + partial unique index (một bond đang hiệu lực mỗi người).
-- [ ] Cầu thân → xác nhận đôi, cảnh báo "vĩnh viễn", điều kiện tối thiểu (tuổi tài khoản, cảnh giới).
-- [ ] Song tu: cả hai online thì tăng hiệu quả 2h/ngày, trong trần 150.
-- [ ] Chấm dứt: lượng kiếp (hook cho Phase 6/8), admin sau báo cáo, vắng 90 ngày (worker).
-- [ ] Chống tự song tu bằng nhiều tài khoản: theo dõi cặp cùng thiết bị/IP, cảnh báo admin.
+- [x] Bảng `dao_lu_bonds` + partial unique index (một bond đang hiệu lực mỗi người) — index trên `dao_lu_members`
+      (cả hai phía), migration 000017.
+- [x] Cầu thân → xác nhận đôi, cảnh báo "vĩnh viễn", điều kiện tối thiểu (tuổi tài khoản, cảnh giới) — `dao_lu.yaml`.
+- [x] Song tu: cả hai online thì tăng hiệu quả 2h/ngày, trong trần 150 — phiên Redis + nhận `dual_cultivation`
+      (community bucket); điểm duyên `dual_cultivation` đã `live`.
+- [x] Chấm dứt: lượng kiếp (hook `bond.EndForCharacterLocked` cho Phase 6/8), admin sau báo cáo, vắng 90 ngày (worker).
+- [x] Chống tự song tu bằng nhiều tài khoản: băm IP có muối (`internal/netsig`, 30 ngày), cảnh báo admin
+      (`/admin/dao-lu/flags`, `/admin/netsig/clusters`). Chưa theo dõi thiết bị (chỉ mạng).
 
 ### 5.2. Trao đổi vật phẩm
-- [ ] Bảng `trades`, chuyển quyền sở hữu nguyên tử qua ledger, giới hạn lần/ngày (YAML).
-- [ ] Tài khoản mới không nhận được đồ hiếm. Giới hạn giá trị nhận mỗi ngày.
-- [ ] Cảnh báo luồng chuyển một chiều bất thường cho admin.
-- [ ] Mở khóa ô "Túi Đồ" trên dock (kèm tab Cửa hàng nếu chưa có ở Phase 2).
+- [x] Bảng `trade_offers`/`trade_lines`/`trade_days`/`trade_events` (migration 000018), tặng + đổi hai chiều, chuyển
+      quyền sở hữu nguyên tử qua ledger trong một giao dịch (khóa theo thứ tự character_id), giới hạn lần/ngày (`trade.yaml`).
+- [x] Tài khoản (< 7 ngày) và nhân vật (< 3 ngày, dưới Trúc Cơ) mới không nhận được. Trần giá trị nhận mỗi ngày theo quan
+      hệ (người lạ 300 · đồng môn 600 · đạo lữ 1.000), phí 5% linh thạch bị hủy. Chỉ linh thạch + nguyên liệu.
+- [x] Cảnh báo luồng chuyển một chiều bất thường cho admin (`GET /admin/trades/flows`, có audit), cờ trùng mạng (netsig),
+      báo cáo giao dịch (`trade_abuse`).
+- [x] Tab "Trao đổi" trong Túi Đồ (hộp thư, xác nhận "không hoàn tác", soạn từ thẻ đạo hữu, lịch sử); vật phẩm không
+      trao đổi được có dấu khóa.
 
 **Xong khi:** `anti-cheat-reviewer` duyệt trade (nhân bản đồ, race condition) và bond.
 

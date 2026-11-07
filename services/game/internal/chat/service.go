@@ -56,6 +56,7 @@ type Message struct {
 	StageID     string    `json:"stageId"`
 	Text        string    `json:"text"`
 	SentAt      time.Time `json:"sentAt"`
+	NameFx      string    `json:"nameFx,omitempty"` // chat_aura cosmetic worn at send time (cosmetics.yaml id; display only)
 }
 
 // Publisher fans an event out to every API instance (realtime.Publish in production). Best effort.
@@ -69,6 +70,9 @@ type Service struct {
 	Mod     *moderation.Catalogue
 	Now     func() time.Time
 	Publish Publisher // nil → no live delivery (clients still get history)
+	// NameFx filters the chat aura snapshot by the sender's điểm duyên (cosmetic.Catalogue.NameFxFilter): a Tiên Duyên
+	// perk above the current level is not shown. nil → stored as equipped.
+	NameFx func(fx string, vipPoints int64) string
 }
 
 // CanPost reports whether a character at stageID may post in ch. Stages on another path compare by tier/order.
@@ -144,9 +148,14 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 				return ErrDuplicate
 			}
 		}
+		fx := sender.NameFx
+		if s.NameFx != nil {
+			v := s.NameFx(fx.String, sender.VipPoints)
+			fx = pgtype.Text{String: v, Valid: v != ""}
+		}
 		row, err := q.InsertChatMessage(ctx, db.InsertChatMessageParams{
 			Channel: channel, UserID: userID, CharacterID: sender.CharacterID, CharacterName: sender.Name,
-			StageID: sender.StageID, Body: body, RawBody: raw, IdempotencyKey: key, Now: now,
+			StageID: sender.StageID, Body: body, RawBody: raw, IdempotencyKey: key, Now: now, NameFx: fx,
 		})
 		if err != nil {
 			return err
@@ -165,7 +174,7 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 }
 
 func fromRow(r db.ChatMessage) Message {
-	return Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName, StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt}
+	return Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName, StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt, NameFx: r.NameFx.String}
 }
 
 // History returns up to history_size visible messages before beforeID (0 = newest), oldest first.
@@ -180,7 +189,7 @@ func (s *Service) History(ctx context.Context, channel string, beforeID int64) (
 	out := make([]Message, len(rows))
 	for i, r := range rows { // rows are newest first → reverse
 		out[len(rows)-1-i] = Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName,
-			StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt}
+			StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt, NameFx: r.NameFx.String}
 	}
 	return out, nil
 }

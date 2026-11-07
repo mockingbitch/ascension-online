@@ -1,6 +1,5 @@
-// Package world holds the shared-world clock: per-game-day totals, the server median ladder position and (Phase 2)
-// story milestones. Phase 1 subset: settings loader + pure helpers used by the worker day job and by catch-up /
-// late-join grant (docs/design/data-model-the-gioi-chung.md §5).
+// Package world holds the shared-world clock: per-game-day totals, the server median ladder position and the story
+// milestones (eras, ranged events, faction effects) — docs/design/data-model-the-gioi-chung.md §5.
 package world
 
 import (
@@ -27,9 +26,15 @@ type Settings struct {
 	ExcludeCatchUpBonus     bool
 }
 
-// Catalogue is the validated world catalogue (Phase 1: settings only).
+// Catalogue is the validated world catalogue. Immutable after Load.
 type Catalogue struct {
-	Settings Settings
+	Settings   Settings
+	Eras       []Era
+	Milestones []Milestone
+	eraSeq     map[string]int
+	byID       map[string]int
+	events     map[string]eventRef
+	eraEffects [][]EraEffect // by era seq; filled once by SetEraEffects while loading (content.LoadAll)
 }
 
 type file struct {
@@ -44,8 +49,8 @@ type file struct {
 		DayCloseGraceSeconds        int64  `yaml:"day_close_grace_seconds"`
 		MedianWindowDays            int    `yaml:"median_window_days"`
 	} `yaml:"settings"`
-	Eras       []yaml.Node `yaml:"eras"`       // Phase 2
-	Milestones []yaml.Node `yaml:"milestones"` // Phase 2
+	Eras       []fileEra       `yaml:"eras"`
+	Milestones []fileMilestone `yaml:"milestones"`
 }
 
 // LoadFile parses and validates world_milestones.yaml.
@@ -90,13 +95,12 @@ func Load(r io.Reader) (*Catalogue, error) {
 	if s.MedianWindowDays < 1 || s.MedianWindowDays > 60 {
 		fail("settings.median_window_days must be within 1..60")
 	}
-	if len(raw.Eras) > 0 || len(raw.Milestones) > 0 {
-		fail("eras/milestones are Phase 2 and not supported by this loader yet")
-	}
+	c := &Catalogue{}
+	c.buildStory(raw.Eras, raw.Milestones, fail)
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("world: invalid catalogue: %w", errors.Join(errs...))
 	}
-	return &Catalogue{Settings: Settings{
+	c.Settings = Settings{
 		WorldCreditCapMilli:     s.WorldCreditCapPoints * 1000,
 		ReferencePerActiveMilli: s.ReferencePointsPerActiveDay * 1000,
 		MinPctBP:                s.MinPctBP,
@@ -104,7 +108,8 @@ func Load(r io.Reader) (*Catalogue, error) {
 		DayCloseGrace:           time.Duration(s.DayCloseGraceSeconds) * time.Second,
 		MedianWindowDays:        s.MedianWindowDays,
 		ExcludeCatchUpBonus:     s.ExcludeCatchUpBonus,
-	}}, nil
+	}
+	return c, nil
 }
 
 // Countable is what one character-day contributes to world progress: min(cap, points − ×2 bonus). Pure.

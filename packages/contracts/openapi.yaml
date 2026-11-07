@@ -19,9 +19,13 @@ paths:
               schema: { $ref: "#/components/schemas/RealmCatalogue" }
   /vip/tiers:
     get:
-      summary: VIP tiers and offline caps
+      summary: Tiên Duyên (VIP) ladder, earning activities and top-up rate (public)
       responses:
-        "200": { description: OK }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VipTiersResponse" }
   /items:
     get:
       summary: Item definitions
@@ -71,14 +75,35 @@ paths:
       summary: >-
         Create the account's single character. 400 `invalid_name` (format) or `name_not_allowed` (moderation filter,
         content/catalog/moderation.yaml — message says the category, never the matched term).
+        **Onboarding intent** (data-model §9.6): with `factionId` (Idempotency-Key required) one transaction creates
+        the character at the first stage of the faction's path (`path` if the faction allows it, else its first
+        path) and joins the faction (first join starts the switch cooldown). Faction errors as in /factions/join
+        (`unknown_faction` 404, `faction_closed` 409, `path_not_allowed` 400, `idempotency_key_reused` 409); on any
+        error nothing is created. A retry with the same key, name and faction returns 200 with `replayed: true`.
+        `path` without `factionId` → 400.
       security: [{ bearer: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          description: required when factionId is set
+          schema: { type: string, pattern: "^[A-Za-z0-9_-]{8,64}$" }
       requestBody:
         content:
           application/json:
-            schema: { type: object, required: [name], properties: { name: { type: string, minLength: 2, maxLength: 24 } } }
+            schema:
+              type: object
+              required: [name]
+              additionalProperties: false
+              properties:
+                name: { type: string, minLength: 2, maxLength: 24 }
+                factionId: { type: string, description: onboarding — faction to join in the same transaction }
+                path: { type: string, enum: [tien, vu], description: requested path (must be allowed by the faction) }
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
+        "200": { description: Onboarding replay (same Idempotency-Key), content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
         "400": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
   /breakthrough/preview:
     get:
@@ -112,6 +137,12 @@ paths:
                     Guard only (never used as a value): send the preview's tribulation.maxLossMilli. If the loss the
                     server would apply exceeds it, nothing is written and the response is 409 quote_changed with a
                     fresh preview. Required for a non-guaranteed tribulation (400 quote_required otherwise).
+                acceptSuccessBp:
+                  type: integer
+                  description: >-
+                    Guard only: send the preview's successBp. If the server's success chance at the attempt is LOWER
+                    (a hộ pháp went offline, the pháp bảo was unequipped…), nothing is written and the response is 409
+                    quote_changed with a fresh preview. Optional (omitted = no odds guard).
       responses:
         "200": { description: Result, content: { application/json: { schema: { $ref: "#/components/schemas/BreakthroughResult" } } } }
         "400": { description: "invalid_body | quote_required — for quote_required error.details is a BreakthroughPreview" }
@@ -132,12 +163,54 @@ paths:
       responses: { "200": { description: "{ rank, score, characterId } — rank 0 = unranked" } }
   /vip/status:
     get:
-      summary: Caller's VIP points, level benefits and distance to next level
+      summary: Caller's điểm duyên, Tiên Duyên level benefits, distance to next level and today's earning progress
       security: [{ bearer: [] }]
-      responses: { "200": { description: OK } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VipStatus" }
+  /admin/vip/refund:
+    post:
+      summary: >-
+        Admin: refund one top-up purchase ledger row — removes exactly its điểm duyên (the level may drop). At most once
+        per purchase; idempotent per Idempotency-Key; audited (admin_audit_logs vip.refund).
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ledgerId, reason]
+              properties: { ledgerId: { type: integer, format: int64 }, reason: { type: string, maxLength: 500 } }
+      responses:
+        "200":
+          description: Refund + the user's new status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  refund:
+                    type: object
+                    properties:
+                      userId: { type: string, format: uuid }
+                      ledgerId: { type: integer, format: int64, description: The purchase that was refunded }
+                      refundLedgerId: { type: integer, format: int64, description: The refund row written (the audit row stores it too) }
+                      pointsRemoved: { type: integer, format: int64 }
+                      pointsBefore: { type: integer, format: int64 }
+                      pointsAfter: { type: integer, format: int64 }
+                      replayed: { type: boolean }
+                  status: { $ref: "#/components/schemas/VipStatus" }
+        "400": { description: invalid_refund }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { description: ledger_not_found }
+        "409": { description: "not_refundable | already_refunded | idempotency_key_reused | insufficient_points" }
   /admin/vip/grant:
     post:
-      summary: "Admin: add/remove VIP points (audited, idempotent)"
+      summary: "Admin: add/remove điểm duyên (audited, idempotent)"
       security: [{ bearer: [] }]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -154,14 +227,277 @@ paths:
           description: World state
           content:
             application/json:
+              schema: { $ref: "#/components/schemas/WorldState" }
+        "403": { $ref: "#/components/responses/Error" }
+  /world:
+    get:
+      summary: >-
+        Public story clock (data-model §11): era, progress per active player toward the next milestone with its
+        70%–150% window and estimate, active ranged events, pending faction effects, full timeline. Cached 15 s.
+      responses:
+        "200":
+          description: World view
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorldView" }
+        "429": { $ref: "#/components/responses/Error" }
+  /factions:
+    get:
+      summary: >-
+        Faction catalogue (factions.yaml) with open flags for the current era, member counts and the era's merit ranking
+        (Σ credited points of the faction's members since the era started, decision H). Public, cached 15 s. Counts and
+        merit come from the rebuildable Redis cache; when it is down, counts come from Postgres and rankingAvailable=false.
+      responses:
+        "200":
+          description: Faction list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionList" }
+        "429": { $ref: "#/components/responses/Error" }
+  /factions/me:
+    get:
+      summary: Caller's membership (factionId null = none), cooldown, lock, pending split choice, upcoming effect, last 10 changes
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Membership
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionMembership" }
+        "404": { description: "character_not_found" }
+  /factions/join:
+    post:
+      summary: >-
+        Join a faction for the first time. The faction must be open in the current era; when the character's path is
+        not allowed it is converted to the requested `path` (or the faction's first path) at the same tier/stage —
+        cultivation is kept. Idle cultivation is settled first (credited to the previous faction). The first join starts
+        the switch cooldown too. An Idempotency-Key is bound to its operation and target.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FactionChangeRequest" }
+      responses:
+        "200":
+          description: New membership (replayed=true when the Idempotency-Key was already used)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionChangeResult" }
+        "400": { description: "path_not_allowed" }
+        "404": { description: "character_not_found | unknown_faction" }
+        "409": { description: "already_member | faction_closed | idempotency_key_reused" }
+  /factions/switch:
+    post:
+      summary: >-
+        Switch to another open faction. Needs switchCooldownSeconds since the last player switch (world moves never touch
+        it) and no active lock. Same path rules as join.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FactionChangeRequest" }
+      responses:
+        "200":
+          description: New membership
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionChangeResult" }
+        "400": { description: "path_not_allowed" }
+        "404": { description: "character_not_found | unknown_faction" }
+        "409": { description: "not_member | same_faction | switch_cooldown | faction_locked | faction_closed | idempotency_key_reused" }
+  /factions/split-choice:
+    post:
+      summary: >-
+        Choose a branch while a split of the caller's faction is pending (membership.mustChoose, before chooseDeadline).
+        Ignores and does not start the switch cooldown; refused while locked (faction_locked). After the deadline the
+        worker places everyone still pending one by one (character id order) into the branch with the fewest members
+        placed by this split so far (choices + defaults; ties → catalogue order).
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [factionId]
+              additionalProperties: false
+              properties: { factionId: { type: string } }
+      responses:
+        "200":
+          description: New membership
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionChangeResult" }
+        "400": { description: "not_a_branch" }
+        "409": { description: "not_member | no_pending_split | choice_closed | faction_locked | idempotency_key_reused" }
+  /factions/{factionId}/members:
+    get:
+      summary: Members of a faction ranked by realm score (same score and tie-break as the global leaderboard), 50 per page
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: factionId, in: path, required: true, schema: { type: string } }
+        - { name: cursor, in: query, required: false, schema: { type: string }, description: "nextCursor of the previous page" }
+      responses:
+        "200":
+          description: Page
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionMembersPage" }
+        "400": { description: "invalid_cursor" }
+        "404": { description: "unknown_faction" }
+        "503": { description: "ranking_unavailable (Redis down; rebuilt from Postgres by the worker)" }
+  /admin/factions/lock:
+    post:
+      summary: >-
+        Lock a member's faction switches (reason fengshen | admin | event; hours 0 = permanent). Split choices are
+        blocked too (the deadline default places the member). Audited (admin_audit_logs faction.lock).
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterId, reason, note]
+              additionalProperties: false
+              properties:
+                characterId: { type: string, format: uuid }
+                reason: { type: string, enum: [fengshen, admin, event] }
+                hours: { type: integer, minimum: 0, maximum: 8760 }
+                note: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Lock state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionLock" }
+        "400": { description: "invalid_lock" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { description: "not_member" }
+  /admin/factions/unlock:
+    post:
+      summary: Remove a member's faction lock. Audited (faction.unlock).
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [characterId, note]
+              additionalProperties: false
+              properties:
+                characterId: { type: string, format: uuid }
+                note: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Lock state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionLock" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { description: "not_member" }
+  /admin/world:
+    get:
+      summary: "Admin: world view + raw state, last 14 world_daily_totals, overrides, reached milestones"
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Admin world view
+          content:
+            application/json:
               schema:
                 type: object
+                required: [world, state, totals, overrides, reached]
                 properties:
-                  startedAt: { type: [string, "null"], format: date-time }
-                  serverDay: { type: integer }
-                  progressMilli: { type: integer, format: int64 }
-                  closedThroughDay: { type: string, format: date }
-                  medianPositionMilli: { type: integer, format: int64 }
+                  world: { $ref: "#/components/schemas/WorldView" }
+                  state: { $ref: "#/components/schemas/WorldState" }
+                  totals:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        gameDay: { type: string, format: date }
+                        creditedMilli: { type: integer, format: int64 }
+                        catchUpBonusMilli: { type: integer, format: int64 }
+                        countableMilli: { type: integer, format: int64 }
+                        dau: { type: integer }
+                        perCapitaMilli: { type: integer, format: int64 }
+                        medianPositionMilli: { type: [integer, "null"], format: int64 }
+                        closedAt: { type: [string, "null"], format: date-time }
+                  overrides: { type: array, items: { $ref: "#/components/schemas/MilestoneOverride" } }
+                  reached: { type: array, items: { $ref: "#/components/schemas/WorldReached" } }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/world/milestones/{milestoneId}:
+    put:
+      summary: >-
+        Admin: replace the override of an UNREACHED milestone — shift (threshold / target day), force, or hold
+        (paused). null fields fall back to the catalogue. Applied by the next worker tick (milestones still fire in
+        order). Audited (admin_audit_logs world.milestone_override).
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: milestoneId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                thresholdPointsPerActive: { type: [integer, "null"], minimum: 0 }
+                targetDay: { type: [integer, "null"], minimum: 0 }
+                forceReach: { type: boolean }
+                paused: { type: boolean }
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Override now in force
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MilestoneOverride" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+  /admin/world/pause:
+    post:
+      summary: "Admin: hold milestone reaching (days still close and fold). Audited; repeat = no-op."
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 500 } } }
+      responses:
+        "200":
+          description: World state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorldState" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/world/resume:
+    post:
+      summary: "Admin: release a pause. Audited; repeat = no-op."
+      security: [{ bearer: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 500 } } }
+      responses:
+        "200":
+          description: World state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorldState" }
+        "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
   /admin/inventory/grant:
     post:
@@ -182,17 +518,27 @@ paths:
       responses: { "200": { description: "{ currencies: {spirit_stone, premium}, items: [{itemId, quantity}] }" } }
   /items/{itemId}/use:
     post:
-      summary: Use an item. Currently offline-bonus items (tu_linh_phu) — 1/game day, no stacking.
+      summary: >-
+        Use an item. Offline-bonus items (tu_linh_phu: 1/game day, no stacking) answer `{ itemId, remaining,
+        offlineBonusSeconds, replayed }`. Speed items (instantPointsMilli, e.g. tu_linh_dan) credit points through the
+        single credit path (source item; speed-item cap 10/day, activity bucket, 150/day ceiling), max_use_per_game_day
+        per character, and answer SpeedItemResult. All or nothing: unless the pill's FULL value fits (speed cap, activity
+        bucket, 150 ceiling, bình cảnh room) it is NOT consumed (409 no_room / bottleneck_full).
       security: [{ bearer: [] }]
       parameters:
         - { name: itemId, in: path, required: true, schema: { type: string } }
         - $ref: "#/components/parameters/IdempotencyKey"
       responses:
-        "200": { description: "{ itemId, remaining, offlineBonusSeconds, replayed }" }
-        "409": { description: "no_item | bonus_active | used_today" }
+        "200":
+          description: BonusStatus (offline bonus) or SpeedItemResult (speed item)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SpeedItemResult" }
+        "400": { description: "not_usable" }
+        "409": { description: "no_item | bonus_active | used_today | daily_limit | no_room | bottleneck_full" }
   /vip/daily-gift:
     post:
-      summary: Claim today's VIP spirit-stone gift (once per game day, UTC+7)
+      summary: Claim today's Tiên Duyên spirit-stone gift (once per game day, UTC+7)
       security: [{ bearer: [] }]
       responses:
         "200": { description: "{ tier, amount, currency, balance, nextResetAt }" }
@@ -201,15 +547,393 @@ paths:
     get:
       summary: Today's daily tasks with progress
       security: [{ bearer: [] }]
-      responses: { "200": { description: "{ gameDay, resetsAt, tasks: [{id, name, description, kind, target, rewards, progress, complete, claimed}] }" } }
+      responses:
+        "200":
+          description: >-
+            { gameDay, resetsAt, tasks: [{ id, name, description, kind (checkin | settle | breakthrough_attempt |
+            lecture_attend | incense), target, rewards, streakRewards?, streak? (StreakView, incense only), progress,
+            complete, claimed }] }
   /tasks/daily/{taskId}/claim:
     post:
       summary: Claim a completed daily task (once per game day)
       security: [{ bearer: [] }]
       parameters: [{ name: taskId, in: path, required: true, schema: { type: string } }]
       responses:
-        "200": { description: Task view }
-        "409": { description: "not_complete | already_claimed" }
+        "200": { description: "Task view; vipPoints = điểm duyên paid by this claim (vip.yaml daily_task_claim, omitted when capped)" }
+        "409": { description: "not_complete | already_claimed | use_incense (incense is offered via /tasks/daily/incense)" }
+  /tasks/daily/incense:
+    post:
+      summary: >-
+        Morning incense ("Dâng hương tĩnh tâm"), once per game day. Builds the streak, pays streak_rewards points
+        (source ritual, activity bucket) and completes + claims the incense task in one transaction. Natural per-day key:
+        idempotency is (character, game day) under the progression lock, so NO Idempotency-Key header is used; a repeat
+        the same day answers the same result with replayed=true.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IncenseResult" }
+        "404": { $ref: "#/components/responses/Error" }
+  /shop:
+    get:
+      summary: Spirit-stone shop with the caller's balance and today's remaining limits (shop.yaml)
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShopView" }
+        "404": { $ref: "#/components/responses/Error" }
+  /shop/buy:
+    post:
+      summary: >-
+        Buy `lots` of a listing. One transaction: currency debit (ledger) + item grant (ledger) + purchase row; price and
+        item come from shop.yaml only; daily_limit_lots enforced under the currency-account lock. Same key → replay.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [listingId, lots]
+              properties: { listingId: { type: string }, lots: { type: integer, minimum: 1 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BuyResult" }
+        "400": { description: "invalid_lots | invalid_body | invalid_idempotency_key" }
+        "404": { description: "unknown_listing | character_not_found" }
+        "409": { description: "daily_limit | tier_locked | already_owned | insufficient_stones | idempotency_key_reused (same key, different listing or lots)" }
+  /cosmetics/catalog:
+    get:
+      summary: >-
+        Public cosmetics catalogue (decisions 2026-11-07 "Linh thạch sinks"): titles, portrait frames, chat name effects,
+        cave decorations — ids "<kind>:<slug>" shared with vip.yaml perks. NO gameplay effect. Cached 5 min; rate-limited per IP.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CosmeticCatalog" }
+        "429": { description: rate_limited }
+  /cosmetics:
+    get:
+      summary: Owned (purchases + Tiên Duyên perks reached), on sale now (season/era window) and the equipped look.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CosmeticsView" }
+        "404": { description: character_not_found }
+  /cosmetics/buy:
+    post:
+      summary: >-
+        Buy one shop cosmetic. One transaction: lock currency account → idempotency → catalogue price, window, Tiên
+        Duyên gate (cosmetics only), owned at most once → debit (currency_ledger cosmetic_purchase) → ownership row.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cosmeticId]
+              properties: { cosmeticId: { type: string, example: "avatar_frame:ngoc_bich" } }
+      responses:
+        "200":
+          description: OK (replayed = true for the same key)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cosmeticId, price, replayed, state]
+                properties:
+                  cosmeticId: { type: string }
+                  price: { type: integer, format: int64 }
+                  replayed: { type: boolean }
+                  state: { $ref: "#/components/schemas/CosmeticsView" }
+        "400": { description: "invalid_body | invalid_idempotency_key" }
+        "404": { description: "unknown_cosmetic | character_not_found" }
+        "409": { description: "not_for_sale | unavailable | tier_locked | already_owned | insufficient_stones | idempotency_key_reused" }
+  /cosmetics/equip:
+    post:
+      summary: >-
+        Set the WHOLE loadout ("" / [] = unequip). Locks the appearance row; every id must be owned and of the slot's
+        kind; ≤ settings.caveSlots decorations, no duplicates. Same key + same loadout = replay; other loadout = 409.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/Appearance" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [replayed, state]
+                properties:
+                  replayed: { type: boolean }
+                  state: { $ref: "#/components/schemas/CosmeticsView" }
+        "400": { description: "invalid_loadout | invalid_body | invalid_idempotency_key" }
+        "404": { description: character_not_found }
+        "409": { description: "not_owned | idempotency_key_reused" }
+  /factions/works:
+    get:
+      summary: >-
+        Faction works (faction_works.yaml): definitions, every faction's donated pool, and the caller's faction detail
+        (progress, unlocked decorations, công đức bảng). mine = null when not in a faction.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FactionWorksView" }
+        "404": { description: character_not_found }
+  /factions/donate:
+    post:
+      summary: >-
+        Donate spirit stones to the caller's current faction works. One transaction, lock order character_faction →
+        currency_accounts → faction_donation_days (per-character daily cap, across factions) → faction_treasuries.
+        PURELY VISUAL: adds no faction merit, ranking points, điểm duyên or tu vi.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties: { amount: { type: integer, format: int64, minimum: 1 } }
+      responses:
+        "200":
+          description: OK (replayed = true for the same key)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [donationId, amount, replayed, state]
+                properties:
+                  donationId: { type: integer, format: int64 }
+                  amount: { type: integer, format: int64 }
+                  replayed: { type: boolean }
+                  state: { $ref: "#/components/schemas/FactionWorksView" }
+        "400": { description: "invalid_amount | invalid_body | invalid_idempotency_key" }
+        "404": { description: character_not_found }
+        "409": { description: "no_faction | daily_cap | insufficient_stones | idempotency_key_reused" }
+  /trials:
+    get:
+      summary: >-
+        Mini-game trials (Phase 3) as seen by the character: state (available | in_progress | cooldown | passed |
+        locked), lose cooldown, valid pass, open run and the rules snapshot (params) the client simulates.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TrialStatus" } } } }
+        "404": { description: character_not_found }
+  /trials/{kind}/start:
+    post:
+      summary: >-
+        Issue a server-seeded run of a trial kind (trials.yaml), or resume the open one (same seed, game restarts
+        from tick 0). Refused while a lose cooldown runs, while a valid pass exists, or when the character is not at
+        the gated realm (opens_at). An expired never-submitted run is closed as expired/abandoned with a cooldown.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: kind, in: path, required: true, schema: { type: string, example: tam_ma } }
+      responses:
+        "201": { description: New run, content: { application/json: { schema: { $ref: "#/components/schemas/TrialRunStart" } } } }
+        "200": { description: Resumed (open run or same Idempotency-Key), content: { application/json: { schema: { $ref: "#/components/schemas/TrialRunStart" } } } }
+        "400": { description: invalid_idempotency_key }
+        "404": { description: "trial_not_found | character_not_found" }
+        "409":
+          description: >-
+            cooldown | pass_active | not_eligible (error.details = TrialKindStatus) | idempotency_key_reused (key
+            already used for another kind)
+  /trials/{runId}/submit:
+    post:
+      summary: >-
+        Single-use submission. The server replays the input log from the run's seed and rules snapshot and decides:
+        expired (after expiresAt) → rejected (invalid_log | implausible_score | implausible_input: tâm ma more than
+        maxInputsPerWindow inputs in a window, hóa phàm a step > maxStep, too much travel / too many strokes in a
+        window or a re-press faster than minLiftTicks | too_fast: less server time than
+        endTick × tickMs × min_elapsed_bp | mismatch: replay ≠ claimed endTick/lines/score/stateHash) → the game's
+        own outcome (pass: cleared; fail: topped_out | lanterns_out | time_up | gave_up). Any non-pass verdict starts the lose
+        cooldown. Pass: valid pass_valid_seconds, kept through failed breakthroughs, consumed by the successful one;
+        +điểm duyên trial_pass (vip.yaml, capped). Same Idempotency-Key again → the stored verdict (replayed).
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: runId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TrialClaim" }
+      responses:
+        "200": { description: Verdict, content: { application/json: { schema: { $ref: "#/components/schemas/TrialSubmitResult" } } } }
+        "400": { description: "invalid_body (incl. over the 96 KiB claim limit) | invalid_idempotency_key" }
+        "404": { description: "run_not_found (unknown, or another character's run) | character_not_found" }
+        "409": { description: already_submitted (judged before with another Idempotency-Key) }
+  /secret-realms:
+    get:
+      summary: >-
+        Bí cảnh (Phase 3.4): every realm with today's runs left, the public loot tables (bands by replayed score,
+        survived bonus, pháp bảo table with weights), daily caps, today's totals, the open run and the rules snapshot;
+        plus the last judged runs. Nothing depends on Tiên Duyên.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SecretRealmView" } } } }
+  /secret-realms/{realmId}/start:
+    post:
+      summary: >-
+        Issue a seeded run (201) — counts toward runs_per_day at START (abandoned runs count) — or resume the open,
+        unexpired run with the same seed (200). Same Idempotency-Key → the same run.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: realmId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Resumed, content: { application/json: { schema: { $ref: "#/components/schemas/SecretRealmStart" } } } }
+        "201": { description: Issued, content: { application/json: { schema: { $ref: "#/components/schemas/SecretRealmStart" } } } }
+        "404": { description: realm_not_found | character_not_found }
+        "409": { description: "daily_limit | locked (below min_tier); details = SecretRealmStatus" }
+  /secret-realms/runs/{runId}/submit:
+    post:
+      summary: >-
+        Single-use submission of the RLE movement log. The server replays it: expired (late) → rejected (invalid_log |
+        implausible_score | too_fast | implausible_input: more than maxChangesPerWindow direction changes in a window |
+        mismatch) → pass (survived) / fail (fallen | gave_up). pass/fail with endTick ≥ minRewardTicks earn the band of
+        the replayed score: loot rolled server-side, clipped by the daily caps (disclosed), granted through
+        currency_ledger / inventory_transactions in the same transaction (key sr:<runId>). A pháp bảo already owned
+        becomes duplicate stones. Survived: +điểm duyên trial_pass (capped). Same key → the stored verdict and loot.
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: runId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SecretRealmClaim" } } }
+      responses:
+        "200": { description: Verdict + loot, content: { application/json: { schema: { $ref: "#/components/schemas/SecretRealmSubmit" } } } }
+        "400": { description: "invalid_body (incl. over the 32 KiB claim limit) | invalid_idempotency_key" }
+        "404": { description: run_not_found | character_not_found }
+        "409": { description: already_submitted }
+  /artifacts:
+    get:
+      summary: The equipped pháp bảo (one slot) and its tribulation bonus (0 if no longer owned)
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EquippedArtifact" } } } }
+  /artifacts/equip:
+    post:
+      summary: Set the pháp bảo slot (itemId "" = unequip). Must be an owned artifact. Naturally idempotent.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [itemId], properties: { itemId: { type: string } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EquippedArtifact" } } } }
+        "400": { description: not_artifact }
+        "409": { description: not_owned }
+  /protector:
+    get:
+      summary: >-
+        Hộ pháp state: my open invite with its protectors (online / same faction / counts now), online fellow members,
+        fellow members' open invites I may accept, my assists left today.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProtectorView" } } } }
+  /protector/invite:
+    post:
+      summary: >-
+        Open (or return) my invite — needs a faction and the last stage of a tribulation realm. Valid
+        invite_window_seconds; used by the next tribulation attempt, which counts accepted protectors still online and
+        in the faction (≤ protector_bonus_max / per_member) and snapshots them in breakthrough_attempts.odds.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProtectorView" } } } }
+        "409": { description: "no_faction | not_eligible | not_ready (the tribulation could not be attempted now)" }
+  /protector/invites/{inviteId}/accept:
+    post:
+      summary: >-
+        Guard a fellow member's invite (same faction, not my own, not expired/used). Spends one of daily_assists; the
+        same invite twice spends one. Counted protectors earn protector_assist điểm duyên after the attempt (worker).
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - { name: inviteId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/ProtectorView" } } } }
+        "403": { description: "other_faction | realm_too_low (protector.yaml min_tier) | character_too_new (min_character_age_days)" }
+        "409": { description: invite_gone | self | daily_limit | idempotency_key_reused }
+  /presence/ping:
+    post:
+      summary: >-
+        "I am online" for hộ pháp: Redis key with a TTL (presence_ttl_seconds), no DB write. Counts only when the same
+        user made a successful authenticated game mutation within activity_window_seconds (online = false otherwise).
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { online: { type: boolean }, pingEverySeconds: { type: integer } } }
+        "503": { description: presence not configured (no Redis) }
+  /admin/protector/pairs:
+    get:
+      summary: Admin review of hộ pháp pairs (inviter → protector) over the last `days` game days with ≥ `min` assists (≤ 200)
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: min, in: query, schema: { type: integer, minimum: 1, default: 3 } }
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 14 } }
+      responses:
+        "200": { description: "{ min, days, pairs: [{ inviterId, inviterName, protectorId, protectorName, assists, counted, firstDay, lastDay }] }" }
+        "403": { description: forbidden }
+  /fortune:
+    get:
+      summary: Gieo quẻ — disclosed odds, today's draw (null if not drawn) and the active rate buff
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FortuneView" }
+  /fortune/draw:
+    post:
+      summary: >-
+        Draw today's gieo quẻ (server RNG, once per game day). Settles idle time first, then sets an idle-rate buff
+        (rateBonusBp ≤ contribution idle.max_buff_bonus_bp) until the next reset; the idle bucket cap and 150/day ceiling
+        still apply. Natural per-day key: idempotency is the daily_fortunes primary key (character, game day), so NO
+        Idempotency-Key header is used; a repeat the same day answers today's draw with replayed=true.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK (includes `cultivation` snapshot)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FortuneView" }
   /cultivation/settle:
     post:
       summary: >-
@@ -229,7 +953,9 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
   /reports:
     post:
-      summary: Report a character (offensive name or harassment). Idempotent; one open report per target+reason.
+      summary: >-
+        Report a character (offensive name or harassment), or a trade (reason trade_abuse + tradeOfferId: the reporter must
+        be a party; the target is the other party). Idempotent; one open report per target+reason.
       security: [{ bearer: [] }]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -237,10 +963,11 @@ paths:
           application/json:
             schema:
               type: object
-              required: [targetCharacterId, reason]
+              required: [reason]
               properties:
-                targetCharacterId: { type: string, format: uuid }
-                reason: { type: string, enum: [offensive_name, harassment] }
+                targetCharacterId: { type: string, format: uuid, description: required unless tradeOfferId }
+                reason: { type: string, enum: [offensive_name, harassment, trade_abuse] }
+                tradeOfferId: { type: string, format: uuid, description: "trade_abuse only: the offer reported" }
                 note: { type: string, maxLength: 500 }
                 chatMessageId: { type: integer, format: int64, description: "Optional: a message sent by the target (its text is kept as evidence)" }
       responses:
@@ -357,6 +1084,494 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /lecture/scripts:
+    get:
+      summary: Tử Tiêu Cung lecture loop (public content). Clients play lines on the server clock — (now − cycleEpoch) mod cycleSeconds.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lectures: { type: array, items: { $ref: "#/components/schemas/LectureScript" } }
+                  cycleSeconds: { type: integer }
+                  cycleEpoch: { type: string, format: date-time }
+        "503": { $ref: "#/components/responses/Error" }
+  /lecture/state:
+    get:
+      summary: Hall state, ngộ đạo timing and the viewer's own unpaid listening. Live seat changes arrive over /ws (lecture.enter, lecture.leave).
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LectureState" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /lecture/enter:
+    post:
+      summary: Take (or keep) a seat in the hall. No amounts; repeating it is harmless. Listening is measured from heartbeats on the server clock.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LectureState" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /lecture/leave:
+    post:
+      summary: Leave the hall. Unpaid listening is kept until it expires (1 h) or is paid on return.
+      security: [{ bearer: [] }]
+      responses: { "200": { description: "{ inHall: false }" } }
+  /lecture/heartbeat:
+    post:
+      summary: Presence ping every heartbeatSeconds. 409 not_in_hall → call /lecture/enter again.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LectureMe" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+  /lecture/insight:
+    post:
+      summary: >-
+        Ngộ đạo: pays the listening the server measured since the last ngộ đạo (capped per insight and per game day;
+        source lecture, activity bucket) and điểm duyên at lectures.yaml milestones. Once per slot — a repeat returns
+        the stored result with replayed=true. 409 insight_closed | nothing_to_pay | not_in_hall.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/InsightResult" } } } }
+        "409": { $ref: "#/components/responses/Error" }
+  /lecture/notebook:
+    get:
+      summary: The Đạo ngộ notebook — lectures the player has had a paid ngộ đạo in.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { type: object, properties: { entries: { type: array, items: { $ref: "#/components/schemas/NoteEntry" } } } }
+  # ───── nạp Tiên Duyên (Phase 4; decisions 2026-11-07 "Khung nạp Tiên Duyên") ─────
+  /payments/packages:
+    get:
+      summary: >-
+        Public top-up catalogue (payments.yaml). Points per package = vip.yaml rate (1.000đ = pointsPer1000Vnd), no bonus.
+        providers lists the gateways enabled on this server; empty = top-up closed.
+      responses:
+        "200": { description: Packages, content: { application/json: { schema: { $ref: "#/components/schemas/PaymentPackagesView" } } } }
+        "429": { $ref: "#/components/responses/Error" }
+  /payments/orders:
+    get:
+      summary: Own top-up history, newest first (≤ 50).
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema: { type: object, properties: { orders: { type: array, items: { $ref: "#/components/schemas/PaymentOrder" } } } }
+    post:
+      summary: >-
+        Open an order for a package (intent only — amount and points come from the catalogue). Same Idempotency-Key →
+        same order (replayed: true); another package under that key → 409. At most max_open_orders_per_user open orders.
+        The response carries the provider checkout URL. Nothing is credited until a signature-verified provider
+        webhook (or reconciliation) confirms the payment; the browser return URL never credits.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [packageId]
+              properties:
+                packageId: { type: string }
+                provider: { type: string, description: Optional; default = first enabled provider }
+      responses:
+        "201": { description: Order, content: { application/json: { schema: { $ref: "#/components/schemas/PaymentOrderResult" } } } }
+        "400": { $ref: "#/components/responses/Error", description: "unknown_package | invalid_amount | invalid_idempotency_key" }
+        "409": { $ref: "#/components/responses/Error", description: "too_many_open_orders | topup_closed | idempotency_key_reused" }
+        "429": { $ref: "#/components/responses/Error" }
+        "502": { $ref: "#/components/responses/Error", description: provider_unavailable }
+  /payments/orders/{orderId}:
+    get:
+      summary: One OWN order (another user's id → 404) plus the current Tiên Duyên status — poll this after checkout.
+      security: [{ bearer: [] }]
+      parameters: [{ name: orderId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: Order, content: { application/json: { schema: { $ref: "#/components/schemas/PaymentOrderResult" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+  /payments/webhook/{provider}:
+    post:
+      summary: >-
+        PUBLIC provider webhook. The provider signature is verified over the raw body BEFORE anything else (bad /
+        missing / stale → 401, nothing written). Then the normalized event is deduped by provider event id (replay →
+        200 outcome replayed) and applied in one transaction: paid → vip.TopupLocked anchored on the order (exactly
+        once) + order paid; amount/points mismatch → rejected and alerted; failed/expired after paid → ignored.
+        Sandbox signature header: X-Sandbox-Signature "t=<unix>,v1=<hex HMAC-SHA256(secret, t + '.' + body)>", ±5 min.
+      parameters: [{ name: provider, in: path, required: true, schema: { type: string } }]
+      requestBody: { content: { application/json: { schema: { type: object, description: Provider-specific payload (≤ 16 KiB) } } } }
+      responses:
+        "200": { description: Applied / replayed / ignored / rejected, content: { application/json: { schema: { $ref: "#/components/schemas/PaymentWebhookResult" } } } }
+        "400": { $ref: "#/components/responses/Error", description: invalid_payload }
+        "401": { $ref: "#/components/responses/Error", description: invalid_signature }
+        "404": { $ref: "#/components/responses/Error", description: unknown_provider }
+        "413": { $ref: "#/components/responses/Error", description: payload_too_large }
+  /dev/payments/sandbox/{orderId}:
+    post:
+      summary: >-
+        DEV ONLY (registered only when APP_ENV=dev). The sandbox gateway's "pay now / fail": records the simulated charge
+        and, unless deliver=false (lost webhook → reconciliation), sends a correctly signed webhook through the real
+        verification path. Order owner (or admin) only.
+      security: [{ bearer: [] }]
+      parameters: [{ name: orderId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [paid, failed] }
+                deliver: { type: boolean, default: true }
+                amountVnd: { type: integer, format: int64, description: Override the paid amount (mismatch testing) }
+      responses:
+        "200":
+          description: Result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  eventId: { type: string }
+                  delivered: { type: boolean }
+                  webhook: { $ref: "#/components/schemas/PaymentWebhookResult" }
+                  order: { $ref: "#/components/schemas/PaymentOrder" }
+        "404": { $ref: "#/components/responses/Error" }
+  /admin/payments/orders:
+    get:
+      summary: "Admin: search orders (status, userId, q = order id or provider ref), newest first."
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [created, pending, paid, failed, expired, refunded] } }
+        - { name: userId, in: query, schema: { type: string, format: uuid } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        "200":
+          description: Orders
+          content:
+            application/json:
+              schema: { type: object, properties: { orders: { type: array, items: { $ref: "#/components/schemas/AdminPaymentOrder" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+  /admin/payments/orders/{orderId}:
+    get:
+      summary: "Admin: one order and every provider event recorded for it."
+      security: [{ bearer: [] }]
+      parameters: [{ name: orderId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200":
+          description: Order + events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order: { $ref: "#/components/schemas/AdminPaymentOrder" }
+                  events: { type: array, items: { $ref: "#/components/schemas/PaymentEvent" } }
+        "404": { $ref: "#/components/responses/Error" }
+  /admin/payments/orders/{orderId}/refund:
+    post:
+      summary: >-
+        Admin: mark a PAID order refunded — provider refund first when the adapter supports it, then in one transaction
+        vip refund of the purchase row (điểm duyên removed, level may drop, perk cosmetics above the new level
+        unequipped), order refunded, audit rows vip.refund + payment.refund. The order is the anchor: retries are one
+        refund (replayed: true). Daily gifts already claimed are not clawed back.
+      security: [{ bearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, required: [reason], properties: { reason: { type: string, maxLength: 500 } } }
+      responses:
+        "200":
+          description: Refunded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  order: { $ref: "#/components/schemas/AdminPaymentOrder" }
+                  refund: { type: object, description: Same shape as /admin/vip/refund refund }
+                  vip: { $ref: "#/components/schemas/VipStatus" }
+                  replayed: { type: boolean }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error", description: "not_refundable | insufficient_points" }
+        "502": { $ref: "#/components/responses/Error", description: provider_unavailable }
+  /admin/payments/alerts:
+    get:
+      summary: "Admin: rejected / ignored provider events (amount_mismatch, unknown_order, provider_refund_needs_admin, out-of-order), newest first (≤ 100)."
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: Events
+          content:
+            application/json:
+              schema: { type: object, properties: { events: { type: array, items: { $ref: "#/components/schemas/PaymentEvent" } } } }
+        "403": { $ref: "#/components/responses/Error" }
+  /dao-lu:
+    get:
+      summary: >-
+        Đạo lữ (Phase 5.1): rules (dao_lu.yaml), my gate blockers, cooldown, proposals left today, my bond (partner +
+        online), open incoming/outgoing proposals and today's song tu state.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DaoLuView" } } } }
+  /dao-lu/proposals:
+    post:
+      summary: >-
+        Cầu thân: propose a permanent bond to a character (from a player card). acknowledgePermanent must be true (the
+        proposer's "vĩnh viễn" confirmation). Both accounts ≥ min_account_age_days, both characters ≥ min_tier, neither
+        bonded nor in the rebond cooldown; one open outgoing proposal; daily_proposals per game day. Accounts that shared a
+        network recently are flagged to admins, never blocked.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetCharacterId, acknowledgePermanent]
+              properties:
+                targetCharacterId: { type: string, format: uuid }
+                acknowledgePermanent: { type: boolean }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DaoLuView" } } } }
+        "400": { $ref: "#/components/responses/Error", description: permanent_not_acknowledged }
+        "404": { $ref: "#/components/responses/Error", description: target_not_found }
+        "409": { $ref: "#/components/responses/Error", description: "not_eligible (details.side, details.blockers) | open_proposal | self" }
+        "429": { $ref: "#/components/responses/Error", description: daily_limit }
+  /dao-lu/proposals/{proposalId}/accept:
+    post:
+      summary: >-
+        Accept an incoming proposal — the target's explicit second "vĩnh viễn" confirmation (acknowledgePermanent: true).
+        Gates are re-checked; one active bond per character (a concurrent second bond fails with already_bonded); every
+        other pending proposal of both is superseded. Idempotent by key.
+      security: [{ bearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [acknowledgePermanent], properties: { acknowledgePermanent: { type: boolean } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DaoLuView" } } } }
+        "400": { $ref: "#/components/responses/Error", description: permanent_not_acknowledged }
+        "409": { $ref: "#/components/responses/Error", description: "proposal_gone | already_bonded | not_eligible" }
+  /dao-lu/proposals/{proposalId}/decline:
+    post:
+      summary: Decline an incoming proposal (target). Idempotent by key.
+      security: [{ bearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DaoLuView" } } } }
+        "409": { $ref: "#/components/responses/Error", description: proposal_gone }
+  /dao-lu/proposals/{proposalId}/cancel:
+    post:
+      summary: Withdraw my own pending proposal (proposer). Idempotent by key. (There is no way to leave a bond — cot-truyen §5.6.)
+      security: [{ bearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: proposalId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/DaoLuView" } } } }
+        "409": { $ref: "#/components/responses/Error", description: proposal_gone }
+  /dao-lu/song-tu:
+    get:
+      summary: Today's song tu state (no accrual).
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SongTuView" } } } }
+        "404": { $ref: "#/components/responses/Error", description: no_bond }
+  /dao-lu/song-tu/start:
+    post:
+      summary: >-
+        Open today's song tu session (either partner; both must be ACTIVE = a successful game mutation within protector.yaml
+        activity_window_seconds — a heartbeat or ping is not one). Idempotent.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SongTuView" } } } }
+        "409": { $ref: "#/components/responses/Error", description: "not_active | partner_not_active" }
+        "503": { $ref: "#/components/responses/Error", description: song tu needs Redis }
+  /dao-lu/song-tu/heartbeat:
+    post:
+      summary: >-
+        Heartbeat every heartbeatSeconds while the song tu panel is open. Overlap accrues on the server clock only while
+        both partners are active and both beat within max_gap_seconds, up to windowSeconds per game day. Does NOT refresh
+        the activity window.
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SongTuView" } } } }
+        "409": { $ref: "#/components/responses/Error", description: no_session }
+  /dao-lu/song-tu/claim:
+    post:
+      summary: >-
+        Claim my unclaimed overlap: rate_milli_per_hour × seconds credited via the single credit path (source
+        dual_cultivation → community bucket, inside the bucket cap and the 150 ceiling); the first claim of the day
+        reaching duyen_min_seconds also earns vip.yaml dual_cultivation. Each partner claims separately. Idempotent by key.
+        Unclaimed overlap is lost at the game-day reset.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SongTuClaimResult" } } } }
+        "409": { $ref: "#/components/responses/Error", description: "nothing_to_claim | day_capped" }
+  /admin/dao-lu/bonds/{bondId}/terminate:
+    post:
+      summary: "Admin: end a bond after a report by or about one of the partners (note required). Audited (admin_audit_logs dao_lu.terminate + dao_lu_events)."
+      security: [{ bearer: [] }]
+      parameters: [{ name: bondId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reportId, note]
+              properties: { reportId: { type: string, format: uuid }, note: { type: string, maxLength: 1000 } }
+      responses:
+        "200": { description: Ended }
+        "400": { $ref: "#/components/responses/Error", description: "report_required | report_mismatch | note_required" }
+        "409": { $ref: "#/components/responses/Error", description: bond_ended }
+  /admin/dao-lu/flags:
+    get:
+      summary: "Admin: proposals/bonds between accounts that shared a network hash within 30 days (?days=, newest first, ≤ 200)."
+      security: [{ bearer: [] }]
+      parameters: [{ name: days, in: query, schema: { type: integer, minimum: 1, maximum: 365, default: 30 } }]
+      responses:
+        "200":
+          description: Flags
+          content:
+            application/json:
+              schema: { type: object, properties: { days: { type: integer }, flags: { type: array, items: { $ref: "#/components/schemas/DaoLuFlag" } } } }
+  /admin/netsig/clusters:
+    get:
+      summary: >-
+        Admin: account sets seen on the same network (salted IP hash, recorded at Google login and session refresh, kept
+        30 days) — largest first. Never returns a hash or an IP.
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: days, in: query, schema: { type: integer, minimum: 1, maximum: 30, default: 30 } }
+        - { name: min, in: query, schema: { type: integer, minimum: 2, maximum: 50, default: 2 } }
+      responses:
+        "200":
+          description: Clusters
+          content:
+            application/json:
+              schema: { type: object, properties: { clusters: { type: array, items: { $ref: "#/components/schemas/NetCluster" } } } }
+  /trades:
+    get:
+      summary: >-
+        Trao đổi (Phase 5.2): rules (trade.yaml — tradable assets + stone-equivalent values, fee, caps, gates), my limits
+        today, pending incoming/outgoing offers (what accepting NOW would move and burn).
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TradeView" } } } }
+    post:
+      summary: >-
+        Create a gift (take empty) or a swap offer to a character. Lines are intent only (asset id + quantity); only
+        trade.yaml assets (linh thạch, plain materials) are accepted — pháp bảo, requirement items, shop items, cosmetics
+        and premium are refused. Nothing is escrowed: everything is re-verified and moved at accept. Gates: the giver
+        passes rules.send, whoever receives passes rules.receive (both, in a swap). Accounts that shared a network
+        recently are flagged to admins, never blocked.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receiverCharacterId, give]
+              properties:
+                receiverCharacterId: { type: string, format: uuid }
+                give: { type: array, items: { $ref: "#/components/schemas/TradeLineInput" }, description: sender → receiver }
+                take: { type: array, items: { $ref: "#/components/schemas/TradeLineInput" }, description: "receiver → sender (swap); empty = gift" }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TradeView" } } } }
+        "400": { $ref: "#/components/responses/Error", description: "invalid_lines (details.reason: not_tradable | bad_quantity | duplicate_line | same_asset_both_sides | too_many_lines | empty_gift; details.assetId)" }
+        "404": { $ref: "#/components/responses/Error", description: target_not_found }
+        "409": { $ref: "#/components/responses/Error", description: "not_eligible (details.side self|other, action send|receive, blockers) | limit_reached (details.side, limit, cap, used, requested) | insufficient | too_many_open | self" }
+        "429": { $ref: "#/components/responses/Error", description: "limit_reached (offers_per_day) | rate limit" }
+  /trades/history:
+    get:
+      summary: Answered or lapsed offers (either side), newest first.
+      security: [{ bearer: [] }]
+      responses:
+        "200":
+          description: OK
+          content: { application/json: { schema: { type: object, properties: { offers: { type: array, items: { $ref: "#/components/schemas/TradeOffer" } } } } } }
+  /trades/peer/{characterId}:
+    get:
+      summary: Composer helper — relation with a character, the daily received-value cap between us, and why they cannot receive now.
+      security: [{ bearer: [] }]
+      parameters: [{ name: characterId, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TradePeer" } } } }
+        "404": { $ref: "#/components/responses/Error", description: target_not_found }
+        "409": { $ref: "#/components/responses/Error", description: self }
+  /trades/{offerId}/accept:
+    post:
+      summary: >-
+        Accept an incoming offer (receiver). acknowledgeIrreversible must be true ("không hoàn tác"). One transaction:
+        catalogue, gates, relation, daily caps and both balances are re-verified; lines move through the ledgers
+        (trade_send / trade_receive) and each giver's stone fee is burned (trade_fee). A failure moves nothing and the offer
+        stays pending. Idempotent by key.
+      security: [{ bearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: offerId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [acknowledgeIrreversible], properties: { acknowledgeIrreversible: { type: boolean } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TradeView" } } } }
+        "400": { $ref: "#/components/responses/Error", description: "irreversible_not_acknowledged | invalid_lines (the catalogue changed)" }
+        "409": { $ref: "#/components/responses/Error", description: "offer_gone | not_eligible | limit_reached | insufficient (details.side other = the sender)" }
+  /trades/{offerId}/decline:
+    post:
+      summary: Decline an incoming offer (receiver). Idempotent by key.
+      security: [{ bearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: offerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TradeView" } } } }
+        "409": { $ref: "#/components/responses/Error", description: offer_gone }
+  /trades/{offerId}/cancel:
+    post:
+      summary: Withdraw my pending offer (sender). Idempotent by key.
+      security: [{ bearer: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+        - { name: offerId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TradeView" } } } }
+        "409": { $ref: "#/components/responses/Error", description: offer_gone }
+  /admin/trades/flows:
+    get:
+      summary: >-
+        Admin: abnormal one-way flows over ?days= (default trade.yaml alerts.window_days, ≤ 90) — top net receivers,
+        lopsided pairs, many-to-one funnels, offers between accounts on the same network. Warnings only. Audited
+        (admin_audit_logs trade.flows.read).
+      security: [{ bearer: [] }]
+      parameters: [{ name: days, in: query, schema: { type: integer, minimum: 1, maximum: 90 } }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TradeFlows" } } } }
+        "403": { $ref: "#/components/responses/Error" }
 components:
   securitySchemes:
     bearer: { type: http, scheme: bearer, bearerFormat: JWT }
@@ -382,17 +1597,370 @@ components:
                   code: { type: string, example: character_not_found }
                   message: { type: string }
   schemas:
+    StreakView:
+      type: object
+      properties:
+        current: { type: integer, description: "streak still alive today (0 = broken)" }
+        best: { type: integer }
+        offeredToday: { type: boolean }
+        nextPointsMilli: { type: integer, format: int64, description: "what the next offering pays" }
+    IncenseResult:
+      type: object
+      properties:
+        streak: { $ref: "#/components/schemas/StreakView" }
+        rawMilli: { type: integer, format: int64 }
+        earnedMilli: { type: integer, format: int64, description: After bucket/ceiling/bottleneck }
+        vipPoints: { type: integer }
+        stagesAdvanced: { type: array, items: { type: string } }
+        task: { type: object, description: Daily task view (claimed) }
+        cultivation: { $ref: "#/components/schemas/CultivationSnapshot" }
+        replayed: { type: boolean }
+    SpeedItemResult:
+      type: object
+      properties:
+        itemId: { type: string }
+        remaining: { type: integer, format: int64 }
+        usesToday: { type: integer }
+        maxUsesPerDay: { type: integer }
+        rawMilli: { type: integer, format: int64 }
+        earnedMilli: { type: integer, format: int64, description: After speed cap / bucket / ceiling / bình cảnh }
+        stagesAdvanced: { type: array, items: { type: string } }
+        cultivation: { $ref: "#/components/schemas/CultivationSnapshot" }
+        replayed: { type: boolean }
+    ShopListing:
+      type: object
+      properties:
+        id: { type: string }
+        itemId: { type: string }
+        lotSize: { type: integer }
+        price: { type: integer, format: int64, description: spirit stones per lot }
+        dailyLimitLots: { type: integer, description: absent = no daily limit }
+        minTier: { type: integer, description: "Tiên Duyên level (cosmetic listings only)" }
+        name: { type: string }
+        category: { type: string }
+        rarity: { type: string }
+        boughtTodayLots: { type: integer }
+        remainingTodayLots: { type: integer, description: "-1 = no daily limit" }
+        owned: { type: integer, format: int64 }
+        available: { type: boolean }
+        lockedReason: { type: string, enum: [tier, owned, sold_out, stones] }
+    ShopView:
+      type: object
+      properties:
+        currency: { type: string, enum: [spirit_stone] }
+        balance: { type: integer, format: int64 }
+        maxLotsPerOrder: { type: integer }
+        tier: { type: integer }
+        gameDay: { type: string, format: date }
+        resetsAt: { type: string, format: date-time }
+        listings: { type: array, items: { $ref: "#/components/schemas/ShopListing" } }
+    BuyResult:
+      type: object
+      properties:
+        purchaseId: { type: integer, format: int64 }
+        listingId: { type: string }
+        lots: { type: integer }
+        totalPrice: { type: integer, format: int64 }
+        item: { type: object, properties: { itemId: { type: string }, quantity: { type: integer, format: int64, description: held after the purchase } } }
+        replayed: { type: boolean }
+        shop: { $ref: "#/components/schemas/ShopView" }
+    FortuneOutcome:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        weightBp: { type: integer, description: "disclosed chance; Σ = 10000" }
+        rateBonusBp: { type: integer }
+        verse: { type: string }
+    FortuneView:
+      type: object
+      properties:
+        name: { type: string }
+        outcomes: { type: array, items: { $ref: "#/components/schemas/FortuneOutcome" } }
+        today:
+          type: [object, "null"]
+          properties: { outcome: { $ref: "#/components/schemas/FortuneOutcome" }, rollBp: { type: integer }, drawnAt: { type: string, format: date-time } }
+        buff:
+          type: [object, "null"]
+          properties: { bonusBp: { type: integer }, startsAt: { type: string, format: date-time }, endsAt: { type: string, format: date-time } }
+        gameDay: { type: string, format: date }
+        resetsAt: { type: string, format: date-time }
+        replayed: { type: boolean }
+        cultivation: { $ref: "#/components/schemas/CultivationSnapshot" }
+    WorldState:
+      type: object
+      properties:
+        startedAt: { type: [string, "null"], format: date-time }
+        serverDay: { type: integer, description: "-1 before launch" }
+        progressMilli: { type: integer, format: int64 }
+        closedThroughDay: { type: string, format: date }
+        medianPositionMilli: { type: integer, format: int64 }
+        eraId: { type: string }
+        lastMilestoneId: { type: string }
+        pausedAt: { type: [string, "null"], format: date-time }
+    WorldReached:
+      type: object
+      required: [id, name, reachedAt, serverDay, reason]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        reachedAt: { type: string, format: date-time }
+        serverDay: { type: integer }
+        reason: { type: string, enum: [threshold, max_time, admin] }
+    MilestoneOverride:
+      type: object
+      properties:
+        milestoneId: { type: string }
+        thresholdPointsPerActive: { type: [integer, "null"] }
+        targetDay: { type: [integer, "null"] }
+        forceReach: { type: boolean }
+        paused: { type: boolean }
+        updatedBy: { type: string, format: uuid }
+        updatedAt: { type: string, format: date-time }
+    FactionView:
+      type: object
+      required: [id, name, namePlaceholder, allowedPaths, color, open, members, meritMilli, meritRank]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        namePlaceholder: { type: boolean }
+        allowedPaths: { type: array, items: { type: string } }
+        openFromEra: { type: string, description: "omitted = never open (canon not decided)" }
+        closeFromEra: { type: string }
+        color: { type: string, description: "design token suffix → var(--color-<color>)" }
+        motto: { type: string }
+        pitch: { type: string }
+        open: { type: boolean, description: joinable in the current era }
+        members: { type: integer }
+        meritMilli: { type: integer, description: "Σ world-countable points (min(100, credited − ×2 bonus) per member-day, milli) since meritSince" }
+        meritRank: { type: integer, description: "1-based among open or populated factions; 0 = unranked" }
+    FactionList:
+      type: object
+      required: [factions, switchCooldownSeconds, eraId, meritSince, rankingAvailable]
+      properties:
+        factions: { type: array, items: { $ref: "#/components/schemas/FactionView" } }
+        switchCooldownSeconds: { type: integer }
+        eraId: { type: string }
+        meritSince: { type: [string, "null"], format: date, description: first game day counted toward merit }
+        rankingAvailable: { type: boolean }
+    FactionEffectNotice:
+      type: object
+      required: [kind, from, dueAt]
+      properties:
+        kind: { type: string, enum: [split_faction, migrate_faction] }
+        from: { type: string }
+        into: { type: array, items: { type: string } }
+        to: { type: string }
+        dueAt: { type: string, format: date-time }
+        deadlineAt: { type: string, format: date-time }
+    FactionHistoryEntry:
+      type: object
+      required: [from, to, reason, createdAt]
+      properties:
+        from: { type: [string, "null"] }
+        to: { type: string }
+        fromPath: { type: string }
+        toPath: { type: string }
+        reason: { type: string, enum: [join, switch, split_choice, split_default, auto_migrate, reincarnation, admin] }
+        createdAt: { type: string, format: date-time }
+    FactionMembership:
+      type: object
+      required: [factionId, joinedAt, canSwitchAt, switchCooldownSeconds, locked, mustChoose, chooseDeadline, path, stageId, upcoming, history]
+      properties:
+        factionId: { type: [string, "null"] }
+        joinedAt: { type: [string, "null"], format: date-time }
+        canSwitchAt: { type: [string, "null"], format: date-time, description: "null = a switch is allowed now" }
+        switchCooldownSeconds: { type: integer }
+        locked: { type: boolean }
+        lockReason: { type: string, enum: [fengshen, admin, event] }
+        lockedUntil: { type: [string, "null"], format: date-time }
+        mustChoose: { type: array, items: { type: string }, description: "branches of a pending split; empty = none" }
+        chooseDeadline: { type: [string, "null"], format: date-time }
+        path: { type: string }
+        stageId: { type: string }
+        upcoming: { oneOf: [{ $ref: "#/components/schemas/FactionEffectNotice" }, { type: "null" }] }
+        history: { type: array, items: { $ref: "#/components/schemas/FactionHistoryEntry" } }
+    FactionChangeRequest:
+      type: object
+      required: [factionId]
+      additionalProperties: false
+      properties:
+        factionId: { type: string }
+        path: { type: string, description: "optional path choice; must be one of the faction's allowedPaths" }
+    FactionChangeResult:
+      type: object
+      required: [membership, replayed]
+      properties:
+        membership: { $ref: "#/components/schemas/FactionMembership" }
+        replayed: { type: boolean }
+    FactionMembersPage:
+      type: object
+      required: [factionId, entries, total, nextCursor]
+      properties:
+        factionId: { type: string }
+        entries:
+          type: array
+          items:
+            type: object
+            required: [rank, characterId, name, stageId]
+            properties:
+              rank: { type: integer }
+              characterId: { type: string, format: uuid }
+              name: { type: string }
+              stageId: { type: string }
+              avatarFrameId: { type: string, description: equipped cosmetic (display only) }
+              titleId: { type: string, description: equipped cosmetic (display only) }
+        total: { type: integer }
+        nextCursor: { type: [string, "null"] }
+    FactionLock:
+      type: object
+      required: [characterId, factionId, lockedAt, lockedUntil]
+      properties:
+        characterId: { type: string, format: uuid }
+        factionId: { type: string }
+        lockReason: { type: string }
+        lockedAt: { type: [string, "null"], format: date-time }
+        lockedUntil: { type: [string, "null"], format: date-time }
+    WorldView:
+      type: object
+      required: [started, startedAt, serverDay, paused, era, progress, lastMilestone, nextMilestone, activeEvents, pendingEffects, timeline]
+      properties:
+        started: { type: boolean }
+        startedAt: { type: [string, "null"], format: date-time }
+        serverDay: { type: integer, description: "-1 before launch" }
+        paused: { type: boolean }
+        era:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties: { id: { type: string }, name: { type: string } }
+        progress:
+          type: object
+          properties:
+            perActiveMilli: { type: integer, format: int64, description: "Σ closed per-capita days since launch" }
+            closedThroughDay: { type: string, format: date }
+            todayProvisionalMilli: { type: integer, format: int64, description: "today's running per-capita (not counted yet)" }
+            yesterdayDau: { type: integer }
+            referencePerDayMilli: { type: integer, format: int64 }
+        lastMilestone:
+          oneOf: [{ type: "null" }, { $ref: "#/components/schemas/WorldReached" }]
+        nextMilestone:
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                id: { type: string }
+                name: { type: string }
+                targetDay: { type: integer, description: "effective (admin override applied)" }
+                thresholdPerActiveMilli: { type: integer, format: int64 }
+                progressBp: { type: integer, minimum: 0, maximum: 10000 }
+                earliestAt: { type: [string, "null"], format: date-time, description: "70% floor" }
+                latestAt: { type: [string, "null"], format: date-time, description: "150% ceiling" }
+                estimatedAt: { type: [string, "null"], format: date-time, description: "avg of last 7 closed days, clamped" }
+        activeEvents:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              milestoneId: { type: string }
+              name: { type: string }
+              startedAt: { type: string, format: date-time }
+              endsAt: { type: string, format: date-time }
+        pendingEffects:
+          type: array
+          description: Faction effects scheduled by a milestone, executed by Phase 2.2 (factions).
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [set_era, start_event, split_faction, migrate_faction] }
+              milestoneId: { type: string }
+              dueAt: { type: string, format: date-time }
+              deadlineAt: { type: string, format: date-time }
+              from: { type: string }
+              into: { type: array, items: { type: string } }
+              to: { type: string }
+        timeline:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              targetDay: { type: integer }
+              eventDays: { type: integer, description: "ranged event length, 0 = none" }
+              reached: { type: boolean }
+              reachedAt: { type: [string, "null"], format: date-time }
+              reachedDay: { type: [integer, "null"] }
+    VipBenefits:
+      type: object
+      properties:
+        tier: { type: integer }
+        name: { type: string, description: "Tán Tu | Tiên Duyên N" }
+        offlineCapHours: { type: integer }
+        dailyGift: { type: integer, format: int64 }
+        alchemySlots: { type: integer }
+        cosmetics: { type: array, items: { type: string } }
+        flags: { type: array, items: { type: string } }
+    VipActivity:
+      type: object
+      description: One in-game source of điểm duyên (vip.yaml earn.activities). live=false → feature not released.
+      properties:
+        id: { type: string }
+        source: { type: string, enum: [cultivation, lecture, interaction, task, trial, event] }
+        name: { type: string }
+        points: { type: integer }
+        dailyMaxTimes: { type: integer }
+        live: { type: boolean }
+        minElapsedSeconds: { type: integer }
+    VipTiersResponse:
+      type: object
+      properties:
+        displayName: { type: string }
+        pointName: { type: string }
+        pointsPer1000Vnd: { type: integer }
+        earnDailyCap: { type: integer }
+        activities: { type: array, items: { $ref: "#/components/schemas/VipActivity" } }
+        tiers:
+          type: array
+          items:
+            type: object
+            properties:
+              tier: { type: integer }
+              pointsRequired: { type: integer, format: int64 }
+              benefits: { $ref: "#/components/schemas/VipBenefits" }
+    VipStatus:
+      type: object
+      properties:
+        displayName: { type: string }
+        pointName: { type: string }
+        points: { type: integer, format: int64 }
+        benefits: { $ref: "#/components/schemas/VipBenefits" }
+        nextTier: { type: integer }
+        pointsToNext: { type: integer, format: int64 }
+        giftClaimedToday: { type: boolean }
+        earnedToday: { type: integer, description: in-game điểm duyên this game day (top-up/admin excluded) }
+        earnDailyCap: { type: integer }
+        activities:
+          type: array
+          items:
+            allOf:
+              - { $ref: "#/components/schemas/VipActivity" }
+              - type: object
+                properties: { timesToday: { type: integer }, pointsToday: { type: integer } }
+        resetsAt: { type: string, format: date-time }
     Report:
       type: object
       properties:
         id: { type: string, format: uuid }
         targetCharacterId: { type: string, format: uuid }
         targetName: { type: string, description: Name at report time }
-        reason: { type: string, enum: [offensive_name, harassment] }
+        reason: { type: string, enum: [offensive_name, harassment, trade_abuse] }
         note: { type: string }
         status: { type: string, enum: [open, dismissed, actioned] }
         createdAt: { type: string, format: date-time }
         chatMessageId: { type: [integer, "null"], format: int64 }
+        tradeOfferId: { type: [string, "null"], format: uuid }
     AdminReport:
       allOf:
         - { $ref: "#/components/schemas/Report" }
@@ -419,6 +1987,79 @@ components:
         stageId: { type: string, description: Sender stage at send time }
         text: { type: string, description: Masked text }
         sentAt: { type: string, format: date-time }
+        nameFx: { type: string, description: "chat_aura cosmetic worn at send time (display only; omitted when none)" }
+    Listener:
+      type: object
+      properties:
+        characterId: { type: string, format: uuid }
+        name: { type: string }
+        stageId: { type: string }
+        seat: { type: integer, description: "-1 = listening outside the hall" }
+    InsightSlot:
+      type: object
+      properties: { no: { type: integer, format: int64 }, opensAt: { type: string, format: date-time }, closesAt: { type: string, format: date-time } }
+    LectureToday:
+      type: object
+      properties: { gameDay: { type: string, format: date }, milli: { type: integer, format: int64 }, capMilli: { type: integer, format: int64 } }
+    LectureMe:
+      type: object
+      properties: { inHall: { type: boolean }, seat: { type: integer }, accruedSeconds: { type: integer, format: int64 } }
+    LectureScript:
+      type: object
+      properties:
+        id: { type: string }
+        order: { type: integer }
+        title: { type: string }
+        theme: { type: string }
+        lines: { type: array, items: { type: object, properties: { text: { type: string }, seconds: { type: integer } } } }
+        question: { type: string }
+        takeaway: { type: string }
+        seconds: { type: integer }
+    LectureState:
+      type: object
+      properties:
+        serverNow: { type: string, format: date-time }
+        cycleEpoch: { type: string, format: date-time }
+        cycleSeconds: { type: integer }
+        seats: { type: integer }
+        listeners: { type: integer, format: int64 }
+        seated: { type: array, items: { $ref: "#/components/schemas/Listener" } }
+        chatChannel: { type: string }
+        heartbeatSeconds: { type: integer }
+        rateMilliPerHour: { type: integer, format: int64 }
+        maxSecondsPerInsight: { type: integer, format: int64 }
+        insight:
+          type: object
+          properties:
+            current: { $ref: "#/components/schemas/InsightSlot" }
+            open: { type: boolean }
+            claimed: { type: boolean }
+            next: { $ref: "#/components/schemas/InsightSlot" }
+            everySeconds: { type: integer }
+        today: { $ref: "#/components/schemas/LectureToday" }
+        me: { $ref: "#/components/schemas/LectureMe" }
+    InsightResult:
+      type: object
+      properties:
+        cultivation: { $ref: "#/components/schemas/CultivationSnapshot" }
+        presenceSeconds: { type: integer, format: int64 }
+        rawMilli: { type: integer, format: int64 }
+        earnedMilli: { type: integer, format: int64, description: After bucket/ceiling/bottleneck }
+        vipPoints: { type: integer }
+        stagesAdvanced: { type: array, items: { type: string } }
+        lectureId: { type: string }
+        takeaway: { type: string }
+        today: { $ref: "#/components/schemas/LectureToday" }
+        replayed: { type: boolean }
+    NoteEntry:
+      type: object
+      properties:
+        lectureId: { type: string }
+        title: { type: string }
+        theme: { type: string }
+        takeaway: { type: string }
+        firstAt: { type: string, format: date-time }
+        times: { type: integer, format: int64 }
     User:
       type: object
       properties:
@@ -487,11 +2128,31 @@ components:
             stageReachedAt: { type: string, format: date-time }
             offlineBonusSeconds: { type: integer }
             bonusUsedToday: { type: boolean }
+            factionId: { type: [string, "null"], description: null = no faction yet (web sends them to the faction step) }
+            appearance: { $ref: "#/components/schemas/Appearance" }
+            replayed: { type: boolean, description: only on an onboarding replay }
     OddsPart:
       type: object
+      description: >-
+        One disclosed component. For a non-guaranteed tribulation the parts sum to successBp: bonus parts uncapped, then
+        bonus_cap (≤ 0, decision-F total-bonus cap) and max_cap (≤ 0, final cap); a guaranteed attempt adds guarantee.
       properties:
-        source: { type: string, enum: [base, pity, surplus, items, protector] }
+        source: { type: string, enum: [base, pity, surplus, items, protector, bonus_cap, max_cap, guarantee] }
         bp: { type: integer }
+        detail: { type: string, description: "items: the equipped pháp bảo id; protector: counted members" }
+    OddsCaps:
+      type: object
+      description: Decision-F caps and bonus sources of a tribulation (Phase 3.4).
+      properties:
+        surplusMaxBp: { type: integer }
+        itemMaxBp: { type: integer }
+        protectorPerMemberBp: { type: integer }
+        protectorMaxBp: { type: integer }
+        totalBonusMaxBp: { type: integer }
+        maxSuccessBp: { type: integer }
+        artifactId: { type: string, description: equipped pháp bảo counted in items ("" = none) }
+        artifactBonusBp: { type: integer }
+        protectorMembers: { type: integer, description: protectors that count now (online, same faction, accepted) }
     BreakthroughPreview:
       type: object
       properties:
@@ -503,6 +2164,7 @@ components:
         projectedCultivationMilli: { type: integer, format: int64 }
         successBp: { type: integer }
         odds: { type: array, items: { $ref: "#/components/schemas/OddsPart" } }
+        caps: { $ref: "#/components/schemas/OddsCaps" }
         cooldownSeconds: { type: integer }
         consumes: { type: array, items: { type: object } }
         tribulation:
@@ -521,16 +2183,300 @@ components:
                 Guard bound to send as acceptLossMilli: the loss after realms.yaml tribulation.quote_window_seconds of
                 further idle accrual (capped by bình cảnh). ≥ lossMilli.
             cooldownSeconds: { type: integer }
+        trial:
+          description: Present when a mini-game trial gates this breakthrough (trials.yaml gate.tier).
+          type: object
+          properties:
+            kind: { type: string, example: tam_ma }
+            name: { type: string }
+            passed: { type: boolean }
+            validUntil: { type: [string, "null"], format: date-time, description: expiry of the valid pass; null when none }
         missing:
           type: array
           items:
             type: object
             properties:
-              kind: { type: string, enum: [cultivation, item, cooldown, final_stage] }
+              kind: { type: string, enum: [cultivation, item, trial, cooldown, final_stage] }
               itemId: { type: string }
+              trialKind: { type: string, description: "kind trial: the trials.yaml kind whose valid pass is needed (tam_ma | hoa_pham)" }
               have: { type: integer, description: "cultivation: milli from the start of the realm" }
               need: { type: integer }
               readyAt: { type: string, format: date-time }
+    TamMaParams:
+      type: object
+      description: Tâm Ma rules snapshot (trials.yaml params, camelCase). The run's copy is what the server replays.
+      properties:
+        rulesVersion: { type: integer }
+        tickMs: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        timeLimitTicks: { type: integer }
+        passLines: { type: integer }
+        gravity: { type: object, properties: { startTicks: { type: integer }, minTicks: { type: integer }, stepEveryTicks: { type: integer } } }
+        riseEveryTicks: { type: integer }
+        calm: { type: object, properties: { chargePerLine: { type: integer }, chargeMax: { type: integer }, durationTicks: { type: integer } } }
+        lineScores: { type: array, items: { type: integer } }
+        maxInputs: { type: integer }
+        inputWindowTicks: { type: integer, description: "rules v2: window for the input cadence cap" }
+        maxInputsPerWindow: { type: integer, description: "more inputs in any window → rejected implausible_input" }
+        minLockGapTicks: { type: integer, description: "a drop sooner than this after the previous lock is ignored (game rule)" }
+        minPassTicks: { type: integer, description: "the pass needs passLines AND tick ≥ minPassTicks" }
+        minElapsedBp: { type: integer, description: "kind-level snapshot: submit needs server elapsed ≥ game time × this / 10000" }
+        pieces:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              weight: { type: integer }
+              cells: { type: array, items: { type: array, items: { type: integer }, minItems: 2, maxItems: 2 } }
+    HoaPhamParams:
+      type: object
+      description: >-
+        Hóa Phàm rules snapshot (trials.yaml params, camelCase; docs/design/hoa-pham-luat-choi.md). Field in grid units,
+        motion in 1/32 grid units per tick. The run's copy is what the server replays.
+      properties:
+        rulesVersion: { type: integer }
+        tickMs: { type: integer }
+        width: { type: integer }
+        height: { type: integer }
+        timeLimitTicks: { type: integer }
+        passScore: { type: integer }
+        minPassTicks: { type: integer, description: "the pass needs passScore AND tick ≥ minPassTicks" }
+        lanterns: { type: integer, description: "tâm đăng: cutting this many chân tâm lanterns fails" }
+        gravitySub: { type: integer }
+        knotMotion: { type: object, properties: { vySub: { type: object, properties: { min: { type: integer }, max: { type: integer } } }, vxMaxSub: { type: integer } } }
+        lanternMotion: { type: object, properties: { vySub: { type: object, properties: { min: { type: integer }, max: { type: integer } } }, vxMaxSub: { type: integer } } }
+        spawn:
+          type: object
+          properties:
+            startTicks: { type: integer }
+            minTicks: { type: integer }
+            stepEveryTicks: { type: integer }
+            waveMax: { type: integer }
+            waveGrowEveryTicks: { type: integer }
+            margin: { type: integer }
+        minCutStep: { type: integer, description: a segment shorter than this (octile grid units per tick) cuts nothing }
+        combo: { type: object, properties: { stepBonus: { type: integer }, maxBonus: { type: integer } } }
+        calm: { type: object, properties: { chargePerCut: { type: integer }, chargeMax: { type: integer }, durationTicks: { type: integer } } }
+        maxStrokes: { type: integer }
+        maxStep: { type: integer, description: "the brush follows the pointer ≤ maxStep units per tick; longer = implausible_input" }
+        inputWindowTicks: { type: integer }
+        maxWindowTravel: { type: integer, description: more brush travel in any window → implausible_input }
+        maxStrokesPerWindow: { type: integer, description: more stroke starts in any window → implausible_input }
+        minLiftTicks: { type: integer, description: unpressed ticks required between two strokes }
+        minElapsedBp: { type: integer, description: "kind-level snapshot: submit needs server elapsed ≥ game time × this / 10000" }
+        objects:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              role: { type: string, enum: [knot, lantern] }
+              weight: { type: integer }
+              radius: { type: integer }
+              points: { type: integer }
+              hp: { type: integer }
+    TrialParams:
+      description: Params of the kind's engine (tam_ma → TamMaParams, hoa_pham → HoaPhamParams).
+      oneOf:
+        - { $ref: "#/components/schemas/TamMaParams" }
+        - { $ref: "#/components/schemas/HoaPhamParams" }
+    TrialKindStatus:
+      type: object
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        summary: { type: string }
+        state: { type: string, enum: [available, in_progress, cooldown, passed, locked] }
+        eligible: { type: boolean }
+        gateTier: { type: integer }
+        fromRealmId: { type: string }
+        toRealmId: { type: string }
+        opensAt: { type: string, enum: [last_stage, realm] }
+        cooldownUntil: { type: [string, "null"], format: date-time }
+        pass: { type: [object, "null"], properties: { runId: { type: string, format: uuid }, validUntil: { type: string, format: date-time } } }
+        openRun: { type: [object, "null"], properties: { runId: { type: string, format: uuid }, expiresAt: { type: string, format: date-time } } }
+        loseCooldownSeconds: { type: integer }
+        passValidSeconds: { type: integer }
+        expireAfterSeconds: { type: integer }
+        params: { $ref: "#/components/schemas/TrialParams" }
+    TrialStatus:
+      type: object
+      properties:
+        serverNow: { type: string, format: date-time }
+        kinds: { type: array, items: { $ref: "#/components/schemas/TrialKindStatus" } }
+    TrialRunStart:
+      type: object
+      properties:
+        runId: { type: string, format: uuid }
+        kind: { type: string }
+        seed: { type: integer, format: int64, minimum: 1, maximum: 4294967295 }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        serverNow: { type: string, format: date-time }
+        params: { $ref: "#/components/schemas/TrialParams" }
+        resumed: { type: boolean }
+        status: { $ref: "#/components/schemas/TrialKindStatus" }
+    TrialClaim:
+      type: object
+      required: [endTick, lines, score, stateHash, inputs]
+      description: >-
+        The input log plus the end state the client's simulator reached. Only the log decides; the rest must equal
+        the server replay. Tâm ma: `inputs` = [tick, action], action 1 left · 2 right · 3 rotate cw · 4 rotate ccw ·
+        5 soft drop · 6 hard drop · 7 tĩnh tâm; `lines` = rows cleared. Hóa phàm: `strokes` = one array per pressed
+        period [start, x0, y0, dx1, dy1, …] (grid units, one point per tick), `inputs` empty, `lines` = knots severed.
+        The body limit is 96 KiB (the catalogue loader checks the longest log of every kind fits).
+      properties:
+        endTick: { type: integer, minimum: 1 }
+        lines: { type: integer }
+        score: { type: integer }
+        stateHash: { type: integer, format: int64, description: FNV-1a 32 of the canonical end state }
+        inputs: { type: array, items: { type: array, items: { type: integer }, minItems: 2, maxItems: 2 } }
+        strokes: { type: array, items: { type: array, items: { type: integer }, minItems: 3 }, description: "hóa phàm stroke log" }
+    SecretRealmLoot:
+      type: object
+      properties:
+        band: { type: string }
+        spiritStone: { type: integer, format: int64, description: granted after the daily cap }
+        items: { type: array, items: { type: object, properties: { itemId: { type: string }, quantity: { type: integer } } } }
+        artifact: { type: string, description: pháp bảo granted }
+        duplicateOf: { type: string, description: rolled pháp bảo already owned → duplicate stones }
+        artifactChanceBp: { type: integer }
+        rolledSpiritStone: { type: integer, format: int64 }
+        rolledItems: { type: array, items: { type: object, properties: { itemId: { type: string }, quantity: { type: integer } } } }
+        rolledArtifact: { type: string }
+        clipped: { type: boolean }
+        artifactCapped: { type: boolean }
+    SecretRealmStatus:
+      type: object
+      properties:
+        realmId: { type: string }
+        name: { type: string }
+        summary: { type: string }
+        unlocked: { type: boolean }
+        minTier: { type: integer }
+        runsPerDay: { type: integer }
+        runsLeft: { type: integer }
+        expireAfterSeconds: { type: integer }
+        minRewardTicks: { type: integer }
+        bands: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string }, minScore: { type: integer } } } }
+        loot: { type: object, additionalProperties: { type: object } }
+        survived: { type: object, properties: { spiritStone: { type: integer }, artifactChanceBp: { type: integer } } }
+        artifacts: { type: array, items: { type: object, properties: { itemId: { type: string }, weight: { type: integer }, duplicateStones: { type: integer } } } }
+        dailyCaps: { type: object, properties: { spiritStone: { type: integer }, materials: { type: integer }, artifacts: { type: integer } } }
+        today: { type: object }
+        resetAt: { type: string, format: date-time }
+        openRun: { type: [object, "null"] }
+        params: { type: object, description: "bí cảnh rules snapshot (rules v1, camelCase; see lib/game/types.ts BiCanhParams)" }
+    SecretRealmView:
+      type: object
+      properties:
+        serverNow: { type: string, format: date-time }
+        realms: { type: array, items: { $ref: "#/components/schemas/SecretRealmStatus" } }
+        recent: { type: array, items: { type: object } }
+    SecretRealmStart:
+      type: object
+      properties:
+        runId: { type: string, format: uuid }
+        realmId: { type: string }
+        seed: { type: integer, format: int64 }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        serverNow: { type: string, format: date-time }
+        params: { type: object }
+        resumed: { type: boolean }
+        status: { $ref: "#/components/schemas/SecretRealmStatus" }
+    SecretRealmClaim:
+      type: object
+      required: [endTick, kills, score, stateHash, moves]
+      properties:
+        endTick: { type: integer }
+        kills: { type: integer }
+        score: { type: integer }
+        stateHash: { type: integer, format: int64 }
+        moves:
+          type: array
+          description: RLE [direction 0..8 (0 still, 1..8 N,NE,E,SE,S,SW,W,NW), ticks ≥ 1]; consecutive directions differ; Σ ticks = endTick
+          items: { type: array, items: { type: integer }, minItems: 2, maxItems: 2 }
+    SecretRealmSubmit:
+      type: object
+      properties:
+        runId: { type: string, format: uuid }
+        realmId: { type: string }
+        verdict: { type: string, enum: [pass, fail, rejected, expired] }
+        reason: { type: string }
+        outcome: { type: [object, "null"], description: replay result + cadence telemetry (pass/fail only) }
+        band: { type: [object, "null"] }
+        loot: { oneOf: [{ $ref: "#/components/schemas/SecretRealmLoot" }, { type: "null" }] }
+        vipPoints: { type: integer }
+        replayed: { type: boolean }
+        status: { $ref: "#/components/schemas/SecretRealmStatus" }
+    EquippedArtifact:
+      type: object
+      properties:
+        itemId: { type: string, description: '"" = none' }
+        tribulationBonusBp: { type: integer }
+        equippedAt: { type: [string, "null"], format: date-time }
+    ProtectorView:
+      type: object
+      properties:
+        serverNow: { type: string, format: date-time }
+        factionId: { type: string }
+        eligible: { type: boolean }
+        pingEverySeconds: { type: integer }
+        inviteWindowSeconds: { type: integer }
+        dailyAssists: { type: integer }
+        assistsLeft: { type: integer }
+        maxCounted: { type: integer }
+        perMemberBp: { type: integer }
+        maxBp: { type: integer }
+        myInvite: { type: [object, "null"] }
+        openInvites: { type: array, items: { type: object } }
+        onlineMembers: { type: array, items: { type: object } }
+        online: { type: boolean }
+    TrialSubmitResult:
+      type: object
+      properties:
+        runId: { type: string, format: uuid }
+        kind: { type: string }
+        verdict: { type: string, enum: [pass, fail, rejected, expired] }
+        reason:
+          type: string
+          enum: [cleared, topped_out, lanterns_out, time_up, gave_up, late, abandoned, invalid_log, implausible_score, implausible_input, too_fast, mismatch]
+        outcome:
+          type: [object, "null"]
+          description: the server replay — only for pass/fail verdicts (rejections keep it server-side for audit)
+          properties:
+            won: { type: boolean }
+            reason: { type: string }
+            endTick: { type: integer }
+            gameMillis: { type: integer }
+            lines: { type: integer }
+            score: { type: integer }
+            pieces: { type: integer }
+            stateHash: { type: integer, format: int64 }
+            inputs: { type: integer }
+            inputsPerSecMilli: { type: integer, description: inputs per second × 1000 over the simulated time }
+            maxWindowInputs: { type: integer }
+            minLockGapTicks: { type: integer }
+            claimedEndTick: { type: integer }
+            strokes: { type: integer, description: "hóa phàm telemetry (inputs = pointer samples, lines = knots severed, pieces = spawned)" }
+            maxStep: { type: integer }
+            maxWindowTravel: { type: integer }
+            maxWindowStrokes: { type: integer }
+            lanternsCut: { type: integer }
+            escaped: { type: integer }
+            bestCombo: { type: integer }
+            elapsedMillis: { type: integer, description: server ms from issue to submit (hóa phàm) }
+            slowSubmit: { type: boolean, description: "elapsed > game time + 60 s: possible replay of a known seed (review flag, never a rejection)" }
+        passValidUntil: { type: [string, "null"], format: date-time }
+        cooldownUntil: { type: [string, "null"], format: date-time }
+        vipPoints: { type: integer, description: điểm duyên credited for this pass (0 when capped or not a pass) }
+        replayed: { type: boolean }
+        status: { $ref: "#/components/schemas/TrialKindStatus" }
     BreakthroughResult:
       type: object
       properties:
@@ -541,6 +2487,7 @@ components:
         successBp: { type: integer }
         consumed: { type: [array, "null"], items: { type: object } }
         tribulation: { type: boolean }
+        trialConsumed: { type: string, description: trial kind whose pass this successful breakthrough consumed }
         guaranteed: { type: boolean }
         lossMilli: { type: integer, format: int64 }
         stageId: { type: string }
@@ -628,3 +2575,433 @@ components:
             hitDailyCap: { type: boolean }
             hitBottleneck: { type: boolean }
             replayed: { type: boolean }
+    # ───── cosmetics & faction works (decisions 2026-11-07 "Linh thạch sinks"; no gameplay effect) ─────
+    Appearance:
+      type: object
+      description: Equipped look, ids only ("<kind>:<slug>"); absent/"" = empty slot.
+      required: [caveDecorationIds]
+      properties:
+        titleId: { type: string }
+        avatarFrameId: { type: string }
+        chatAuraId: { type: string }
+        caveDecorationIds: { type: array, items: { type: string } }
+    Cosmetic:
+      type: object
+      required: [id, slug, kind, series, name, rarity, source]
+      properties:
+        id: { type: string, example: "avatar_frame:ngoc_bich" }
+        slug: { type: string }
+        kind: { type: string, enum: [title, avatar_frame, chat_aura, cave_decoration] }
+        series: { type: string }
+        name: { type: string }
+        rarity: { type: string, enum: [pham, linh, huyen, dia, thien, tien] }
+        source: { type: string, enum: [shop, tien_duyen] }
+        price: { type: integer, format: int64, description: spirit stones (shop only) }
+        minTier: { type: integer, description: Tiên Duyên level needed to buy (cosmetics only) }
+        perkTier: { type: integer, description: Tiên Duyên level that grants it (tien_duyen) }
+        description: { type: string }
+        season: { type: string }
+        fromEra: { type: string }
+        untilEra: { type: string }
+    CosmeticCatalog:
+      type: object
+      required: [settings, seasons, series, cosmetics]
+      properties:
+        settings:
+          type: object
+          properties: { currency: { type: string }, caveSlots: { type: integer } }
+        seasons:
+          type: array
+          items: { type: object, properties: { id: { type: string }, name: { type: string }, months: { type: array, items: { type: integer } } } }
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              kind: { type: string }
+              name: { type: string }
+              source: { type: string }
+              season: { type: string }
+              fromEra: { type: string }
+              untilEra: { type: string }
+              items: { type: array, items: { type: string } }
+        cosmetics: { type: array, items: { $ref: "#/components/schemas/Cosmetic" } }
+    CosmeticsView:
+      type: object
+      required: [balance, tier, season, eraId, owned, available, equipped]
+      properties:
+        balance: { type: integer, format: int64 }
+        tier: { type: integer }
+        season: { type: string }
+        eraId: { type: string, description: "'' before launch (first era applies)" }
+        owned: { type: array, items: { type: string } }
+        available: { type: array, items: { type: string }, description: shop cosmetics inside their window now }
+        equipped: { $ref: "#/components/schemas/Appearance" }
+    FactionWorksView:
+      type: object
+      required: [settings, works, factions, balance, todayDonated, gameDay, resetsAt, mine]
+      properties:
+        settings:
+          type: object
+          properties:
+            currency: { type: string }
+            dailyCapPerCharacter: { type: integer, format: int64 }
+            minAmount: { type: integer, format: int64 }
+            donorBoardSize: { type: integer }
+        works:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              name: { type: string }
+              description: { type: string }
+              goal: { type: integer, format: int64 }
+              start: { type: integer, format: int64 }
+              stages:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    at: { type: integer, format: int64 }
+                    decoration: { type: object, properties: { slug: { type: string }, name: { type: string } } }
+        factions:
+          type: array
+          items: { type: object, properties: { factionId: { type: string }, donatedTotal: { type: integer, format: int64 } } }
+        balance: { type: integer, format: int64 }
+        todayDonated: { type: integer, format: int64 }
+        gameDay: { type: string, format: date }
+        resetsAt: { type: string, format: date-time }
+        mine:
+          type: [object, "null"]
+          properties:
+            factionId: { type: string }
+            myTotal: { type: integer, format: int64 }
+            progress:
+              type: object
+              properties:
+                total: { type: integer, format: int64 }
+                workIndex: { type: integer }
+                workDonated: { type: integer, format: int64 }
+                unlocked: { type: array, items: { type: string } }
+            donors:
+              type: array
+              description: Công đức bảng — display only, never an input of merit, ranking or điểm duyên
+              items:
+                type: object
+                properties: { characterId: { type: string, format: uuid }, name: { type: string }, total: { type: integer, format: int64 } }
+    PaymentStatus:
+      type: string
+      enum: [created, pending, paid, failed, expired, refunded]
+    PaymentPackage:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        amountVnd: { type: integer, format: int64 }
+        points: { type: integer, format: int64, description: "= amountVnd / 1000 × pointsPer1000Vnd (no bonus)" }
+    PaymentPackagesView:
+      type: object
+      properties:
+        currency: { type: string, enum: [VND] }
+        pointName: { type: string }
+        pointsPer1000Vnd: { type: integer, format: int64 }
+        minAmountVnd: { type: integer, format: int64 }
+        maxAmountVnd: { type: integer, format: int64 }
+        orderExpiryMinutes: { type: integer }
+        packages: { type: array, items: { $ref: "#/components/schemas/PaymentPackage" } }
+        providers: { type: array, items: { type: object, properties: { id: { type: string }, name: { type: string } } } }
+    PaymentOrder:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        packageId: { type: string }
+        packageName: { type: string }
+        amountVnd: { type: integer, format: int64 }
+        points: { type: integer, format: int64 }
+        provider: { type: string }
+        status: { $ref: "#/components/schemas/PaymentStatus" }
+        checkout:
+          type: object
+          description: Only while the order is open
+          properties: { url: { type: string }, qr: { type: string } }
+        failureReason: { type: string }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        paidAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        refundedAt: { type: string, format: date-time }
+    PaymentOrderResult:
+      type: object
+      properties:
+        order: { $ref: "#/components/schemas/PaymentOrder" }
+        vip: { $ref: "#/components/schemas/VipStatus" }
+        replayed: { type: boolean }
+    PaymentWebhookResult:
+      type: object
+      properties:
+        outcome: { type: string, enum: [applied, replayed, ignored, rejected] }
+        detail: { type: string }
+        orderId: { type: string, format: uuid }
+        status: { $ref: "#/components/schemas/PaymentStatus" }
+    AdminPaymentOrder:
+      allOf:
+        - { $ref: "#/components/schemas/PaymentOrder" }
+        - type: object
+          properties:
+            userId: { type: string, format: uuid }
+            providerRef: { type: string }
+            vipLedgerId: { type: integer, format: int64 }
+            refundLedgerId: { type: integer, format: int64 }
+            checkCount: { type: integer }
+            lastCheckedAt: { type: string, format: date-time }
+    PaymentEvent:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        provider: { type: string }
+        dedupeKey: { type: string }
+        source: { type: string, enum: [webhook, reconcile] }
+        signatureOk: { type: boolean }
+        orderId: { type: string, format: uuid }
+        kind: { type: string, enum: [paid, failed, expired, refunded, pending] }
+        amountVnd: { type: integer, format: int64 }
+        outcome: { type: string, enum: [received, applied, replayed, ignored, rejected] }
+        detail: { type: string }
+        receivedAt: { type: string, format: date-time }
+    DaoLuRules:
+      type: object
+      properties:
+        minAccountAgeDays: { type: integer }
+        minTier: { type: integer }
+        proposalExpiryHours: { type: integer }
+        dailyProposals: { type: integer }
+        absenceDays: { type: integer }
+        rebondCooldownDays: { type: integer }
+        windowSeconds: { type: integer }
+        rateMilliPerHour: { type: integer, format: int64 }
+        heartbeatSeconds: { type: integer }
+        maxSongTuMilli: { type: integer, format: int64 }
+        duyenMinSeconds: { type: integer }
+    DaoLuProposal:
+      type: object
+      properties:
+        proposalId: { type: string, format: uuid }
+        characterId: { type: string, format: uuid, description: "incoming: the proposer · outgoing: the target" }
+        name: { type: string }
+        stageId: { type: string }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    DaoLuBond:
+      type: object
+      properties:
+        bondId: { type: string, format: uuid }
+        formedAt: { type: string, format: date-time }
+        partner:
+          type: object
+          properties:
+            characterId: { type: string, format: uuid }
+            name: { type: string }
+            stageId: { type: string }
+            online: { type: boolean }
+    SongTuView:
+      type: object
+      properties:
+        available: { type: boolean }
+        gameDay: { type: string, format: date }
+        resetAt: { type: string, format: date-time }
+        sessionStarted: { type: boolean }
+        accruedSeconds: { type: integer, description: shared overlap today }
+        paidSeconds: { type: integer, description: my paid seconds today }
+        claimableSeconds: { type: integer }
+        claimableMilli: { type: integer, format: int64, description: raw tu vi of claimableSeconds (caps may clip it) }
+        windowSeconds: { type: integer }
+        meActive: { type: boolean }
+        partnerActive: { type: boolean }
+        partnerBeatAt: { type: string, format: date-time, nullable: true }
+        heartbeatSeconds: { type: integer }
+    DaoLuView:
+      type: object
+      properties:
+        serverNow: { type: string, format: date-time }
+        rules: { $ref: "#/components/schemas/DaoLuRules" }
+        blockers: { type: array, items: { type: string, enum: [account_age, tier, bonded, cooldown] } }
+        cooldownUntil: { type: string, format: date-time, nullable: true }
+        proposalsLeft: { type: integer }
+        bond: { allOf: [{ $ref: "#/components/schemas/DaoLuBond" }], nullable: true }
+        incoming: { type: array, items: { $ref: "#/components/schemas/DaoLuProposal" } }
+        outgoing: { type: array, items: { $ref: "#/components/schemas/DaoLuProposal" } }
+        songTu: { allOf: [{ $ref: "#/components/schemas/SongTuView" }], nullable: true }
+    SongTuClaimResult:
+      type: object
+      properties:
+        cultivation: { type: object, description: authoritative cultivation snapshot (same shape as GET /character cultivation) }
+        seconds: { type: integer }
+        rawMilli: { type: integer, format: int64 }
+        earnedMilli: { type: integer, format: int64 }
+        vipPoints: { type: integer }
+        replayed: { type: boolean }
+        songTu: { $ref: "#/components/schemas/SongTuView" }
+    DaoLuFlag:
+      type: object
+      properties:
+        proposalId: { type: string, format: uuid }
+        bondId: { type: string, format: uuid }
+        proposerId: { type: string, format: uuid }
+        proposerName: { type: string }
+        targetId: { type: string, format: uuid }
+        targetName: { type: string }
+        status: { type: string }
+        stage: { type: string, enum: [propose, accept] }
+        flaggedAt: { type: string, format: date-time }
+    NetCluster:
+      type: object
+      properties:
+        accounts:
+          type: array
+          items:
+            type: object
+            properties:
+              userId: { type: string, format: uuid }
+              email: { type: string }
+              characterId: { type: string, format: uuid }
+              characterName: { type: string }
+        sharedNetworks: { type: integer }
+        lastSeenAt: { type: string, format: date-time }
+    TradeLineInput:
+      type: object
+      required: [assetId, quantity]
+      properties:
+        assetId: { type: string, description: "spirit_stone or a trade.yaml item id" }
+        quantity: { type: integer, format: int64, minimum: 1 }
+    TradeLine:
+      type: object
+      properties:
+        assetId: { type: string }
+        kind: { type: string, enum: [currency, item] }
+        quantity: { type: integer, format: int64 }
+        unitValue: { type: integer, format: int64, description: stone-equivalent per unit (trade.yaml) }
+    TradeOffer:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, enum: [gift, swap] }
+        status: { type: string, enum: [pending, accepted, declined, cancelled, expired] }
+        direction: { type: string, enum: [incoming, outgoing] }
+        counterpart: { type: object, properties: { characterId: { type: string, format: uuid }, name: { type: string }, stageId: { type: string } } }
+        give: { type: array, items: { $ref: "#/components/schemas/TradeLine" }, description: sender → receiver }
+        take: { type: array, items: { $ref: "#/components/schemas/TradeLine" }, description: receiver → sender }
+        valueToReceiver: { type: integer, format: int64 }
+        valueToSender: { type: integer, format: int64 }
+        senderFee: { type: integer, format: int64, description: "linh thạch burned from the sender (pending: if accepted now)" }
+        receiverFee: { type: integer, format: int64, description: "linh thạch burned from the receiver (swap)" }
+        relation: { type: string, enum: [stranger, faction, dao_lu] }
+        createdAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        respondedAt: { type: string, format: date-time, nullable: true }
+    TradeGate:
+      type: object
+      properties: { minAccountAgeDays: { type: integer }, minCharacterAgeDays: { type: integer }, minTier: { type: integer } }
+    TradeRules:
+      type: object
+      properties:
+        assets: { type: array, items: { type: object, properties: { id: { type: string }, kind: { type: string, enum: [currency, item] }, value: { type: integer } } } }
+        stoneFeeBp: { type: integer }
+        minStoneFee: { type: integer }
+        expiryHours: { type: integer }
+        maxLinesPerSide: { type: integer }
+        maxQuantityPerLine: { type: integer, format: int64 }
+        maxOpenOutgoing: { type: integer }
+        offersPerDay: { type: integer }
+        completedPerDay: { type: integer }
+        sentValuePerDay: { type: integer, format: int64 }
+        receivedValuePerDay: { type: object, properties: { stranger: { type: integer }, faction: { type: integer }, daoLu: { type: integer } } }
+        send: { $ref: "#/components/schemas/TradeGate" }
+        receive: { $ref: "#/components/schemas/TradeGate" }
+    TradeView:
+      type: object
+      properties:
+        serverNow: { type: string, format: date-time }
+        rules: { $ref: "#/components/schemas/TradeRules" }
+        limits:
+          type: object
+          properties:
+            gameDay: { type: string, format: date }
+            resetAt: { type: string, format: date-time }
+            offersLeft: { type: integer }
+            completedLeft: { type: integer }
+            openOutgoing: { type: integer }
+            valueReceived: { type: integer, format: int64 }
+            valueSent: { type: integer, format: int64 }
+            sendBlockers: { type: array, items: { type: string, enum: [account_age, character_age, tier] } }
+            receiveBlockers: { type: array, items: { type: string, enum: [account_age, character_age, tier] } }
+        incoming: { type: array, items: { $ref: "#/components/schemas/TradeOffer" } }
+        outgoing: { type: array, items: { $ref: "#/components/schemas/TradeOffer" } }
+        replayed: { type: boolean, description: an idempotent replay (nothing changed) }
+    TradePeer:
+      type: object
+      properties:
+        characterId: { type: string, format: uuid }
+        name: { type: string }
+        stageId: { type: string }
+        relation: { type: string, enum: [stranger, faction, dao_lu] }
+        receiveCap: { type: integer, format: int64 }
+        blockers: { type: array, items: { type: string, enum: [account_age, character_age, tier] } }
+    TradeFlows:
+      type: object
+      properties:
+        days: { type: integer }
+        since: { type: string, format: date-time }
+        pairMinValue: { type: integer }
+        lopsidedMinBp: { type: integer }
+        funnelMinSenders: { type: integer }
+        topNetReceivers:
+          type: array
+          items:
+            type: object
+            properties:
+              characterId: { type: string, format: uuid }
+              name: { type: string }
+              received: { type: integer }
+              sent: { type: integer }
+              net: { type: integer }
+              distinctSenders: { type: integer }
+              tradesIn: { type: integer }
+        lopsidedPairs:
+          type: array
+          items:
+            type: object
+            properties:
+              a: { type: string, format: uuid }
+              aName: { type: string }
+              b: { type: string, format: uuid }
+              bName: { type: string }
+              aToB: { type: integer }
+              bToA: { type: integer }
+              trades: { type: integer }
+        funnels:
+          type: array
+          items:
+            type: object
+            properties:
+              characterId: { type: string, format: uuid }
+              name: { type: string }
+              distinctSenders: { type: integer }
+              received: { type: integer }
+              trades: { type: integer }
+        netFlags:
+          type: array
+          items:
+            type: object
+            properties:
+              offerId: { type: string, format: uuid }
+              kind: { type: string }
+              status: { type: string }
+              createdAt: { type: string, format: date-time }
+              senderId: { type: string, format: uuid }
+              senderName: { type: string }
+              receiverId: { type: string, format: uuid }
+              receiverName: { type: string }
+              valueToReceiver: { type: integer }
+              valueToSender: { type: integer }

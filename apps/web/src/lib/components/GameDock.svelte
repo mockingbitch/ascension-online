@@ -6,7 +6,9 @@
 	import Icon from './Icon.svelte';
 
 	const path = $derived(page.url.pathname);
-	const isActive = (href: string) => (href === screens.world.href ? path === href : path.startsWith(href));
+	const inDock = (href: string) => href !== screens.world.href && path.startsWith(href);
+	// Places reached from the world map (Tử Tiêu Cung, Thiên Đạo Sử, Đột Phá…) keep "Thế Giới" lit.
+	const isActive = (href: string) => (href === screens.world.href ? !dockScreens.some((s) => inDock(s.href)) : inDock(href));
 	// Small red dot when something on that screen wants attention.
 	const badge = (id: string) => (id === 'cultivate' && (game.claimable > 0 || game.preview?.ready) ? 1 : 0);
 </script>
@@ -56,6 +58,9 @@
 		color: var(--color-gold-300);
 		border-bottom-color: var(--color-gold-500);
 		background: linear-gradient(0deg, color-mix(in oklab, var(--color-gold-500) 16%, transparent), transparent);
+	}
+	.dock-item.is-active :global(svg) {
+		filter: drop-shadow(0 0 6px color-mix(in oklab, var(--color-gold-300) 55%, transparent));
 	}
 	.dot {
 		position: absolute;

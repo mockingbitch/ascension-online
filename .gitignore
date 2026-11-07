@@ -13,3 +13,10 @@ graphify-out/
 # art pipeline (tools/artgen): raw generations, refs
 art-work/
 __pycache__/
+/backups/
+
+# Go binaries built in place (go build ./cmd/...)
+/services/game/api
+/services/game/worker
+/services/game/balancesim
+/services/game/opsctl

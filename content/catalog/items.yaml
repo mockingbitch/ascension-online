@@ -1,5 +1,15 @@
 # Item definitions. IDs are stable slugs referenced by DB (inventory_items.item_id) and realms.yaml.
-# category: pill | herb | material | fragment | currency_bundle | cosmetic
+# category: pill | herb | material | fragment | consumable | currency_bundle | cosmetic | artifact
+# Effect fields (data-model §8.1, all optional):
+#   offline_cap_bonus_hours   pending offline-window bonus (Tụ Linh Phù)
+#   instant_points_milli      speed item: points via the single credit path (source item, activity bucket)
+#   max_use_per_game_day      required with instant_points_milli; per character per game day of USE (gifts included)
+#   breakthrough_bonus_bp / tribulation_bonus_bp   odds items (Phase 3 pháp bảo) — NEVER sold in shop.yaml
+#   unique_per_character      cosmetics only: a character owns at most one
+# Cosmetics (frames, titles, cave decorations, chat effects) live in cosmetics.yaml since decisions 2026-11-07
+# "Linh thạch sinks" (the two Phase 2.5 shop cosmetics moved there, migration 000014). A `cosmetic` item may never
+# carry an effect field (loader) and the shop may not list one (content.LoadAll: one cosmetic id space).
+# Speed budget: Σ instant_points_milli × max_use_per_game_day ≤ contribution.yaml speed_items (10 points/day).
 # rarity:   pham | linh | huyen | dia | thien | tien   (maps to design tokens --rarity-*)
 version: 1
 items:
@@ -28,3 +38,51 @@ items:
     tradable: false
     offline_cap_bonus_hours: 4
     description: Lá bùa tụ linh khí quanh động phủ, kéo dài thời gian bế quan thêm 4 canh giờ trong ngày (không vượt 24 canh giờ).
+  - id: tu_linh_dan
+    name: Tụ Linh Đan
+    category: pill
+    rarity: linh
+    tradable: false                   # shop speed item: not tradable (no stone laundering between characters)
+    instant_points_milli: 5000
+    max_use_per_game_day: 2
+    description: Đan dược ngưng tụ linh khí, uống vào lập tức được thêm 5 điểm tu vi. Mỗi ngày dùng tối đa 2 viên, vẫn tính trong hạn mức tu luyện hằng ngày.
+  # ───── Pháp bảo (artifacts, Phase 3.4) ─────
+  # Drop ONLY from bí cảnh (secret_realms.yaml); never sold (shop.yaml cross-check), never tradable (loader).
+  # One equipped pháp bảo counts toward the tribulation odds (POST /artifacts/equip); its tribulation_bonus_bp fills the
+  # "items" part of decision F (realms.yaml item_bonus_max_bp 700 — loader-checked). Highest tier 500 by design, leaving
+  # 200 for a future đan hộ thân (balance §11.4). ⚠ Bonuses are beta-tuning placeholders.
+  - id: thanh_dong_kinh
+    name: Thanh Đồng Hộ Tâm Kính
+    category: artifact
+    rarity: linh
+    tradable: false
+    tribulation_bonus_bp: 100
+    description: Gương đồng xanh treo trước ngực, hắt bớt một tia lôi quang lạc hướng. Lôi kiếp +1%.
+  - id: ty_loi_chau
+    name: Tị Lôi Châu
+    category: artifact
+    rarity: huyen
+    tradable: false
+    tribulation_bonus_bp: 200
+    description: Viên châu ngậm hơi nước lạnh của đáy cốc, khiến sấm sét trượt qua da thịt. Lôi kiếp +2%.
+  - id: loi_van_phu
+    name: Lôi Văn Bảo Phù
+    category: artifact
+    rarity: dia
+    tradable: false
+    tribulation_bonus_bp: 300
+    description: Lá bùa khắc lôi văn cổ, hút một phần thiên lôi vào chính nó rồi hóa tro. Lôi kiếp +3%.
+  - id: huyen_vu_thuan
+    name: Huyền Vũ Thuẫn
+    category: artifact
+    rarity: thien
+    tradable: false
+    tribulation_bonus_bp: 400
+    description: Tấm khiên mai rùa đen đã qua trăm lần lôi kiếp, vết nứt nào cũng còn tỏa hơi ấm. Lôi kiếp +4%.
+  - id: cuu_tieu_hoan
+    name: Cửu Tiêu Hoàn
+    category: artifact
+    rarity: tien
+    tradable: false
+    tribulation_bonus_bp: 500
+    description: Chiếc vòng chín tầng mây, xoay quanh người độ kiếp như một tầng trời thu nhỏ. Lôi kiếp +5%.

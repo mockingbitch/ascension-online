@@ -20,6 +20,10 @@
 	import Toaster from '$lib/components/Toaster.svelte';
 	import VipWindow from '$lib/components/VipWindow.svelte';
 	import { chat } from '$lib/game/chat.svelte';
+	import { cosmetics } from '$lib/game/cosmetics.svelte';
+	import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
+	import { screens } from '$lib/game/nav';
+	import { startPresence } from '$lib/game/presence';
 	import { game } from '$lib/game/store.svelte';
 	import { closeWindow, openWindow } from '$lib/game/windows';
 
@@ -30,6 +34,14 @@
 	game.init(data.catalogue, data.character!);
 	$effect(() => game.init(data.catalogue, data.character!));
 	$effect(() => startRealtime(true));
+	// Hộ pháp presence: "online" while a game screen is visible (Redis TTL on the server).
+	$effect(() => startPresence());
+	// Cosmetics catalogue (public, cached): resolves the frame/title/name-effect ids on characters, chat and boards.
+	$effect(() => void cosmetics.load());
+	// Faction card in the HUD / Nhân Vật: membership + roster names (light; refreshed by the Thế Lực screen and WS).
+	$effect(() => {
+		if (data.character?.id) void Promise.all([loadFactionMe(), loadFactions()]);
+	});
 
 	const cat = $derived(data.catalogue);
 	const win = $derived(page.state.win);
@@ -68,8 +80,8 @@
 		{/if}
 	</div>
 
-	{#if !wide.current}
-		<!-- Mobile/tablet: latest world message, tap to open the channel -->
+	{#if !wide.current && !page.url.pathname.startsWith(screens.hall.href)}
+		<!-- Mobile/tablet: latest world message, tap to open the channel (Tử Tiêu Cung shows its own tabbed chat) -->
 		<button type="button" class="chat-peek flex shrink-0 items-center gap-2 px-3 py-1.5 text-left text-sm" onclick={() => openWindow({ kind: 'chat' })}>
 			<Icon name="chat" size={16} class="shrink-0 text-gold-500" />
 			{#if lastChat}
@@ -91,7 +103,7 @@
 
 <GameWindow open={!!win} title={win ? (win.kind === 'profile' ? win.name : (titles[win.kind] ?? '')) : ''} size={win?.kind === 'vip' ? 'lg' : 'md'} onclose={closeWindow}>
 	{#if win?.kind === 'tasks'}
-		<DailyTasks board={game.board} catalogue={cat} busy={game.busy} onclaim={game.claimTask} />
+		<DailyTasks board={game.board} catalogue={cat} busy={game.busy} onclaim={game.claimTask} onincense={game.offerIncense} />
 	{:else if win?.kind === 'vip'}
 		<VipWindow />
 	{:else if win?.kind === 'notifications'}
@@ -100,7 +112,15 @@
 		<div class="-mx-5 -my-4 h-[70dvh]"><ChatPanel compact /></div>
 	{:else if win?.kind === 'profile'}
 		{#key win.characterId}
-			<ProfileWindow characterId={win.characterId} name={win.name} stageId={win.stageId} messageId={win.messageId} />
+			<ProfileWindow
+				characterId={win.characterId}
+				name={win.name}
+				stageId={win.stageId}
+				messageId={win.messageId}
+				avatarFrameId={win.avatarFrameId}
+				titleId={win.titleId}
+				nameFx={win.nameFx}
+			/>
 		{/key}
 	{/if}
 </GameWindow>

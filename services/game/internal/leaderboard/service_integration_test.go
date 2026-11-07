@@ -57,6 +57,10 @@ func TestRebuildPageRefresh(t *testing.T) {
 	late := mk("Muộn Đạt", "truc_co.so_ky", 0, t0.Add(time.Hour))
 	top := mk("Đệ Nhất" /* Vu path: score is path-agnostic */, "vu_3.so_ky", 10_000, t0)
 
+	// Equipped frame/title ride along on the page (display only; the order below proves the score ignores them).
+	if _, err := pool.Exec(ctx, "INSERT INTO character_appearance (character_id, avatar_frame_id, title_id) VALUES ($1, 'avatar_frame:xich_ha', 'title:thai_hu')", low); err != nil {
+		t.Fatal(err)
+	}
 	if n, err := svc.Rebuild(ctx); err != nil || n != 4 {
 		t.Fatalf("rebuild %d %v", n, err)
 	}
@@ -69,6 +73,9 @@ func TestRebuildPageRefresh(t *testing.T) {
 		if e.CharacterID != want[i] || e.Rank != int64(i+1) {
 			t.Fatalf("rank %d = %s (%s), want %s", i+1, e.Name, e.CharacterID, want[i])
 		}
+	}
+	if p := page[3]; p.AvatarFrameID != "avatar_frame:xich_ha" || p.TitleID != "title:thai_hu" || page[0].AvatarFrameID != "" {
+		t.Fatalf("appearance on page: %+v", page)
 	}
 	// Low player jumps to Hóa Thần → Refresh re-reads Postgres.
 	if _, err := pool.Exec(ctx, "UPDATE character_progressions SET realm_id='hoa_than', stage_id='hoa_than.so_ky_1' WHERE character_id=$1", low); err != nil {

@@ -18,6 +18,9 @@ paths:
   loader whitelists perk keys; don't widen the whitelist without an explicit product decision.
 - Fairness target: VIP max at 1 login/day ≈ free at 3 logins/day (nobody banks > 24h/day). Flag any change that
   lets VIP beat an always-active free player. Track free-1/day vs VIP-1/day gap (now ~2.7×, ~1.8× with Tụ Linh Phù).
+- Accepted exception (decisions 2026-11-07): idle Tiên Duyên @1 login may reach requirement-item breakthroughs
+  (Trúc Cơ, Kim Đan) up to 3 days before free @3 because the gift's linh thạch funds retries — not a violation;
+  balancesim fails only if the lead exceeds 3 days.
 - Breakthrough odds: always disclosed (`successBp` in preview incl. pity). Pity bonus capped by
   `pity_max_bonus_bp`. Failure keeps cultivation before the tribulation tiers; a failed tribulation (D3) loses
   `loss_bp` of the current stage only (never a stage), with the loss disclosed in the preview.

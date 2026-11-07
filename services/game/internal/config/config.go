@@ -3,6 +3,8 @@ package config
 
 import (
 	"errors"
+	"fmt"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -30,6 +32,8 @@ type Config struct {
 	PublicBaseURL      string // web origin users see, e.g. http://localhost:5173 — OAuth redirect is built from it
 	AuthDevHeader      bool   // DEV ONLY: trust X-Dev-User-Id. Refused unless Env=dev.
 	TrustProxy         bool   // take client IP from X-Forwarded-For (only behind our Nginx)
+	TrustedProxyCIDRs  string // TRUSTED_PROXY_CIDRS: peers whose X-Forwarded-For is honoured (TRUST_PROXY); dev default = loopback + private
+	NetSigSalts        string // NETSIG_SALTS "id:secret[,id:secret]" (first = current): salted IP hash; required outside dev
 
 	// Worker
 	WorkerInterval    time.Duration
@@ -57,6 +61,8 @@ func Load() Config {
 		PublicBaseURL:      strings.TrimRight(get("PUBLIC_BASE_URL", "http://localhost:5173"), "/"),
 		AuthDevHeader:      get("AUTH_DEV_HEADER", "false") == "true",
 		TrustProxy:         get("TRUST_PROXY", "false") == "true",
+		TrustedProxyCIDRs:  get("TRUSTED_PROXY_CIDRS", ""),
+		NetSigSalts:        get("NETSIG_SALTS", ""),
 		WorkerInterval:     time.Duration(getInt("WORKER_INTERVAL_MS", 1000)) * time.Millisecond,
 		ReconcileInterval:  time.Duration(getInt("LEADERBOARD_RECONCILE_SECONDS", 600)) * time.Second,
 		WorldInterval:      time.Duration(getInt("WORLD_TICK_SECONDS", 60)) * time.Second,
@@ -89,6 +95,9 @@ func (c Config) ValidateAPI() error {
 	if c.AccessTokenTTL <= 0 || c.AccessTokenTTL > time.Hour {
 		errs = append(errs, errors.New("ACCESS_TOKEN_TTL_SECONDS must be within 1..3600"))
 	}
+	if _, err := c.TrustedProxies(); err != nil {
+		errs = append(errs, err)
+	}
 	if c.AuthDevHeader && !c.IsDev() {
 		errs = append(errs, errors.New("AUTH_DEV_HEADER may only be enabled when APP_ENV=dev"))
 	}
@@ -98,6 +107,12 @@ func (c Config) ValidateAPI() error {
 		}
 		if !c.GoogleEnabled() {
 			errs = append(errs, errors.New("GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET are required outside dev"))
+		}
+		if c.TrustProxy && strings.TrimSpace(c.TrustedProxyCIDRs) == "" {
+			errs = append(errs, errors.New("TRUSTED_PROXY_CIDRS is required outside dev when TRUST_PROXY=true"))
+		}
+		if c.NetSigSalts == "" {
+			errs = append(errs, errors.New("NETSIG_SALTS (id:secret, secret ≥ 32 bytes) is required outside dev"))
 		}
 		if !strings.HasPrefix(c.PublicBaseURL, "https://") {
 			errs = append(errs, errors.New("PUBLIC_BASE_URL must be https outside dev"))
@@ -118,4 +133,37 @@ func getInt(k string, def int) int {
 		return v
 	}
 	return def
+}
+
+// devProxyCIDRs: loopback and private ranges (the docker compose network) — dev only.
+const devProxyCIDRs = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+
+// TrustedProxies parses TRUSTED_PROXY_CIDRS (comma-separated CIDRs or single IPs). Empty in dev → loopback + private
+// ranges; empty elsewhere → none (ValidateAPI refuses TRUST_PROXY without it).
+func (c Config) TrustedProxies() ([]netip.Prefix, error) {
+	spec := strings.TrimSpace(c.TrustedProxyCIDRs)
+	if spec == "" && c.IsDev() {
+		spec = devProxyCIDRs
+	}
+	var out []netip.Prefix
+	for _, part := range strings.Split(spec, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !strings.Contains(part, "/") {
+			a, err := netip.ParseAddr(part)
+			if err != nil {
+				return nil, fmt.Errorf("TRUSTED_PROXY_CIDRS: %q: %w", part, err)
+			}
+			out = append(out, netip.PrefixFrom(a.Unmap(), a.Unmap().BitLen()))
+			continue
+		}
+		p, err := netip.ParsePrefix(part)
+		if err != nil {
+			return nil, fmt.Errorf("TRUSTED_PROXY_CIDRS: %q: %w", part, err)
+		}
+		out = append(out, p.Masked())
+	}
+	return out, nil
 }

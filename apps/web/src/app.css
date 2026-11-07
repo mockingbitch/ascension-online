@@ -172,6 +172,39 @@
 	.eyebrow {
 		@apply text-xs font-medium tracking-[0.18em] text-mist-500 uppercase;
 	}
+
+	/* Cosmetic portrait frames (cosmetics.yaml avatar_frame:*; lib/game/cosmetics.svelte.ts frameStyle). A ring overlay
+	   around a round portrait — looks only, no gameplay effect. Raster art (cosmetics/<slug>) replaces it when shipped. */
+	.cos-frame {
+		position: absolute;
+		inset: -8%;
+		border-radius: 9999px;
+		pointer-events: none;
+		--fw: 11%;
+		-webkit-mask: radial-gradient(closest-side, transparent calc(100% - var(--fw)), black calc(100% - var(--fw) + 0.5px));
+		mask: radial-gradient(closest-side, transparent calc(100% - var(--fw)), black calc(100% - var(--fw) + 0.5px));
+	}
+	.frame-bamboo {
+		background: repeating-conic-gradient(var(--color-jade-500) 0 9deg, var(--color-ink-700) 9deg 12deg);
+	}
+	.frame-jade {
+		background: conic-gradient(from 30deg, var(--color-jade-300), var(--color-jade-700), var(--color-jade-300), var(--color-jade-500), var(--color-jade-300));
+	}
+	.frame-bronze {
+		background: repeating-conic-gradient(var(--color-bronze-500) 0 22deg, var(--color-gold-700) 22deg 30deg);
+	}
+	.frame-cloud {
+		background: conic-gradient(var(--color-silver-300), var(--color-mist-500), var(--color-silver-300), var(--color-mist-300), var(--color-silver-300));
+	}
+	.frame-flame {
+		background: conic-gradient(from 200deg, var(--color-cinnabar-500), var(--color-gold-300), var(--color-cinnabar-300), var(--color-gold-500), var(--color-cinnabar-500));
+	}
+	.frame-gold {
+		background: conic-gradient(var(--color-gold-300), var(--color-gold-700), var(--color-gold-300), var(--color-gold-500), var(--color-gold-300));
+	}
+	.frame-celestial {
+		background: conic-gradient(var(--color-spirit-violet), var(--color-spirit-cyan), var(--color-aura-celestial), var(--color-spirit-violet));
+	}
 }
 
 :root {

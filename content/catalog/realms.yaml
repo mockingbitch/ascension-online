@@ -97,11 +97,11 @@ tiers:
       pity_step_bp: 800
       cooldown_seconds: 3600
       requirements: [{ item_id: ket_dan_qua, quantity: 1 }]
-  - tier: 3                       # Kim Đan (Phase 3 adds requires_trial: tam_ma on tier 3)
+  - tier: 3                       # Kim Đan — leaving it needs a Tâm Ma pass (trials.yaml gate.tier: 3)
     entry_points: 950
     stages: { phases: bon_ky, layers: 1 }
     major_breakthrough: { success_bp: 5000, pity_step_bp: 700, cooldown_seconds: 7200 }
-  - tier: 4                       # Nguyên Anh (Phase 3 adds requires_trial: hoa_pham on tier 4)
+  - tier: 4                       # Nguyên Anh — leaving it needs a Hóa Phàm pass (trials.yaml gate.tier: 4)
     entry_points: 2050
     stages: { phases: bon_ky, layers: 2 }
     major_breakthrough: { success_bp: 4500, pity_step_bp: 600, cooldown_seconds: 10800 }

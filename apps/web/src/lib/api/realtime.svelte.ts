@@ -1,11 +1,18 @@
-// Receive-only WebSocket: world announcements + chat. Reconnects with capped exponential backoff + jitter.
+// Receive-only WebSocket: world announcements (breakthroughs, story milestones), chat and the Tử Tiêu Cung hall. Reconnects with capped exponential backoff + jitter.
 // Delivery is at-most-once, so every (re)connect backfills chat from REST (merged by id).
 import { loadChat, onChatHidden, onChatMessage } from '$lib/game/chat.svelte';
-import type { Announcement, ChatEvent } from '$lib/game/types';
+import { onHallChat, onHallEvent } from '$lib/game/lecture.svelte';
+import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
+import { loadWorld } from '$lib/game/world.svelte';
+import type { Announcement, ChatEvent, LectureEvent } from '$lib/game/types';
 
 export const feed = $state<{ items: Announcement[]; connected: boolean }>({ items: [], connected: false });
 
 const MAX_ITEMS = 5;
+
+function pushFeed(msg: Announcement) {
+	if (!feed.items.some((m) => m.id === msg.id && m.type === msg.type)) feed.items = [msg, ...feed.items].slice(0, MAX_ITEMS);
+}
 let started = false;
 let chatEnabled = false;
 
@@ -27,7 +34,7 @@ export function startRealtime(withChat = false) {
 			if (chatEnabled) void loadChat();
 		};
 		ws.onmessage = (e) => {
-			let msg: Announcement | ChatEvent;
+			let msg: Announcement | ChatEvent | LectureEvent;
 			try {
 				msg = JSON.parse(e.data);
 			} catch {
@@ -35,13 +42,30 @@ export function startRealtime(withChat = false) {
 			}
 			switch (msg.type) {
 				case 'announcement.major_breakthrough':
-					if (!feed.items.some((m) => m.id === msg.id)) feed.items = [msg, ...feed.items].slice(0, MAX_ITEMS);
+					pushFeed(msg);
+					break;
+				case 'world.milestone_reached':
+				case 'world.event_ended':
+					// The text goes to the feed; the state itself comes from GET /world (the client never derives it).
+					pushFeed(msg);
+					void loadWorld(true);
+					break;
+				case 'faction.announcement':
+					// Split/migrate notices: text to the feed, then refetch membership (pending choice) and the roster.
+					pushFeed(msg);
+					if (chatEnabled) void Promise.all([loadFactionMe(), loadFactions()]);
 					break;
 				case 'chat.message':
 					if (chatEnabled) onChatMessage(msg.data);
+					onHallChat(msg.data);
 					break;
 				case 'chat.hidden':
 					onChatHidden(msg.data.id);
+					onHallChat(null, msg.data.id);
+					break;
+				case 'lecture.enter':
+				case 'lecture.leave':
+					onHallEvent(msg);
 					break;
 			}
 		};

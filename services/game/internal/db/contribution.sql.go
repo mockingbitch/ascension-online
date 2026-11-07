@@ -47,7 +47,8 @@ func (q *Queries) AddDailyContribution(ctx context.Context, arg AddDailyContribu
 }
 
 const ensureDailyContribution = `-- name: EnsureDailyContribution :exec
-INSERT INTO daily_contribution (character_id, game_day) VALUES ($1, $2)
+INSERT INTO daily_contribution (character_id, game_day, faction_id)
+VALUES ($1, $2, (SELECT cf.faction_id FROM character_faction cf WHERE cf.character_id = $1))
 ON CONFLICT DO NOTHING
 `
 
@@ -56,7 +57,8 @@ type EnsureDailyContributionParams struct {
 	GameDay     pgtype.Date `json:"game_day"`
 }
 
-// Call under the progression lock before GetDailyContributionForUpdate.
+// Call under the progression lock before GetDailyContributionForUpdate. The day is stamped with the character's
+// faction at its first credit (faction merit, §10); a plain read — character_faction is locked later in §2.3 order.
 func (q *Queries) EnsureDailyContribution(ctx context.Context, arg EnsureDailyContributionParams) error {
 	_, err := q.db.Exec(ctx, ensureDailyContribution, arg.CharacterID, arg.GameDay)
 	return err
@@ -147,6 +149,23 @@ func (q *Queries) GetDailyContributionForUpdate(ctx context.Context, arg GetDail
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getItemDailyUses = `-- name: GetItemDailyUses :one
+SELECT COALESCE((SELECT uses FROM item_daily_uses WHERE character_id = $1 AND game_day = $2 AND item_id = $3), 0)::INT AS uses
+`
+
+type GetItemDailyUsesParams struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	GameDay     pgtype.Date `json:"game_day"`
+	ItemID      string      `json:"item_id"`
+}
+
+func (q *Queries) GetItemDailyUses(ctx context.Context, arg GetItemDailyUsesParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getItemDailyUses, arg.CharacterID, arg.GameDay, arg.ItemID)
+	var uses int32
+	err := row.Scan(&uses)
+	return uses, err
 }
 
 const incrementItemDailyUse = `-- name: IncrementItemDailyUse :one

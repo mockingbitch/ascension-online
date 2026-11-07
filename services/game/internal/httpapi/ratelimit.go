@@ -4,12 +4,15 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"net/netip"
 	"sync"
 	"time"
 
 	"github.com/go-redis/redis_rate/v10"
 	"github.com/redis/go-redis/v9"
 	"golang.org/x/time/rate"
+
+	"tiendao/game/internal/platform/metrics"
 )
 
 // limitSpec: `events` per `per`, with bursts up to `burst`.
@@ -24,15 +27,16 @@ type limitSpec struct {
 // redis_rate); if Redis is absent or errors, it falls back to an in-process token bucket so a Redis
 // outage degrades to per-instance limits instead of disabling limits or failing requests.
 type limiter struct {
-	spec       limitSpec
-	redis      *redis_rate.Limiter // nil → memory only
-	mem        *memLimiter
-	trustProxy bool
-	log        *slog.Logger
+	spec    limitSpec
+	redis   *redis_rate.Limiter // nil → memory only
+	mem     *memLimiter
+	proxies []netip.Prefix // trusted proxies (nil = never read X-Forwarded-For)
+	log     *slog.Logger
+	metrics *metrics.API // counts rejections; nil-safe
 }
 
-func newLimiter(spec limitSpec, rdb *redis.Client, trustProxy bool, log *slog.Logger) *limiter {
-	l := &limiter{spec: spec, mem: newMemLimiter(spec), trustProxy: trustProxy, log: log}
+func newLimiter(spec limitSpec, rdb *redis.Client, proxies []netip.Prefix, log *slog.Logger) *limiter {
+	l := &limiter{spec: spec, mem: newMemLimiter(spec), proxies: proxies, log: log}
 	if rdb != nil {
 		l.redis = redis_rate.NewLimiter(rdb)
 	}
@@ -57,7 +61,8 @@ func (l *limiter) allow(ctx context.Context, key string) bool {
 
 func (l *limiter) byIP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !l.allow(r.Context(), "ip:"+clientIP(r, l.trustProxy)) {
+		if !l.allow(r.Context(), "ip:"+clientIP(r, l.proxies)) {
+			l.metrics.RateLimited(l.spec.name)
 			writeError(w, 429, "rate_limited", "too many requests")
 			return
 		}
@@ -69,6 +74,7 @@ func (l *limiter) byIP(next http.Handler) http.Handler {
 func (l *limiter) byUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !l.allow(r.Context(), "user:"+userFrom(r.Context()).String()) {
+			l.metrics.RateLimited(l.spec.name)
 			writeError(w, 429, "rate_limited", "too many requests")
 			return
 		}

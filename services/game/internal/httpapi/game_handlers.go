@@ -9,6 +9,7 @@ import (
 	"tiendao/game/internal/character"
 	"tiendao/game/internal/cultivation"
 	"tiendao/game/internal/leaderboard"
+	"tiendao/game/internal/realm"
 )
 
 // ───── catalogue (public, cacheable) ─────
@@ -32,10 +33,11 @@ func (d Deps) listVIPTiers(w http.ResponseWriter, _ *http.Request) {
 		tiers = append(tiers, map[string]any{"tier": tr.Tier, "pointsRequired": tr.PointsRequired, "benefits": t.Benefits(tr.Tier)})
 	}
 	w.Header().Set("Cache-Control", "public, max-age=300")
-	writeJSON(w, 200, map[string]any{"tiers": tiers})
+	writeJSON(w, 200, map[string]any{"tiers": tiers, "displayName": t.DisplayName, "pointName": t.PointName,
+		"pointsPer1000Vnd": t.PointsPer1000VND, "earnDailyCap": t.EarnDailyCap, "activities": t.Activities()})
 }
 
-// ───── VIP ─────
+// ───── VIP (Tiên Duyên) ─────
 
 func (d Deps) vipStatus(w http.ResponseWriter, r *http.Request) {
 	if d.VIP == nil {
@@ -74,12 +76,29 @@ func (d Deps) createCharacter(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name string `json:"name"`
+		Name      string       `json:"name"`
+		FactionID string       `json:"factionId"` // onboarding (§9.6): create + join in one tx; needs Idempotency-Key
+		Path      realm.PathID `json:"path"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	v, err := d.Characters.Create(r.Context(), userFrom(r.Context()), body.Name)
+	var v character.View
+	var err error
+	if body.FactionID == "" {
+		if body.Path != "" {
+			writeError(w, 400, "invalid_body", "path needs a factionId")
+			return
+		}
+		v, err = d.Characters.Create(r.Context(), userFrom(r.Context()), body.Name)
+	} else {
+		key, ok := idempotencyKey(w, r)
+		if !ok {
+			return
+		}
+		v, err = d.Characters.CreateOnboarded(r.Context(), userFrom(r.Context()), body.Name,
+			character.Onboarding{IdempotencyKey: key, FactionID: body.FactionID, Path: body.Path})
+	}
 	if msg, ok := nameBlockedMessage(err); ok {
 		writeError(w, 400, "name_not_allowed", msg)
 		return
@@ -91,8 +110,14 @@ func (d Deps) createCharacter(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "name_taken", "Đạo hiệu này đã có người dùng")
 	case errors.Is(err, character.ErrAlreadyExists):
 		writeError(w, 409, "character_exists", "account already has a character")
+	case errors.Is(err, character.ErrNoFactions):
+		unavailable(w)
 	case err != nil:
-		d.internal(w, r, "create character", err)
+		if !writeFactionError(w, err) {
+			d.internal(w, r, "create character", err)
+		}
+	case v.Replayed:
+		writeJSON(w, 200, v)
 	default:
 		writeJSON(w, 201, v)
 	}
@@ -116,6 +141,8 @@ func (d Deps) settle(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		d.internal(w, r, "settle", err)
 	default:
+		d.Metrics.Settle(st.Replayed)
+		d.markActive(r, !st.Replayed && st.EarnedMilli > 0)
 		writeJSON(w, 200, st)
 	}
 }
@@ -147,9 +174,10 @@ func (d Deps) breakthroughAttempt(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Optional body {acceptLossMilli}: a guard only (the server never uses it as a value).
+	// Optional body {acceptLossMilli, acceptSuccessBp}: guards only (the server never uses them as values).
 	var body struct {
 		AcceptLossMilli *int64 `json:"acceptLossMilli"`
+		AcceptSuccessBP *int64 `json:"acceptSuccessBp"` // M3: refuse if the odds dropped below what the player saw
 	}
 	if r.ContentLength != 0 && r.Body != nil {
 		if !decodeJSON(w, r, &body) {
@@ -160,7 +188,8 @@ func (d Deps) breakthroughAttempt(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	res, err := d.Breakthrough.Attempt(r.Context(), userFrom(r.Context()), key, body.AcceptLossMilli)
+	res, err := d.Breakthrough.AttemptGuarded(r.Context(), userFrom(r.Context()), key,
+		breakthrough.Guard{AcceptLossMilli: body.AcceptLossMilli, AcceptSuccessBP: body.AcceptSuccessBP})
 	var nr *breakthrough.ErrNotReady
 	var qc *breakthrough.ErrQuoteChanged
 	var qr *breakthrough.ErrQuoteRequired
@@ -170,12 +199,14 @@ func (d Deps) breakthroughAttempt(w http.ResponseWriter, r *http.Request) {
 	case errors.As(err, &nr):
 		writeErrorDetails(w, 409, "not_ready", "breakthrough requirements not met", nr.Preview)
 	case errors.As(err, &qc):
-		writeErrorDetails(w, 409, "quote_changed", "Tu vi đã thay đổi, số tu vi có thể mất đã khác — hãy xem lại", qc.Preview)
+		writeErrorDetails(w, 409, "quote_changed", "Tình thế đã thay đổi (tu vi có thể mất hoặc tỉ lệ vượt kiếp) — hãy xem lại", qc.Preview)
 	case errors.Is(err, cultivation.ErrNoCharacter):
 		writeError(w, 404, "character_not_found", "create a character first")
 	case err != nil:
 		d.internal(w, r, "breakthrough attempt", err)
 	default:
+		d.Metrics.Breakthrough(res.Success, res.Tribulation, res.Replayed)
+		d.markActive(r, !res.Replayed)
 		writeJSON(w, 200, res)
 	}
 }

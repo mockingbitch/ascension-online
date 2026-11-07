@@ -98,6 +98,7 @@ Contents
 ```
 character_progressions (FOR UPDATE)            -- serializes everything that changes cultivation
   → daily_contribution (upsert + FOR UPDATE)
+  → trial_runs (FOR UPDATE: the run being judged, or the valid pass a breakthrough consumes)
   → item_daily_uses (conditional upsert)
   → character_faction (FOR UPDATE)
   → vip_accounts (FOR UPDATE)
@@ -105,6 +106,27 @@ character_progressions (FOR UPDATE)            -- serializes everything that cha
   → inventory_items (FOR UPDATE, ORDER BY item_id)
   → shop_daily_counts (conditional upsert)
 ```
+
+`daily_task_progress` sits between `item_daily_uses` and `vip_accounts`. Inside one transaction: write the task row
+before `vip_accounts`, and credit **currencies before items** (a daily-task claim: điểm duyên → spirit stones →
+items; the shop: debit → grant).
+
+Linh thạch sinks (decisions 2026-11-07, migration 000014): a faction donation locks `character_faction` →
+`currency_accounts` → `faction_donation_days` (conditional upsert) → `faction_donors` → `faction_treasuries` (shared row,
+always **last**, one statement with the donation row); a cosmetic purchase locks `currency_accounts` only; an equip locks
+only `character_appearance`; a Tiên Duyên level drop locks `vip_accounts` → `character_appearance` (unequip perks); a
+`migrate_faction` step locks `character_faction` rows → `faction_treasuries` → `faction_donors`.
+
+Phase 3.4 (decisions 2026-11-07, migration 000015): a bí cảnh start/submit locks `character_progressions` →
+`secret_realm_runs` → `secret_realm_days` → `vip_accounts` (trial_pass) → `currency_accounts` → `inventory_items`; a
+tribulation attempt locks its open `protector_invites` row after `trial_runs` and before inventory; a hộ pháp accept
+locks the invite → `protector_days`. Protector điểm duyên is credited by the worker (outbox `protector.assist_counted`),
+never inside the attempt. `character_artifacts` is written only by the equip call.
+
+Phase 5.2 trades (decisions 2026-11-07, migration 000018): an accept locks the `trade_offers` row → both parties'
+`trade_days` rows → both `currency_accounts` (spirit_stone) → both parties' `inventory_items` (item_id order), each pair
+in **character_id order**, so two accepts sharing a character (incl. A→B and B→A at once) serialize. A trade never locks
+`character_progressions` (it moves no tu vi). Creating an offer locks only the sender's `trade_days` row.
 
 `world_state` is **read without lock** on hot paths (or from an in-process snapshot ≤ 30 s old); only the worker and
 admin lock it.
@@ -265,7 +287,8 @@ Notes:
   ties by `stage_reached_at`.
 - `pham_nhan` and `phi_thang` are **removed** (pre-launch reset, §13). New characters start at `<path>.tier1.stage1`.
 - `base_rate_milli` and `curve` are removed from realms; pace lives in `contribution.yaml`.
-- Phase 3 adds `requires_trial: tam_ma` / `hoa_pham` on the tier 3/4 major rules (additive field).
+- Phase 3: trial gates live in `trials.yaml` (`gate.tier: 3` = Tâm Ma for the breakthrough leaving tier 3, every
+  path), not as a `requires_trial` field here — one source per gate (decisions 2026-11-07 "Mini game: khung thử luyện + Tâm Ma").
 
 ### 3.2 Stage requirement generation
 

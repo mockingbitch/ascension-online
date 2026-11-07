@@ -3,7 +3,7 @@
 // replays the same intent.
 import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
 import type { CatalogueIndex } from './catalogue';
-import { formatPoints } from './format';
+import { formatBp, formatPoints } from './format';
 import { toast } from './toasts.svelte';
 import type {
 	BreakthroughPreview,
@@ -12,6 +12,7 @@ import type {
 	DailyBoard,
 	Inventory,
 	LeaderboardEntry,
+	SpeedItemResult,
 	VipStatus
 } from './types';
 
@@ -42,6 +43,7 @@ class GameStore {
 
 	#settleKey: string | null = null;
 	#attemptKey: string | null = null;
+	#speedKeys = new Map<string, string>();
 	#floatSeq = 0;
 	#initFrom: CharacterView | null = null;
 
@@ -109,11 +111,40 @@ class GameStore {
 	}
 
 	claimTask = (id: string) =>
-		this.#run(async () => `Đã nhận thưởng "${(await api.claimTask(id)).name}".`);
+		this.#run(async () => {
+			const t = await api.claimTask(id);
+			return `Đã nhận thưởng "${t.name}"${t.vipPoints ? `, +${t.vipPoints} điểm duyên` : ''}.`;
+		});
 	usePhu = () =>
 		this.#run(async () => {
 			await api.useItem(PHU, fetch, newIdempotencyKey());
 			return 'Tụ Linh Phù đã kích hoạt: lần bế quan tới được thêm 4 canh giờ.';
+		});
+	/** Speed item (Tụ Linh Đan): all or nothing — the server consumes it only if its full value fits today's caps. */
+	useSpeed = async (itemId: string) => {
+		this.busy = true;
+		const key = this.#speedKeys.get(itemId) ?? newIdempotencyKey();
+		this.#speedKeys.set(itemId, key);
+		try {
+			const r = await api.useItem<SpeedItemResult>(itemId, fetch, key);
+			this.#speedKeys.delete(itemId);
+			if (r.earnedMilli > 0) this.#float(`+${formatPoints(r.earnedMilli)} tu vi`);
+			toast('ok', `Nhận ${formatPoints(r.earnedMilli)} tu vi. Hôm nay đã dùng ${r.usesToday}/${r.maxUsesPerDay}.`);
+			await this.reload();
+		} catch (e) {
+			if (definitive(e)) this.#speedKeys.delete(itemId);
+			toast('err', errText(e));
+		} finally {
+			this.busy = false;
+		}
+	};
+	/** Morning incense: once per game day; the server answers a repeat with the same offering. */
+	offerIncense = () =>
+		this.#run(async () => {
+			const r = await api.incense();
+			if (r.replayed) return `Hôm nay đã dâng hương — chuỗi ${r.streak.current} ngày.`;
+			if (r.earnedMilli > 0) this.#float(`+${formatPoints(r.earnedMilli)} tu vi`);
+			return `Dâng hương tĩnh tâm: chuỗi ${r.streak.current} ngày, +${formatPoints(r.earnedMilli)} tu vi${r.vipPoints ? `, +${r.vipPoints} điểm duyên` : ''}.`;
 		});
 	claimGift = () =>
 		this.#run(async () => `Nhận quà Tiên Duyên: ${(await api.claimVipGift()).amount} linh thạch.`);
@@ -148,8 +179,10 @@ class GameStore {
 		// Guard bound from the preview the player saw; the server refuses with 409 quote_changed if the loss grew.
 		const pv = this.preview;
 		const guard = pv?.tribulation && !pv.tribulation.guaranteed ? pv.tribulation.maxLossMilli : undefined;
+		// …and the odds the player saw: refused if they dropped (a hộ pháp went offline, pháp bảo unequipped…).
+		const seenBp = pv?.successBp;
 		try {
-			const r = await api.breakthroughAttempt(fetch, this.#attemptKey, guard);
+			const r = await api.breakthroughAttempt(fetch, this.#attemptKey, guard, seenBp);
 			this.#attemptKey = null;
 			if (r.success) {
 				this.celebrate = r;
@@ -171,7 +204,12 @@ class GameStore {
 				toast('warn', 'Chưa đủ điều kiện đột phá.');
 			} else if (e instanceof ApiError && e.code === 'quote_changed') {
 				this.preview = e.details as BreakthroughPreview;
-				toast('warn', `Tu vi vừa thay đổi: nếu thất bại sẽ mất ${formatPoints(this.preview.tribulation?.lossMilli ?? 0)} tu vi. Xem lại rồi xác nhận.`);
+				this.#attemptKey = null; // a new quote → a new attempt
+				if (seenBp !== undefined && this.preview.successBp < seenBp) {
+					toast('warn', `Tỉ lệ vượt kiếp vừa giảm còn ${formatBp(this.preview.successBp)} (đồng môn rời đi hoặc pháp bảo thay đổi). Xem lại rồi xác nhận.`);
+				} else {
+					toast('warn', `Tu vi vừa thay đổi: nếu thất bại sẽ mất ${formatPoints(this.preview.tribulation?.lossMilli ?? 0)} tu vi. Xem lại rồi xác nhận.`);
+				}
 			} else {
 				toast('err', errText(e));
 			}

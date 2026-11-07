@@ -1,0 +1,160 @@
+# Cosmetics (decisions 2026-11-07 "Linh thạch sinks"): titles, portrait frames, chat name effects and cave
+# decorations. Loaded by internal/cosmetic; cross-checked in content.LoadAll (vip.yaml perks, world eras).
+#
+# NO GAMEPLAY EFFECT. A cosmetic changes how a character LOOKS to others — never cultivation rate, points,
+# breakthrough/tribulation odds, ranking, faction merit or điểm duyên. The loader REJECTS any effect-like field on an
+# entry (`*_bp`, `*_milli`, `*_hours`, `*_seconds`, every items.yaml effect key): `make content-check` fails.
+#
+# IDs: the full id is "<kind>:<slug>" — the SAME id space as vip.yaml perks (`title:vip_1`, `avatar_frame:ngoc`,
+#   `chat_aura:linh_quang`, `cave_decoration:van_hac`). Every such perk must resolve to a `source: tien_duyen` entry
+#   here and every tien_duyen entry must be granted by exactly one tier (cross-check). Slugs are unique across the
+#   whole file (and faction_works.yaml decorations): the web art slot is `cosmetics/<slug>`.
+# kind: title | avatar_frame | chat_aura | cave_decoration   (one equipped title/frame/chat aura; settings.cave_slots
+#   decorations at once).
+# source: shop (default; bought with spirit stones) | tien_duyen (granted by the Tiên Duyên level; no price).
+# price: spirit stones, STRICTLY increasing within a shop series (escalating ladder). min_tier: optional Tiên Duyên
+#   gate — allowed here because cosmetics never decide progress (CLAUDE.md non-negotiable 3).
+# Availability window (shop series only; owned items stay usable forever):
+#   season: xuan | ha | thu | dong — game-day month (UTC+7) inside the season's months;
+#   from_era / until_era: world era range (world_milestones.yaml eras; before launch the first era applies).
+#
+# ⚠️ PRICES ARE PLACEHOLDERS awaiting owner sign-off (docs/decisions.md 2026-11-07 "Linh thạch sinks").
+version: 1
+settings:
+  currency: spirit_stone
+  cave_slots: 4
+seasons:
+  - { id: xuan, name: Xuân, months: [2, 3, 4] }
+  - { id: ha,   name: Hạ,   months: [5, 6, 7] }
+  - { id: thu,  name: Thu,  months: [8, 9, 10] }
+  - { id: dong, name: Đông, months: [11, 12, 1] }
+
+series:
+  # ───── Danh hiệu ─────
+  - id: dao_hieu
+    kind: title
+    name: Đạo hiệu
+    items:
+      - { slug: so_tam,       name: Sơ Tâm,                rarity: linh,  price: 1500 }
+      - { slug: tinh_tam,     name: Tĩnh Tâm Khách,        rarity: linh,  price: 3000 }
+      - { slug: van_du,       name: Vân Du Tán Nhân,       rarity: huyen, price: 6000 }
+      - { slug: phong_nguyet, name: Thanh Phong Minh Nguyệt, rarity: huyen, price: 10000 }
+      - { slug: son_ha,       name: Sơn Hà Độc Hành,       rarity: dia,   price: 16000 }
+      - { slug: thai_hu,      name: Thái Hư Ẩn Sĩ,         rarity: thien, price: 25000 }
+  - id: duyen_hieu
+    kind: title
+    name: Danh hiệu Tiên Duyên
+    source: tien_duyen
+    items:
+      - { slug: vip_1,   name: Duyên Khởi,         rarity: linh }
+      - { slug: vip_2,   name: Duyên Tụ,           rarity: linh }
+      - { slug: vip_3,   name: Duyên Hợp,          rarity: huyen }
+      - { slug: vip_4,   name: Duyên Thâm,         rarity: huyen }
+      - { slug: vip_5,   name: Duyên Hậu,          rarity: huyen }
+      - { slug: vip_6,   name: Duyên Minh,         rarity: dia }
+      - { slug: vip_7,   name: Duyên Huyền,        rarity: dia }
+      - { slug: vip_8,   name: Duyên Viên,         rarity: dia }
+      - { slug: vip_9,   name: Duyên Thông,        rarity: thien }
+      - { slug: vip_10,  name: Duyên Diệu,         rarity: thien }
+      - { slug: vip_11,  name: Duyên Cực,          rarity: thien }
+      - { slug: chi_ton, name: Chí Tôn Tiên Duyên, rarity: tien }
+
+  # ───── Khung chân dung ─────
+  - id: khung_chan_dung
+    kind: avatar_frame
+    name: Khung chân dung
+    items:
+      - { slug: truc_moc,   name: Khung Trúc Mộc,   rarity: linh,  price: 2000, description: "Vành trúc tía uốn tròn, mộc mạc như am tranh nơi chân núi." }
+      - { slug: ngoc_bich,  name: Khung Ngọc Bích,  rarity: huyen, price: 3000, description: "Khung tạc từ ngọc bích Thanh Khâu, vân xanh như nước hồ thu." }
+      - { slug: thanh_dong, name: Khung Thanh Đồng, rarity: huyen, price: 6000, description: "Đồng xanh cổ khắc vân lôi, mép đã mòn theo năm tháng." }
+      - { slug: bach_van,   name: Khung Bạch Vân,   rarity: dia,   price: 12000, description: "Mây trắng quấn quanh vành bạc, lững lờ không dứt." }
+      - { slug: xich_ha,    name: Khung Xích Hà,    rarity: thien, price: 20000, description: "Ráng chiều đỏ thắm bọc lấy dung nhan, như hoàng hôn trên đỉnh Côn Lôn." }
+  - id: khung_duyen
+    kind: avatar_frame
+    name: Khung Tiên Duyên
+    source: tien_duyen
+    items:
+      - { slug: ngoc,  name: Khung Ngọc Duyên,  rarity: huyen }
+      - { slug: kim,   name: Khung Kim Duyên,   rarity: dia }
+      - { slug: thien, name: Khung Thiên Duyên, rarity: thien }
+
+  # ───── Hiệu ứng tên trong kênh chat ─────
+  - id: danh_quang
+    kind: chat_aura
+    name: Danh quang
+    items:
+      - { slug: mac_huong, name: Mặc Hương, rarity: linh,  price: 2500, description: "Tên hiện như nét mực vừa khô, thoảng mùi tùng yên." }
+      - { slug: bich_lam,  name: Bích Lam,  rarity: huyen, price: 5000, description: "Sắc ngọc lam lan dọc nét chữ như sóng hồ." }
+      - { slug: kim_sa,    name: Kim Sa,    rarity: dia,   price: 10000, description: "Cát vàng lấp lánh trôi qua tên." }
+      - { slug: tinh_ha,   name: Tinh Hà,   rarity: thien, price: 18000, description: "Dải ngân hà nhỏ chảy qua từng chữ." }
+  - id: danh_quang_duyen
+    kind: chat_aura
+    name: Danh quang Tiên Duyên
+    source: tien_duyen
+    items:
+      - { slug: linh_quang, name: Linh Quang, rarity: huyen }
+      - { slug: tu_quang,   name: Tử Quang,   rarity: thien }
+
+  # ───── Trang trí động phủ ─────
+  - id: bo_tung_hac
+    kind: cave_decoration
+    name: Bộ Tùng Hạc
+    items:
+      - { slug: den_da,    name: Đèn Đá Rêu Phong,     rarity: linh,  price: 1200, description: "Ngọn đèn đá phủ rêu, lửa nhỏ mà không tắt." }
+      - { slug: chau_lan,  name: Chậu Lan Thạch Hộc,   rarity: huyen, price: 2400, description: "Chậu lan mọc trên đá, lá dài như nét bút." }
+      - { slug: tung_hac,  name: Bình Phong Tùng Hạc,  rarity: dia,   price: 5000, description: "Bình phong vẽ tùng già và hạc trắng, cho tâm cảnh thư thái." }
+  - id: bo_dao_hoa
+    kind: cave_decoration
+    name: Bộ Đào Hoa (mùa Xuân)
+    season: xuan
+    items:
+      - { slug: canh_dao,       name: Bình Cành Đào,      rarity: linh,  price: 1500 }
+      - { slug: den_long_xuan,  name: Đèn Lồng Xuân,      rarity: huyen, price: 3000 }
+      - { slug: binh_phong_dao, name: Bình Phong Đào Nguyên, rarity: dia, price: 6000 }
+  - id: bo_lien_tri
+    kind: cave_decoration
+    name: Bộ Liên Trì (mùa Hạ)
+    season: ha
+    items:
+      - { slug: chau_sen,    name: Chậu Sen Ngọc,   rarity: linh,  price: 1500 }
+      - { slug: quat_truc,   name: Quạt Trúc Treo,  rarity: huyen, price: 3000 }
+      - { slug: tieu_lien_tri, name: Tiểu Liên Trì, rarity: dia,   price: 6000 }
+  - id: bo_thu_nguyet
+    kind: cave_decoration
+    name: Bộ Thu Nguyệt (mùa Thu)
+    season: thu
+    items:
+      - { slug: den_trang,     name: Đèn Trăng Giấy,    rarity: linh,  price: 1500 }
+      - { slug: cuc_vang,      name: Khóm Cúc Vàng,     rarity: huyen, price: 3000 }
+      - { slug: tranh_nguyet,  name: Tranh Vọng Nguyệt, rarity: dia,   price: 6000 }
+  - id: bo_mai_tuyet
+    kind: cave_decoration
+    name: Bộ Mai Tuyết (mùa Đông)
+    season: dong
+    items:
+      - { slug: canh_mai,         name: Bình Cành Mai,      rarity: linh,  price: 1500, description: "Cành mai nở giữa tuyết, hương lạnh mà thanh." }
+      - { slug: lo_suoi,          name: Lò Sưởi Than Hồng,  rarity: huyen, price: 3000, description: "Lò đồng nhỏ, than hồng âm ỉ suốt đêm đông." }
+      - { slug: binh_phong_tuyet, name: Bình Phong Tuyết Sơn, rarity: dia, price: 6000, description: "Núi tuyết trùng điệp trên lụa trắng." }
+  - id: bo_tu_tieu
+    kind: cave_decoration
+    name: Bộ Tử Tiêu (thời Tử Tiêu khai giảng)
+    from_era: khai_giang
+    until_era: luan_hoi
+    items:
+      - { slug: ngoc_bai_tu_tieu, name: Ngọc Bài Tử Tiêu,  rarity: huyen, price: 2000, description: "Ngọc bài khắc hai chữ Tử Tiêu, kỷ niệm buổi khai giảng." }
+      - { slug: bo_doan,          name: Bồ Đoàn Nghe Giảng, rarity: huyen, price: 4000, description: "Bồ đoàn cói tím, giống chỗ ngồi dưới giảng đàn." }
+      - { slug: hoanh_phi_dao,    name: Hoành Phi Văn Đạo,  rarity: dia,   price: 8000, description: "Bức hoành phi ba chữ Văn Đạo Tâm, nét chữ như mây bay." }
+  - id: bo_phong_than
+    kind: cave_decoration
+    name: Bộ Phong Thần (thời Phong Thần lượng kiếp)
+    from_era: phong_than
+    items:
+      - { slug: co_phong_than,  name: Cờ Bảng Phong Thần, rarity: dia,   price: 4000 }
+      - { slug: den_luu_ly,     name: Đèn Lưu Ly Bát Bảo, rarity: dia,   price: 8000 }
+      - { slug: dinh_tam_chan,  name: Đỉnh Đồng Tam Chân, rarity: thien, price: 14000 }
+  - id: dong_phu_duyen
+    kind: cave_decoration
+    name: Trang trí Tiên Duyên
+    source: tien_duyen
+    items:
+      - { slug: van_hac, name: Vân Hạc Đình, rarity: dia, description: "Đình nhỏ giữa mây, có đôi hạc đậu trên mái." }

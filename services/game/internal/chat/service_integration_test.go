@@ -177,3 +177,46 @@ func TestChatFlow(t *testing.T) {
 		t.Fatalf("report after sweep %+v", list)
 	}
 }
+
+// The chat aura equipped at send time is snapshotted on the message (others see it in live delivery and history);
+// changing the look later does not rewrite old messages.
+func TestChatNameEffectSnapshot(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	cb, err := content.LoadAll("../../../../content/catalog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 7, 5, 0, 0, 0, time.UTC)
+	svc := &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: func() time.Time { return now }}
+	u, ch := uuid.New(), uuid.New()
+	for _, q := range []struct {
+		sql  string
+		args []any
+	}{
+		{"INSERT INTO users (id, email) VALUES ($1, $2)", []any{u, u.String() + "@t"}},
+		{"INSERT INTO characters (id, user_id, name) VALUES ($1, $2, 'Mặc Khách')", []any{ch, u}},
+		{"INSERT INTO character_progressions (character_id, realm_id, stage_id) VALUES ($1, 'luyen_khi', 'luyen_khi.tang_3')", []any{ch}},
+		{"INSERT INTO character_appearance (character_id, chat_aura_id) VALUES ($1, 'chat_aura:mac_huong')", []any{ch}},
+	} {
+		if _, err := pool.Exec(ctx, q.sql, q.args...); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m, err := svc.Send(ctx, u, "world", "hương mực", "k-fx-0001")
+	if err != nil || m.NameFx != "chat_aura:mac_huong" {
+		t.Fatalf("send: %+v %v", m, err)
+	}
+	if _, err := pool.Exec(ctx, "UPDATE character_appearance SET chat_aura_id = NULL WHERE character_id=$1", ch); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Minute)
+	m2, err := svc.Send(ctx, u, "world", "không hiệu ứng", "k-fx-0002")
+	if err != nil || m2.NameFx != "" {
+		t.Fatalf("send 2: %+v %v", m2, err)
+	}
+	hist, err := svc.History(ctx, "world", 0)
+	if err != nil || len(hist) != 2 || hist[0].NameFx != "chat_aura:mac_huong" || hist[1].NameFx != "" {
+		t.Fatalf("history: %+v %v", hist, err)
+	}
+}

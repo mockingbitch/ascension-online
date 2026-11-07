@@ -5,6 +5,8 @@
 <script lang="ts">
 	import type { Aura } from '$lib/game/types';
 	import { art } from '$lib/game/art';
+	import { cosmetics, hangs, slugOf } from '$lib/game/cosmetics.svelte';
+	import CosmeticArt from './CosmeticArt.svelte';
 	import CultivatorFigure from './CultivatorFigure.svelte';
 	import FormationCircle from './FormationCircle.svelte';
 
@@ -13,8 +15,22 @@
 		ready?: boolean;
 		/** Increment to play the failed-breakthrough backlash once. */
 		backlash?: number;
+		/** equipped cave_decoration cosmetic ids (looks only) */
+		decorations?: string[];
 	}
-	let { aura, ready = false, backlash = 0 }: Props = $props();
+	let { aura, ready = false, backlash = 0, decorations = [] }: Props = $props();
+	// Wall-hung pieces take the upper slots, floor pieces the lower ones; overflow falls back to the other row.
+	const placed = $derived.by(() => {
+		const wall: string[] = [];
+		const floor: string[] = [];
+		for (const id of decorations) (hangs(slugOf(id)) ? wall : floor).push(id);
+		while (wall.length > 2) floor.push(wall.pop()!);
+		while (floor.length > 2 && wall.length < 2) wall.push(floor.pop()!);
+		return [
+			...wall.map((id, i) => ({ id, pos: i === 0 ? 'wl' : 'wr' })),
+			...floor.map((id, i) => ({ id, pos: i === 0 ? 'fl' : i === 1 ? 'fr' : 'fc' }))
+		];
+	});
 	const meditate = art('characters/meditate'); // raster slot; includes its own rune array
 
 	// Deterministic mote spawn ring (no Math.random → stable SSR/hydration, no layout jitter).
@@ -28,6 +44,12 @@
 {#key backlash}
 <div class:shake={backlash > 0} class="scene relative mx-auto aspect-[4/3] w-full max-w-[480px] overflow-hidden" style:--aura="var(--color-aura-{aura})">
 	<div class="halo absolute inset-0" aria-hidden="true"></div>
+	{#each placed as d (d.id)}
+		{@const c = cosmetics.get(d.id)}
+		<div class="deco deco-{d.pos}" title={c?.name}>
+			<CosmeticArt kind="cave_decoration" slug={slugOf(d.id)} rarity={c?.rarity} size={88} />
+		</div>
+	{/each}
 	{#if ready}<div class="pillar absolute inset-y-0 left-1/2" aria-hidden="true"></div>{/if}
 
 	{#if meditate}
@@ -54,6 +76,40 @@
 {/key}
 
 <style>
+	.deco {
+		position: absolute;
+		width: 20%;
+		aspect-ratio: 1;
+		display: grid;
+		place-items: center;
+		opacity: 0.92;
+		filter: drop-shadow(0 4px 10px var(--color-ink-950));
+	}
+	.deco :global(.cart) {
+		width: 100% !important;
+		height: 100% !important;
+	}
+	.deco-wl {
+		left: 4%;
+		top: 6%;
+	}
+	.deco-wr {
+		right: 4%;
+		top: 6%;
+	}
+	.deco-fl {
+		left: 3%;
+		bottom: 4%;
+	}
+	.deco-fr {
+		right: 3%;
+		bottom: 4%;
+	}
+	.deco-fc {
+		left: 22%;
+		bottom: 2%;
+		width: 15%;
+	}
 	.art {
 		filter: drop-shadow(0 0 18px color-mix(in oklab, var(--aura) 45%, transparent));
 		animation: var(--animate-qi-breathe);

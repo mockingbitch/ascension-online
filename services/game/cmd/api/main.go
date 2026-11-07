@@ -10,23 +10,42 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
+
+	"tiendao/game/internal/artifact"
 	"tiendao/game/internal/auth"
 	"tiendao/game/internal/breakthrough"
 	"tiendao/game/internal/character"
 	"tiendao/game/internal/chat"
 	"tiendao/game/internal/config"
 	"tiendao/game/internal/content"
+	"tiendao/game/internal/cosmetic"
 	"tiendao/game/internal/cultivation"
 	"tiendao/game/internal/dailytask"
+	"tiendao/game/internal/daolu/bond"
+	"tiendao/game/internal/faction"
+	"tiendao/game/internal/factionwork"
 	"tiendao/game/internal/httpapi"
 	"tiendao/game/internal/leaderboard"
+	"tiendao/game/internal/lecture"
+	"tiendao/game/internal/lecture/hall"
+	"tiendao/game/internal/netsig"
+	"tiendao/game/internal/payment"
+	"tiendao/game/internal/platform/metrics"
 	"tiendao/game/internal/platform/postgres"
 	"tiendao/game/internal/platform/redisx"
+	"tiendao/game/internal/protector"
 	"tiendao/game/internal/realtime"
 	"tiendao/game/internal/report"
+	"tiendao/game/internal/ritual"
+	"tiendao/game/internal/secretrealm"
+	"tiendao/game/internal/shop"
+	"tiendao/game/internal/trade"
+	"tiendao/game/internal/trial"
 	"tiendao/game/internal/vip"
 	"tiendao/game/internal/world"
 )
@@ -67,6 +86,17 @@ func run(log *slog.Logger) error {
 		Log: log, Content: cb, Now: time.Now, Issuer: issuer, Flow: auth.NewFlowSigner(secret),
 		PublicBaseURL: cfg.PublicBaseURL, SecureCookies: !cfg.IsDev(), AuthDevHeader: cfg.AuthDevHeader, TrustProxy: cfg.TrustProxy,
 	}
+	if deps.TrustedProxies, err = cfg.TrustedProxies(); err != nil { // XFF honoured only from these peers (review M1)
+		return err
+	}
+	// Prometheus: own registry, served on an internal listener (METRICS_ADDR, default :9090; "off" disables) — never
+	// on the public router, and nginx denies /metrics as well.
+	reg := metrics.NewRegistry()
+	deps.Metrics = metrics.NewAPI(reg)
+	metricsAddr := os.Getenv("METRICS_ADDR")
+	if metricsAddr == "" {
+		metricsAddr = ":9090"
+	}
 
 	if cfg.GoogleEnabled() {
 		g, err := auth.NewGoogle(ctx, cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.PublicBaseURL+"/api/v1/auth/google/callback")
@@ -84,17 +114,58 @@ func run(log *slog.Logger) error {
 			return err
 		}
 		defer pool.Close()
+		metrics.RegisterPool(reg, pool)
 		cult := &cultivation.Service{Pool: pool, Realms: cb.Realms, Contribution: cb.Contribution, VIP: cb.VIP, Tasks: cb.DailyTasks, Now: time.Now}
 		deps.Pool = pool
 		deps.Cultivation = cult
 		deps.Auth = &auth.Service{Pool: pool, Issuer: issuer, RefreshTTL: cfg.RefreshTokenTTL, Now: time.Now}
-		deps.Characters = &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation}
-		deps.Chat = &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: time.Now}
+		deps.Characters = &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation, Cosmetics: cb.Cosmetics, VIP: cb.VIP}
+		deps.Chat = &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: time.Now,
+			NameFx: cb.Cosmetics.NameFxFilter(cb.VIP.TierForPoints)}
 		deps.Reports = &report.Service{Pool: pool, Cat: cb.Moderation, Now: time.Now}
-		deps.Breakthrough = &breakthrough.Service{Pool: pool, Cultivation: cult, RNG: breakthrough.NewRNG()}
+		deps.Protectors = &protector.Service{Pool: pool, Cfg: cb.Protector, Realms: cb.Realms, Project: cult.ProjectedStage, Now: time.Now, Log: log}
+		deps.Breakthrough = &breakthrough.Service{Pool: pool, Cultivation: cult, RNG: breakthrough.NewRNG(), Trials: cb.Trials, Items: cb.Items,
+			Protectors: deps.Protectors}
+		deps.Protectors.Ready = func(ctx context.Context, userID uuid.UUID) (bool, error) {
+			pv, err := deps.Breakthrough.Preview(ctx, userID)
+			return pv.Ready && pv.Tribulation != nil, err
+		}
+		deps.SecretRealms = &secretrealm.Service{Pool: pool, Cat: cb.SecretRealms, Realms: cb.Realms, Project: cult.ProjectedStage, VIP: cb.VIP, Now: time.Now}
+		deps.Artifacts = &artifact.Service{Pool: pool, Items: cb.Items, Now: time.Now}
+		deps.Trials = &trial.Service{Pool: pool, Cat: cb.Trials, Realms: cb.Realms, Project: cult.ProjectedStage, VIP: cb.VIP, Now: time.Now}
 		deps.VIP = &vip.Service{Pool: pool, Table: cb.VIP, Now: time.Now}
-		deps.DailyTasks = &dailytask.Service{Pool: pool, Cat: cb.DailyTasks, Now: time.Now}
+		// Nạp Tiên Duyên (Phase 4): providers enabled for APP_ENV; the sandbox "pay now" endpoint only in dev.
+		pc := config.LoadPayment()
+		provs, err := payment.BuildProviders(cb.Payments, cfg.Env, []byte(pc.SandboxSecret), cfg.PublicBaseURL+"/tien-duyen/sandbox/", pool, time.Now)
+		if err != nil {
+			return err
+		}
+		deps.Payments = &payment.Service{Pool: pool, Cat: cb.Payments, VIP: cb.VIP, Providers: provs,
+			ReturnURL: cfg.PublicBaseURL + "/tien-duyen?order=", Log: log, Now: time.Now}
+		deps.PaymentDev = cfg.IsDev()
+		// Đạo lữ (Phase 5.1) + salted IP-hash network signal. Dev without NETSIG_SALTS uses a fixed, NON-secret salt.
+		netKeys, err := netsig.ParseKeys(cfg.NetSigSalts, netsig.MinSecretLen)
+		if err != nil && cfg.NetSigSalts == "" && cfg.IsDev() {
+			netKeys, err = []netsig.Key{{ID: "dev", Secret: []byte("dev-only-netsig-salt-not-a-secret-0000")}}, nil
+			log.Warn("NETSIG_SALTS not set: using a fixed dev-only salt")
+		}
+		if err != nil {
+			return err
+		}
+		deps.NetSig = &netsig.Store{Pool: pool, Hasher: &netsig.Hasher{Keys: netKeys}, Now: time.Now}
+		deps.Protectors.Net = deps.NetSig // hộ pháp pairs on a shared network → admin flag (review M2)
+		deps.DaoLu = &bond.Service{Pool: pool, Cfg: cb.DaoLu, Realms: cb.Realms, Cultivation: cult, VIP: cb.VIP, Net: deps.NetSig, Now: time.Now, Log: log}
+		deps.Trades = &trade.Service{Pool: pool, Cfg: cb.Trade, Items: cb.Items, Realms: cb.Realms, Net: deps.NetSig, Now: time.Now, Log: log} // Phase 5.2
+		deps.DailyTasks = &dailytask.Service{Pool: pool, Cat: cb.DailyTasks, VIP: cb.VIP, Now: time.Now}
+		deps.Shop = &shop.Service{Pool: pool, Cat: cb.Shop, Items: cb.Items, VIP: cb.VIP, Now: time.Now}
+		deps.Cosmetics = &cosmetic.Service{Pool: pool, Cat: cb.Cosmetics, VIP: cb.VIP, Eras: cb.World, Now: time.Now}
+		deps.FactionWorks = &factionwork.Service{Pool: pool, Cat: cb.FactionWorks, Now: time.Now}
+		deps.Rituals = &ritual.Service{Pool: pool, Tasks: cb.DailyTasks, Cultivation: cult, VIP: cb.VIP, Now: time.Now}
+		deps.Fortune = &ritual.Fortune{Pool: pool, Cat: cb.Fortunes, Cultivation: cult, RNG: breakthrough.NewRNG(), Now: time.Now}
 		deps.World = &world.Service{Pool: pool, Realms: cb.Realms, Cat: cb.World, Contribution: cb.Contribution, Now: time.Now}
+		deps.Factions = &faction.Service{Pool: pool, Cat: cb.Factions, Realms: cb.Realms, World: cb.World, Now: time.Now,
+			Settle: cult.SettleLockedRow}
+		deps.Characters.Factions = deps.Factions // onboarding: POST /character {name, factionId, path} (§9.6)
 
 		if cfg.RedisURL != "" {
 			rdb, err := redisx.Connect(ctx, cfg.RedisURL)
@@ -102,17 +173,30 @@ func run(log *slog.Logger) error {
 				return err
 			}
 			defer rdb.Close()
-			deps.Leaderboard = &leaderboard.Service{Pool: pool, Redis: rdb, Realms: cb.Realms}
+			metrics.RegisterRedis(reg, rdb)
+			deps.Leaderboard = &leaderboard.Service{Pool: pool, Redis: rdb, Realms: cb.Realms, Look: cb.Cosmetics.BoardFilter(cb.VIP.TierForPoints)}
 			deps.Redis = rdb
+			deps.Protectors.Presence = &protector.RedisPresence{R: rdb, TTL: cb.Protector.PresenceTTL(), Activity: cb.Protector.ActivityWindow()} // hộ pháp "online"
+			deps.DaoLu.Presence = deps.Protectors.Presence
+			deps.DaoLu.Session = &bond.Session{R: rdb, Cfg: cb.DaoLu} // song tu overlap accrual
+			deps.Factions.Ranking = &faction.Ranking{Pool: pool, Redis: rdb, Realms: cb.Realms, Cat: cb.Factions,
+				Look: cb.Cosmetics.BoardFilter(cb.VIP.TierForPoints)}
 			deps.Chat.Publish = func(ctx context.Context, typ, id string, data any) error {
 				return realtime.Publish(ctx, rdb, realtime.Envelope{Type: typ, ID: id, TS: time.Now().UTC(), Data: data})
 			}
+			scripts, err := lecture.LoadScripts(filepath.Join(cfg.StoryDir, "lectures"))
+			if err != nil {
+				return err
+			}
+			deps.Lectures = &hall.Service{Pool: pool, Hall: &hall.Hall{R: rdb, Cfg: cb.Lectures}, Cfg: cb.Lectures, Scripts: scripts,
+				Cultivation: cult, VIP: cb.VIP, Now: time.Now, Log: log, Publish: hall.Publisher(deps.Chat.Publish)}
 			origin, err := url.Parse(cfg.PublicBaseURL)
 			if err != nil {
 				return err
 			}
 			hub := realtime.NewHub(log, []string{origin.Host}, cfg.WSMaxClients)
 			go hub.Subscribe(ctx, rdb)
+			metrics.RegisterWSClients(reg, hub.Count)
 			deps.Realtime = hub
 		} else {
 			log.Warn("REDIS_URL empty: leaderboard, realtime and shared rate limits disabled")
@@ -130,6 +214,7 @@ func run(log *slog.Logger) error {
 		IdleTimeout:       60 * time.Second,
 		MaxHeaderBytes:    1 << 16,
 	}
+	metrics.Serve(ctx, metricsAddr, reg, log)
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("api listening", "addr", cfg.HTTPAddr, "env", cfg.Env, "stages", len(cb.Realms.Stages()))

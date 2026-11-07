@@ -1,0 +1,37 @@
+# Đạo lữ song tu (Phase 5.1) — cot-truyen §5.6, plan §3.11, checklist §5.1. Loaded by services/game/internal/daolu;
+# cross-checked in content.LoadAll. Decision: docs/decisions.md 2026-11-07 "Đạo lữ song tu (Phase 5.1)".
+#
+# Bond: propose (from a player card) → the target accepts or declines → BOTH sides confirm the "vĩnh viễn" warning
+# (proposer when proposing, target on accept) → bond. One active bond per character. No voluntary divorce
+# (cot-truyen §5.6 "kết trọn đời"): a bond ends only by luân hồi / Phong Thần (later phases call the hook), an admin
+# after a report, or absence_days without play by either side; then both wait rebond_cooldown_days.
+#
+# Song tu: while BOTH partners are active (a real game action within protector.yaml activity_window_seconds) and both
+# keep the song tu panel open (heartbeats, server clock), their overlap accrues up to window_seconds per game day.
+# Each partner claims it separately: rate_milli_per_hour × overlap, credited via cultivation.CreditLocked source
+# dual_cultivation → community bucket, inside the bucket cap and the 150 ceiling. The first claim that reaches
+# duyen_min_seconds that day also earns vip.yaml dual_cultivation (2 điểm duyên, once a day).
+#
+# Anti-abuse: both accounts ≥ min_account_age_days and both characters ≥ min_tier; pairs whose accounts shared a
+# network (netsig salted IP hash, 30 days) are flagged to admins — never auto-blocked.
+#
+# ⚠ Numbers are beta-tuning placeholders.
+version: 1
+
+bond:
+  min_account_age_days: 14       # both Google accounts at least 14 days old
+  min_tier: 2                    # both at least Trúc Cơ (tier 2, any path)
+  proposal_expiry_hours: 72
+  daily_proposals: 3             # proposals a character may send per game day (one open at a time)
+  incoming_list_limit: 20
+  max_incoming_pending: 10       # open proposals a character can have waiting (spam guard; the proposer sees "not eligible")
+  decline_cooldown_days: 7       # after a decline, the same proposer may not propose to the same target again for 7 days
+  absence_days: 90               # either side shows no play for 90 days → the bond ends (cot-truyen §5.6 "tọa hóa")
+  rebond_cooldown_days: 7        # after any ending, both wait before a new bond
+
+song_tu:
+  window_seconds: 7200           # 2 canh giờ of overlap per game day
+  rate_milli_per_hour: 5000      # 5 points/h → 10 points for the full window (community bucket target 20/day)
+  heartbeat_seconds: 30
+  max_gap_seconds: 75            # a beat further than this from the previous one (or from the partner's) accrues nothing
+  duyen_min_seconds: 1800        # paid overlap that day before the dual_cultivation điểm duyên

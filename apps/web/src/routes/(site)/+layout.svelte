@@ -20,7 +20,7 @@
 	const active = (href: string) => page.url.pathname.startsWith(href);
 	const links = [
 		{ href: '/leaderboard', label: 'Thiên Bảng' },
-		{ href: '/vip', label: 'Tiên Duyên' }
+		{ href: '/tien-duyen', label: 'Tiên Duyên' }
 	];
 </script>
 

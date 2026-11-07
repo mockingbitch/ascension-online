@@ -1,31 +1,61 @@
-# VIP ladder — permanent level from cumulative VIP points (1 point per top-up of point_value_vnd).
+# Tiên Duyên (VIP v3) — permanent level 0–12 from cumulative điểm duyên (docs/decisions.md "Tiên Duyên (thay VIP)",
+# Phase 0 D/E; data-model §7). Code/DB identifiers stay `vip`; every player-facing string says Tiên Duyên / điểm duyên.
 #
 # FAIRNESS (GDD §10, .claude/rules/economy-balance.md):
-#   VIP never multiplies cultivation rate, never changes breakthrough odds, never adds ranking points.
-#   Nobody can bank more than 24h of cultivation per day → VIP lowers how often you must log in,
-#   it does not raise the progression ceiling. Caps above 24h only help players who skip a day.
+#   Tiên Duyên never multiplies cultivation rate, never changes breakthrough/tribulation odds, never adds ranking
+#   points. Nobody can bank more than 24h of cultivation per day → a higher level lowers how often you must log in,
+#   it does not raise the progression ceiling (150 points/day). Caps above 24h only help players who skip a day.
 #
 # perks: NEW perks unlocked at this tier (cumulative upward). Allowed keys (loader-enforced):
 #   title:<id> · avatar_frame:<id> · chat_aura:<id> · cave_decoration:<id> · breakthrough_fx:<id>
 #   alchemy_slot (stackable, +1 each) · garden_auto_harvest
-# daily_gift: spirit stones claimable per day at this tier (absolute, not cumulative). Budget: VIP12 gift
-#   ≤ ~15% of an active free player's daily spirit-stone income (verify in balance-sim when income exists).
-version: 2
-point_value_vnd: 1000          # PLACEHOLDER pricing — business decision
+# daily_gift: spirit stones claimable per day at this tier (absolute, not cumulative).
+# BUDGET (decisions 2026-11-06 "Phase 0" #5): stones turn into cultivation ONLY through speed items, capped per
+#   character per game day (Tụ Linh Đan 2 × 5 = 10 points, cost 250 ≤ stone income of a free 3-login idle player).
+#   ⇒ a gift's progress value ≤ 10 − 4 (what a free 1-login player self-funds) = 6 points/day, and 0 for anyone
+#   doing daily tasks. Invariant checked by balancesim: tier L at 1 login/day ≤ free at 3 logins/day, every tier,
+#   every activity profile. Gift stones beyond the speed-item budget need NON-PROGRESS sinks (cosmetics, cave
+#   decoration). Breakthrough-requirement items (Trúc Cơ Đan, Kết Đan Quả) are NOT such sinks: they gate progress, so
+#   more stones = more retries after a failed major breakthrough (balancesim "retry gap"). Shop daily limits bound it.
+#   balancesim prints stone creation vs destruction per profile/day (shop.yaml).
+#   (The old "VIP12 gift ≤ ~15% of free income" note was wrong: 300 / 450 ≈ 67%.)
+version: 3
+display_name: Tiên Duyên
+point_name: điểm duyên
+points_per_1000_vnd: 10            # decision D1b: 1.000đ = 10 điểm duyên (top-up; no payment gateway yet)
 hard_max_offline_cap_hours: 36
 daily_cultivation_ceiling_hours: 24
 
+# In-game điểm duyên (decision D). Every activity is credited by vip.EarnLocked inside the activity's own transaction:
+#   per activity ≤ points × daily_max_times per game day, all activities together ≤ daily_cap_points (theoretical
+#   max 29 → capped at 20). Top-up and admin grants are not activities and never count toward these caps.
+# source: ledger source (topup/admin are reserved). live: false = the feature does not exist yet (shown as "sắp mở").
+# min_elapsed_seconds (online_cultivation only): a settlement counts when ≥ this since the previous one.
+earn:
+  daily_cap_points: 20
+  activities:
+    - { id: online_cultivation,  source: cultivation, name: Vận công,     points: 1, daily_max_times: 3, live: true, min_elapsed_seconds: 3600 }
+    - { id: lecture_attendance,  source: lecture,     name: Nghe giảng,   points: 3, daily_max_times: 2, live: true }
+    - { id: daily_task_claim,    source: task,        name: Nhiệm vụ ngày, points: 1, daily_max_times: 4, live: true }
+    - { id: protector_assist,    source: interaction, name: Hộ pháp,      points: 2, daily_max_times: 2, live: true }     # counted protector of a tribulation (protector.yaml; worker credits)
+    - { id: dual_cultivation,    source: interaction, name: Song tu,      points: 2, daily_max_times: 1, live: true }      # a song tu claim reaching dao_lu.yaml duyen_min_seconds that day (Phase 5.1)
+    - { id: faction_merit,       source: interaction, name: Công thế lực, points: 1, daily_max_times: 3, live: false }  # TODO: earning action not defined (data-model §6); factions ship without it
+    - { id: trial_pass,          source: trial,       name: Vượt thí luyện, points: 2, daily_max_times: 2, live: true }    # a trial pass verdict (trials.yaml) or a bí cảnh run that survived (secret_realms.yaml)
+    - { id: event_participation, source: event,       name: Sự kiện,      points: 3, daily_max_times: 1, live: false }
+
+# Thresholds: decision E. Expected free play (balance §11.3): active players reach level 3–4 by day 90, level 6
+# after about a year; level 8+ is effectively top-up only. Offline caps, gifts and perks unchanged from v2.
 tiers:
-  - { tier: 0,  name: Tán Tu, points_required: 0,     offline_cap_hours: 8,  daily_gift: 0,   perks: [] }
-  - { tier: 1,  name: VIP 1,  points_required: 10,    offline_cap_hours: 10, daily_gift: 0,   perks: ["title:vip_1"] }
-  - { tier: 2,  name: VIP 2,  points_required: 50,    offline_cap_hours: 12, daily_gift: 50,  perks: ["title:vip_2"] }
-  - { tier: 3,  name: VIP 3,  points_required: 100,   offline_cap_hours: 14, daily_gift: 50,  perks: ["title:vip_3", "avatar_frame:ngoc", alchemy_slot] }
-  - { tier: 4,  name: VIP 4,  points_required: 200,   offline_cap_hours: 16, daily_gift: 50,  perks: ["title:vip_4", garden_auto_harvest] }
-  - { tier: 5,  name: VIP 5,  points_required: 500,   offline_cap_hours: 18, daily_gift: 100, perks: ["title:vip_5", "chat_aura:linh_quang"] }
-  - { tier: 6,  name: VIP 6,  points_required: 1000,  offline_cap_hours: 20, daily_gift: 100, perks: ["title:vip_6", "avatar_frame:kim", alchemy_slot] }
-  - { tier: 7,  name: VIP 7,  points_required: 2000,  offline_cap_hours: 22, daily_gift: 100, perks: ["title:vip_7", "cave_decoration:van_hac"] }
-  - { tier: 8,  name: VIP 8,  points_required: 5000,  offline_cap_hours: 24, daily_gift: 200, perks: ["title:vip_8"] }
-  - { tier: 9,  name: VIP 9,  points_required: 10000, offline_cap_hours: 26, daily_gift: 200, perks: ["title:vip_9", "avatar_frame:thien", alchemy_slot] }
-  - { tier: 10, name: VIP 10, points_required: 20000, offline_cap_hours: 28, daily_gift: 200, perks: ["title:vip_10", "chat_aura:tu_quang"] }
-  - { tier: 11, name: VIP 11, points_required: 35000, offline_cap_hours: 30, daily_gift: 300, perks: ["title:vip_11"] }
-  - { tier: 12, name: VIP 12, points_required: 50000, offline_cap_hours: 32, daily_gift: 300, perks: ["title:chi_ton", "breakthrough_fx:chi_ton"] }
+  - { tier: 0,  name: Tán Tu,        points_required: 0,      offline_cap_hours: 8,  daily_gift: 0,   perks: [] }
+  - { tier: 1,  name: Tiên Duyên 1,  points_required: 30,     offline_cap_hours: 10, daily_gift: 0,   perks: ["title:vip_1"] }
+  - { tier: 2,  name: Tiên Duyên 2,  points_required: 150,    offline_cap_hours: 12, daily_gift: 50,  perks: ["title:vip_2"] }
+  - { tier: 3,  name: Tiên Duyên 3,  points_required: 500,    offline_cap_hours: 14, daily_gift: 50,  perks: ["title:vip_3", "avatar_frame:ngoc", alchemy_slot] }
+  - { tier: 4,  name: Tiên Duyên 4,  points_required: 1200,   offline_cap_hours: 16, daily_gift: 50,  perks: ["title:vip_4", garden_auto_harvest] }
+  - { tier: 5,  name: Tiên Duyên 5,  points_required: 2500,   offline_cap_hours: 18, daily_gift: 100, perks: ["title:vip_5", "chat_aura:linh_quang"] }
+  - { tier: 6,  name: Tiên Duyên 6,  points_required: 4500,   offline_cap_hours: 20, daily_gift: 100, perks: ["title:vip_6", "avatar_frame:kim", alchemy_slot] }
+  - { tier: 7,  name: Tiên Duyên 7,  points_required: 10000,  offline_cap_hours: 22, daily_gift: 100, perks: ["title:vip_7", "cave_decoration:van_hac"] }
+  - { tier: 8,  name: Tiên Duyên 8,  points_required: 25000,  offline_cap_hours: 24, daily_gift: 200, perks: ["title:vip_8"] }
+  - { tier: 9,  name: Tiên Duyên 9,  points_required: 50000,  offline_cap_hours: 26, daily_gift: 200, perks: ["title:vip_9", "avatar_frame:thien", alchemy_slot] }
+  - { tier: 10, name: Tiên Duyên 10, points_required: 100000, offline_cap_hours: 28, daily_gift: 200, perks: ["title:vip_10", "chat_aura:tu_quang"] }
+  - { tier: 11, name: Tiên Duyên 11, points_required: 250000, offline_cap_hours: 30, daily_gift: 300, perks: ["title:vip_11"] }
+  - { tier: 12, name: Tiên Duyên 12, points_required: 500000, offline_cap_hours: 32, daily_gift: 300, perks: ["title:chi_ton", "breakthrough_fx:chi_ton"] }

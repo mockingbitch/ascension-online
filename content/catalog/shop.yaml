@@ -1,0 +1,27 @@
+# Spirit-stone shop (decision D7, data-model §8). Loaded by internal/shop; cross-checked in content.LoadAll.
+#
+# lot_size: items per lot · price: spirit stones per lot · daily_limit_lots: per character per game day (UTC+7),
+#   absent = unlimited (required when the item has any effect) · min_tier: Tiên Duyên level, COSMETIC listings only.
+#
+# Rules (enforced by the loader — `make content-check` fails otherwise):
+#   - never sell an item that raises breakthrough/tribulation odds (decisions D1a, Phase 0 #11);
+#     breakthrough REQUIREMENT items (Trúc Cơ Đan, Kết Đan Quả) are allowed;
+#   - only shop-safe effects (offline window, capped speed points);
+#   - cosmetics are NOT sold here: they live in cosmetics.yaml (decisions 2026-11-07 "Linh thạch sinks", decision G).
+#
+# Budget (balance-the-gioi-chung §5.2): Tụ Linh Đan 125 stones / 5 points = 25 stones per point; 2 per day
+# (the item's own max_use_per_game_day) → 250 stones/day ≤ a free 3-login player's stone income. Every other
+# listing is a gate item (consumed by a breakthrough attempt). Non-progress sinks: cosmetics.yaml, faction_works.yaml.
+version: 1
+settings:
+  currency: spirit_stone
+  max_lots_per_order: 10
+listings:
+  - { id: tu_linh_dan,   item_id: tu_linh_dan,  lot_size: 1,  price: 125, daily_limit_lots: 2 }
+  - { id: tu_linh_phu,   item_id: tu_linh_phu,  lot_size: 1,  price: 300, daily_limit_lots: 1 }
+  # Breakthrough requirement items (decision 11). Consumed on success AND failure; 3/day covers a bad-luck day.
+  - { id: truc_co_dan,   item_id: truc_co_dan,  lot_size: 1,  price: 400, daily_limit_lots: 3 }
+  - { id: ket_dan_qua,   item_id: ket_dan_qua,  lot_size: 1,  price: 900, daily_limit_lots: 3 }
+  # Linh Thảo is not sold until something consumes it (alchemy): a sink that buys a dead item is not a sink.
+  # Non-progress sinks (decision G) moved to cosmetics.yaml + faction_works.yaml (decisions 2026-11-07, migration 000014):
+  # Khung Ngọc Bích → avatar_frame:ngoc_bich, Bình Phong Tùng Hạc → cave_decoration:tung_hac (same prices).

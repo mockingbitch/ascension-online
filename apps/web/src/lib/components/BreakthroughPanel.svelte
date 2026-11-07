@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { CatalogueIndex } from '$lib/game/catalogue';
+	import { trialRoutes } from '$lib/game/nav';
 	import { formatBp, formatPoints } from '$lib/game/format';
 	import type { BreakthroughPreview } from '$lib/game/types';
 	import type { Snippet } from 'svelte';
@@ -17,11 +18,44 @@
 	let { preview, catalogue, failStreak, busy, onattempt, children }: Props = $props();
 	const canTry = $derived(!!preview && !preview.missing.some((m) => m.kind === 'final_stage'));
 
+	const fmtDay = (iso?: string | null) =>
+		iso ? new Date(iso).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) : '';
 	const fmtTime = (iso?: string) => (iso ? new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '');
 	const target = $derived(preview?.to ? catalogue.stages.get(preview.to) : undefined);
 	const trib = $derived(preview?.tribulation);
-	const oddsLabel: Record<string, string> = { base: 'cơ bản', pity: 'tâm cảnh', surplus: 'dư tu vi', items: 'pháp bảo', protector: 'hộ pháp' };
-	const bonusParts = $derived((preview?.odds ?? []).filter((o) => o.source !== 'base' && o.bp > 0));
+	const oddsLabel: Record<string, string> = {
+		base: 'cơ bản',
+		pity: 'tâm cảnh',
+		surplus: 'dư tu vi',
+		items: 'pháp bảo',
+		protector: 'hộ pháp',
+		bonus_cap: 'trần cộng thêm',
+		max_cap: 'trần tỉ lệ',
+		guarantee: 'bảo hiểm'
+	};
+	const bonusParts = $derived((preview?.odds ?? []).filter((o) => o.source !== 'base' && o.bp !== 0));
+	const caps = $derived(preview?.caps);
+	const part = (src: string) => preview?.odds.find((o) => o.source === src);
+	// Tribulation breakdown rows: every component with its own cap, then the caps that bit (parts sum to successBp).
+	const rows = $derived.by(() => {
+		if (!caps || !preview) return [];
+		const out: { label: string; bp: number; note: string }[] = [{ label: 'Cơ bản', bp: part('base')?.bp ?? 0, note: '' }];
+		out.push({ label: 'Dư tu vi', bp: part('surplus')?.bp ?? 0, note: `trần +${formatBp(caps.surplusMaxBp)}` });
+		const art = caps.artifactId ? catalogue.itemName(caps.artifactId) : 'chưa có pháp bảo hộ thân';
+		out.push({ label: 'Pháp bảo', bp: part('items')?.bp ?? 0, note: `${art} · trần +${formatBp(caps.itemMaxBp)}` });
+		out.push({
+			label: 'Hộ pháp',
+			bp: part('protector')?.bp ?? 0,
+			note: `${caps.protectorMembers} đồng môn × ${formatBp(caps.protectorPerMemberBp)} · trần +${formatBp(caps.protectorMaxBp)}`
+		});
+		const bc = part('bonus_cap');
+		if (bc) out.push({ label: 'Trần cộng thêm', bp: bc.bp, note: `tổng cộng thêm tối đa +${formatBp(caps.totalBonusMaxBp)}` });
+		const mc = part('max_cap');
+		if (mc) out.push({ label: 'Trần tỉ lệ', bp: mc.bp, note: `tối đa ${formatBp(caps.maxSuccessBp)} (trừ lần bảo hiểm)` });
+		const g = part('guarantee');
+		if (g) out.push({ label: 'Bảo hiểm', bp: g.bp, note: 'thất bại liên tiếp đủ lần' });
+		return out;
+	});
 	const targetRealm = $derived(preview?.to ? catalogue.realmOf(preview.to) : undefined);
 </script>
 
@@ -53,9 +87,28 @@
 				<p class="mt-1 text-3xl leading-none font-semibold text-jade-300 tabular-nums">{formatBp(preview.successBp)}</p>
 			</div>
 		</div>
-		{#if bonusParts.length && !trib?.guaranteed}
+		{#if rows.length}
+			<table class="odds mt-2 w-full text-xs" aria-label="Tỉ lệ vượt kiếp từng phần">
+				<tbody>
+					{#each rows as r (r.label)}
+						<tr>
+							<td class="py-0.5 pr-2 text-mist-300">{r.label}</td>
+							<td class="pr-2 text-mist-500">{r.note}</td>
+							<td class="text-right tabular-nums" class:text-jade-300={r.bp > 0 && r.label !== 'Cơ bản'} class:text-cinnabar-300={r.bp < 0} class:text-mist-100={r.label === 'Cơ bản'}>
+								{r.bp > 0 && r.label !== 'Cơ bản' ? '+' : ''}{formatBp(r.bp)}
+							</td>
+						</tr>
+					{/each}
+					<tr class="total">
+						<td class="pt-1 pr-2 font-semibold text-mist-100">Tổng</td>
+						<td></td>
+						<td class="pt-1 text-right font-semibold text-jade-300 tabular-nums">{formatBp(preview.successBp)}</td>
+					</tr>
+				</tbody>
+			</table>
+		{:else if bonusParts.length && !trib?.guaranteed}
 			<p class="mt-1 text-right text-xs text-mist-500">
-				{#each bonusParts as o, i (o.source)}{i ? ' · ' : ''}+{formatBp(o.bp)} {oddsLabel[o.source] ?? o.source}{/each}
+				{#each bonusParts as o, i (o.source)}{i ? ' · ' : ''}{o.bp > 0 ? '+' : ''}{formatBp(o.bp)} {oddsLabel[o.source] ?? o.source}{/each}
 			</p>
 		{/if}
 		{#if trib}
@@ -75,6 +128,13 @@
 			</div>
 		{:else if failStreak > 0}
 			<p class="mt-1 text-sm text-mist-300">Tâm cảnh vững thêm sau {failStreak} lần thất bại — đã cộng vào tỉ lệ.</p>
+		{/if}
+
+		{#if preview.trial?.passed}
+			<p class="mt-2 flex items-center gap-2 text-sm text-mist-300">
+				<Icon name="check" size={16} class="text-gold-300" />
+				Đã {preview.trial.name.toLowerCase()} — ấn chứng tới {fmtDay(preview.trial.validUntil)}, giữ qua lần thất bại.
+			</p>
 		{/if}
 
 		{#if preview.consumes.length}
@@ -97,6 +157,13 @@
 								Tu vi còn thiếu <span class="text-mist-100 tabular-nums">{formatPoints(m.need - m.have)}</span> (tới Viên Mãn cảnh giới)
 							{:else if m.kind === 'item'}
 								Thiếu {catalogue.itemName(m.itemId ?? '')}: {m.have}/{m.need}
+							{:else if m.kind === 'trial'}
+								<span>
+									Chưa {preview.trial?.name.toLowerCase() ?? 'vượt thử luyện'}
+									{#if trialRoutes[m.trialKind ?? '']}
+										— <a class="text-jade-300 underline underline-offset-2" href={trialRoutes[m.trialKind ?? '']}>vào thử luyện</a>
+									{/if}
+								</span>
 							{/if}
 						{/if}
 					</li>
@@ -118,6 +185,12 @@
 </section>
 
 <style>
+	.odds td {
+		vertical-align: top;
+	}
+	.odds .total td {
+		border-top: 1px solid var(--color-ink-700);
+	}
 	.trib {
 		border-left: 2px solid color-mix(in oklab, var(--color-cinnabar-300) 70%, transparent);
 		background: color-mix(in oklab, var(--color-ink-950) 55%, transparent);

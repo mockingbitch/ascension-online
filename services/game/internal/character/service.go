@@ -3,6 +3,7 @@ package character
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,11 +12,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/cosmetic"
 	"tiendao/game/internal/cultivation"
 	"tiendao/game/internal/db"
+	"tiendao/game/internal/faction"
 	"tiendao/game/internal/gameday"
 	"tiendao/game/internal/leaderboard"
 	"tiendao/game/internal/platform/postgres"
+	"tiendao/game/internal/realm"
+	"tiendao/game/internal/vip"
 	"tiendao/game/internal/world"
 )
 
@@ -23,6 +28,8 @@ var (
 	ErrAlreadyExists = errors.New("character: account already has a character")
 	ErrNameTaken     = errors.New("character: name already taken")
 	ErrNotFound      = cultivation.ErrNoCharacter
+	// ErrNoFactions: onboarding with a faction but the faction service is not wired.
+	ErrNoFactions = errors.New("character: factions unavailable")
 )
 
 // Currencies every character starts with (balance 0).
@@ -36,11 +43,14 @@ type View struct {
 	CreatedAt time.Time `json:"createdAt"`
 	RealmID   string    `json:"realmId"`
 	cultivation.Snapshot
-	FailStreak          int32      `json:"failStreak"`
-	CooldownUntil       *time.Time `json:"cooldownUntil"`
-	StageReachedAt      time.Time  `json:"stageReachedAt"`
-	OfflineBonusSeconds int32      `json:"offlineBonusSeconds"` // pending Tụ Linh Phù bonus
-	BonusUsedToday      bool       `json:"bonusUsedToday"`
+	FailStreak          int32               `json:"failStreak"`
+	CooldownUntil       *time.Time          `json:"cooldownUntil"`
+	StageReachedAt      time.Time           `json:"stageReachedAt"`
+	OfflineBonusSeconds int32               `json:"offlineBonusSeconds"` // pending Tụ Linh Phù bonus
+	BonusUsedToday      bool                `json:"bonusUsedToday"`
+	FactionID           *string             `json:"factionId"`          // null = no faction yet (onboarding sends them to the faction step)
+	Appearance          cosmetic.Appearance `json:"appearance"`         // equipped cosmetics (ids only; GET /cosmetics/catalog resolves them)
+	Replayed            bool                `json:"replayed,omitempty"` // onboarding create replayed by Idempotency-Key
 }
 
 // NameChecker is the moderation filter (moderation.Catalogue). It receives a format-normalised name and returns
@@ -54,6 +64,18 @@ type Service struct {
 	Pool        *pgxpool.Pool
 	Cultivation *cultivation.Service
 	Names       NameChecker
+	Factions    *faction.Service // nil → onboarding with a faction is refused (ErrNoFactions)
+	// Cosmetics + VIP hide Tiên Duyên perk cosmetics above the current level in the shown look (defence in depth; vip
+	// strips them on a level drop). nil → shown as stored.
+	Cosmetics *cosmetic.Catalogue
+	VIP       *vip.Table
+}
+
+// Onboarding is the faction part of the new-player intent POST /character {name, factionId, path} (data-model §9.6).
+type Onboarding struct {
+	IdempotencyKey string
+	FactionID      string
+	Path           realm.PathID // "" = the faction's first allowed path
 }
 
 // ValidName normalises the format, then applies the moderation filter.
@@ -97,15 +119,54 @@ func Rename(ctx context.Context, q *db.Queries, id uuid.UUID, raw string, names 
 // more than late_join_grant.after_server_day days ago, the one-time late-join grant (50% of the server median) is
 // stored as grant_reserve_milli — at most once per account (late_join_grants PK), released by the credit path.
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, rawName string) (View, error) {
+	return s.create(ctx, userID, rawName, nil)
+}
+
+// CreateOnboarded is the new-player intent (data-model §9.6): one transaction creates the character at the first
+// stage of the path the faction gives (requested path if the faction allows it, else its first path) and joins the
+// faction (character_faction + faction_history + outbox, the first join starts the switch cooldown, Phase 2.2).
+// Idempotent: a retry with the same key, name and faction returns the current view with Replayed = true.
+// Errors: those of Create, plus faction errors (ErrUnknownFaction, ErrFactionClosed, ErrPathNotAllowed,
+// ErrIdempotencyReused) — on any error nothing is written.
+func (s *Service) CreateOnboarded(ctx context.Context, userID uuid.UUID, rawName string, o Onboarding) (View, error) {
+	if s.Factions == nil {
+		return View{}, ErrNoFactions
+	}
+	return s.create(ctx, userID, rawName, &o)
+}
+
+func (s *Service) create(ctx context.Context, userID uuid.UUID, rawName string, o *Onboarding) (View, error) {
 	name, err := ValidName(rawName, s.Names)
 	if err != nil {
 		return View{}, err
 	}
 	cat := s.Cultivation.Realms
+	path := cat.DefaultPath()
+	if o != nil {
+		f, ok := s.Factions.Cat.Get(o.FactionID)
+		if !ok {
+			return View{}, faction.ErrUnknownFaction
+		}
+		if path, err = faction.ResolvePath(f, "", o.Path); err != nil {
+			return View{}, err
+		}
+	}
+	replayed := false
 	err = postgres.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
-		if _, err := q.GetCharacterByUser(ctx, userID); err == nil {
-			return ErrAlreadyExists
+		if old, err := q.GetCharacterByUser(ctx, userID); err == nil {
+			if o == nil || old.Name != name {
+				return ErrAlreadyExists
+			}
+			joined, err := faction.JoinedWithKey(ctx, q, old.ID, o.IdempotencyKey, o.FactionID)
+			if err != nil {
+				return err
+			}
+			if !joined {
+				return ErrAlreadyExists
+			}
+			replayed = true
+			return nil
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
 		}
@@ -118,7 +179,10 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, rawName string) 
 		if err != nil {
 			return err
 		}
-		first := cat.First(cat.DefaultPath())
+		first := cat.First(path)
+		if first == nil {
+			return fmt.Errorf("character: path %q has no stages", path)
+		}
 		if err := q.CreateProgression(ctx, db.CreateProgressionParams{
 			CharacterID: ch.ID, RealmID: first.RealmID, StageID: first.ID, Now: now, GrantReserveMilli: grant,
 		}); err != nil {
@@ -132,12 +196,23 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, rawName string) 
 		if err := q.EnsureVIPAccount(ctx, userID); err != nil {
 			return err
 		}
-		return cultivation.EnqueueLeaderboard(ctx, q, ch.ID, leaderboard.Score(first, 0))
+		if err := cultivation.EnqueueLeaderboard(ctx, q, ch.ID, leaderboard.Score(first, 0)); err != nil {
+			return err
+		}
+		if o == nil {
+			return nil
+		}
+		// Same tx: the faction checks (open in this era, path) run on the row just created; any refusal rolls the
+		// character back too, so the player never ends up half-onboarded.
+		_, err = s.Factions.JoinTx(ctx, q, userID, o.IdempotencyKey, o.FactionID, path)
+		return err
 	})
 	if err != nil {
 		return View{}, err
 	}
-	return s.Get(ctx, userID)
+	v, err := s.Get(ctx, userID)
+	v.Replayed = replayed
+	return v, err
 }
 
 // lateJoinGrant inserts the account's one-time grant when eligible and returns its amount (0 otherwise).
@@ -184,7 +259,25 @@ func (s *Service) Get(ctx context.Context, userID uuid.UUID) (View, error) {
 	if proj.Credit.After.Stage.ID != p.StageID {
 		reached = s.Cultivation.Now().UTC()
 	}
+	var factionID *string
+	if cf, err := q.GetCharacterFaction(ctx, ch.ID); err == nil {
+		factionID = &cf.FactionID
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return View{}, err
+	}
+	look, err := cosmetic.LoadAppearance(ctx, q, ch.ID)
+	if err != nil {
+		return View{}, err
+	}
+	if s.Cosmetics != nil && s.VIP != nil {
+		points, err := q.GetVIPPoints(ctx, userID)
+		if err != nil {
+			return View{}, err
+		}
+		look = s.Cosmetics.VisibleLook(look, s.VIP.TierForPoints(points))
+	}
 	return View{
+		FactionID: factionID, Appearance: look,
 		ID: ch.ID, Name: ch.Name, CreatedAt: ch.CreatedAt, RealmID: proj.Credit.After.Stage.RealmID, Snapshot: proj.Snapshot,
 		FailStreak: p.BreakthroughFailStreak, CooldownUntil: p.BreakthroughCooldownUntil,
 		StageReachedAt: reached, OfflineBonusSeconds: p.OfflineBonusSeconds,

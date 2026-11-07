@@ -23,6 +23,7 @@ import (
 	"tiendao/game/internal/character"
 	"tiendao/game/internal/content"
 	"tiendao/game/internal/cultivation"
+	"tiendao/game/internal/faction"
 	"tiendao/game/internal/httpapi"
 	"tiendao/game/internal/leaderboard"
 	"tiendao/game/internal/platform/redisx"
@@ -61,6 +62,8 @@ func TestEndToEnd(t *testing.T) {
 	secret := []byte(strings.Repeat("e", 32))
 	iss, _ := auth.NewIssuer(secret, time.Minute, time.Now)
 	cult := &cultivation.Service{Pool: pool, Realms: cb.Realms, Contribution: cb.Contribution, VIP: cb.VIP, Now: time.Now}
+	chars := &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation,
+		Factions: &faction.Service{Pool: pool, Cat: cb.Factions, Realms: cb.Realms, World: cb.World, Now: time.Now, Settle: cult.SettleLockedRow}}
 	lb := &leaderboard.Service{Pool: pool, Redis: rdb, Realms: cb.Realms, Key: lbKey}
 
 	mux := http.NewServeMux()
@@ -70,7 +73,7 @@ func TestEndToEnd(t *testing.T) {
 		Log: slog.New(slog.DiscardHandler), Pool: pool, Content: cb, Now: time.Now,
 		Auth: &auth.Service{Pool: pool, Issuer: iss, RefreshTTL: time.Hour, Now: time.Now}, Issuer: iss,
 		Google: fakeGoogle{callback: srv.URL + "/api/v1/auth/google/callback"}, Flow: auth.NewFlowSigner(secret),
-		Cultivation: cult, Characters: &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation},
+		Cultivation: cult, Characters: chars,
 		Breakthrough: &breakthrough.Service{Pool: pool, Cultivation: cult, RNG: breakthrough.NewRNG()},
 		Leaderboard:  lb, VIP: &vip.Service{Pool: pool, Table: cb.VIP},
 		PublicBaseURL: srv.URL,
@@ -110,6 +113,13 @@ func TestEndToEnd(t *testing.T) {
 	if blocked.Error.Code != "name_not_allowed" || strings.Contains(blocked.Error.Message, "Nữ Oa") {
 		t.Fatalf("blocked name: %+v", blocked)
 	}
+	// Onboarding intent (§9.6): factionId needs an Idempotency-Key; path needs a factionId; refusals create nothing.
+	onb := map[string]string{"Idempotency-Key": "e2e-onboard-01"}
+	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh","factionId":"vu_toc"}`, nil, 400, nil)
+	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh","path":"vu"}`, nil, 400, nil)
+	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh","factionId":"nhan_toc"}`, onb, 409, nil)
+	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh","factionId":"vu_toc","path":"tien"}`, onb, 400, nil)
+	do(t, c, "GET", srv.URL+"/api/v1/character", tok, "", nil, 404, nil)
 	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh"}`, nil, 201, nil)
 	do(t, c, "POST", srv.URL+"/api/v1/character", tok, `{"name":"Mộc Thanh"}`, nil, 409, nil)
 

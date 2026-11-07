@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -79,8 +80,33 @@ func (q *Queries) GetVIPAccountForUpdate(ctx context.Context, userID uuid.UUID) 
 	return i, err
 }
 
+const getVIPLedgerByID = `-- name: GetVIPLedgerByID :one
+SELECT id, user_id, delta, points_after, reason, ref_type, ref_id, idempotency_key, created_at, source, activity_id, game_day, reverses_ledger_id FROM vip_point_ledger WHERE id = $1
+`
+
+func (q *Queries) GetVIPLedgerByID(ctx context.Context, id int64) (VipPointLedger, error) {
+	row := q.db.QueryRow(ctx, getVIPLedgerByID, id)
+	var i VipPointLedger
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Delta,
+		&i.PointsAfter,
+		&i.Reason,
+		&i.RefType,
+		&i.RefID,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.Source,
+		&i.ActivityID,
+		&i.GameDay,
+		&i.ReversesLedgerID,
+	)
+	return i, err
+}
+
 const getVIPLedgerByKey = `-- name: GetVIPLedgerByKey :one
-SELECT id, user_id, delta, points_after, reason, ref_type, ref_id, idempotency_key, created_at FROM vip_point_ledger WHERE user_id = $1 AND idempotency_key = $2
+SELECT id, user_id, delta, points_after, reason, ref_type, ref_id, idempotency_key, created_at, source, activity_id, game_day, reverses_ledger_id FROM vip_point_ledger WHERE user_id = $1 AND idempotency_key = $2
 `
 
 type GetVIPLedgerByKeyParams struct {
@@ -101,6 +127,36 @@ func (q *Queries) GetVIPLedgerByKey(ctx context.Context, arg GetVIPLedgerByKeyPa
 		&i.RefID,
 		&i.IdempotencyKey,
 		&i.CreatedAt,
+		&i.Source,
+		&i.ActivityID,
+		&i.GameDay,
+		&i.ReversesLedgerID,
+	)
+	return i, err
+}
+
+const getVIPLedgerReversal = `-- name: GetVIPLedgerReversal :one
+SELECT id, user_id, delta, points_after, reason, ref_type, ref_id, idempotency_key, created_at, source, activity_id, game_day, reverses_ledger_id FROM vip_point_ledger WHERE reverses_ledger_id = $1
+`
+
+// The refund row that reverses ledger row $1, if any (reverses_ledger_id is UNIQUE).
+func (q *Queries) GetVIPLedgerReversal(ctx context.Context, reversesLedgerID pgtype.Int8) (VipPointLedger, error) {
+	row := q.db.QueryRow(ctx, getVIPLedgerReversal, reversesLedgerID)
+	var i VipPointLedger
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Delta,
+		&i.PointsAfter,
+		&i.Reason,
+		&i.RefType,
+		&i.RefID,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.Source,
+		&i.ActivityID,
+		&i.GameDay,
+		&i.ReversesLedgerID,
 	)
 	return i, err
 }
@@ -115,6 +171,37 @@ func (q *Queries) GetVIPPoints(ctx context.Context, userID uuid.UUID) (int64, er
 	var points int64
 	err := row.Scan(&points)
 	return points, err
+}
+
+const getVIPPurchaseByOrder = `-- name: GetVIPPurchaseByOrder :one
+SELECT id, user_id, delta, points_after, reason, ref_type, ref_id, idempotency_key, created_at, source, activity_id, game_day, reverses_ledger_id FROM vip_point_ledger WHERE reason = 'purchase' AND ref_type = $1 AND ref_id = $2
+`
+
+type GetVIPPurchaseByOrderParams struct {
+	RefType pgtype.Text `json:"ref_type"`
+	RefID   pgtype.Text `json:"ref_id"`
+}
+
+// The purchase row of a payment order (unique per order: vip_point_ledger_purchase_order_uq).
+func (q *Queries) GetVIPPurchaseByOrder(ctx context.Context, arg GetVIPPurchaseByOrderParams) (VipPointLedger, error) {
+	row := q.db.QueryRow(ctx, getVIPPurchaseByOrder, arg.RefType, arg.RefID)
+	var i VipPointLedger
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Delta,
+		&i.PointsAfter,
+		&i.Reason,
+		&i.RefType,
+		&i.RefID,
+		&i.IdempotencyKey,
+		&i.CreatedAt,
+		&i.Source,
+		&i.ActivityID,
+		&i.GameDay,
+		&i.ReversesLedgerID,
+	)
+	return i, err
 }
 
 const insertDailyGiftClaim = `-- name: InsertDailyGiftClaim :one
@@ -144,30 +231,113 @@ func (q *Queries) InsertDailyGiftClaim(ctx context.Context, arg InsertDailyGiftC
 	return claim_day, err
 }
 
-const insertVIPLedger = `-- name: InsertVIPLedger :exec
-INSERT INTO vip_point_ledger (user_id, delta, points_after, reason, ref_type, ref_id, idempotency_key)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+const insertVIPLedger = `-- name: InsertVIPLedger :one
+INSERT INTO vip_point_ledger (user_id, delta, points_after, reason, source, activity_id, game_day, reverses_ledger_id,
+                              ref_type, ref_id, idempotency_key)
+VALUES ($1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11)
+RETURNING id
 `
 
 type InsertVIPLedgerParams struct {
-	UserID         uuid.UUID   `json:"user_id"`
-	Delta          int64       `json:"delta"`
-	PointsAfter    int64       `json:"points_after"`
-	Reason         string      `json:"reason"`
-	RefType        pgtype.Text `json:"ref_type"`
-	RefID          pgtype.Text `json:"ref_id"`
-	IdempotencyKey string      `json:"idempotency_key"`
+	UserID           uuid.UUID   `json:"user_id"`
+	Delta            int64       `json:"delta"`
+	PointsAfter      int64       `json:"points_after"`
+	Reason           string      `json:"reason"`
+	Source           string      `json:"source"`
+	ActivityID       pgtype.Text `json:"activity_id"`
+	GameDay          pgtype.Date `json:"game_day"`
+	ReversesLedgerID pgtype.Int8 `json:"reverses_ledger_id"`
+	RefType          pgtype.Text `json:"ref_type"`
+	RefID            pgtype.Text `json:"ref_id"`
+	IdempotencyKey   string      `json:"idempotency_key"`
 }
 
-func (q *Queries) InsertVIPLedger(ctx context.Context, arg InsertVIPLedgerParams) error {
-	_, err := q.db.Exec(ctx, insertVIPLedger,
+func (q *Queries) InsertVIPLedger(ctx context.Context, arg InsertVIPLedgerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertVIPLedger,
 		arg.UserID,
 		arg.Delta,
 		arg.PointsAfter,
 		arg.Reason,
+		arg.Source,
+		arg.ActivityID,
+		arg.GameDay,
+		arg.ReversesLedgerID,
 		arg.RefType,
 		arg.RefID,
 		arg.IdempotencyKey,
 	)
-	return err
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const listVIPEarnDay = `-- name: ListVIPEarnDay :many
+SELECT activity_id::text AS activity_id, COUNT(*)::bigint AS times, COALESCE(SUM(delta), 0)::bigint AS points
+FROM vip_point_ledger
+WHERE user_id = $1 AND game_day = $2 AND activity_id IS NOT NULL
+GROUP BY activity_id
+`
+
+type ListVIPEarnDayParams struct {
+	UserID  uuid.UUID   `json:"user_id"`
+	GameDay pgtype.Date `json:"game_day"`
+}
+
+type ListVIPEarnDayRow struct {
+	ActivityID string `json:"activity_id"`
+	Times      int64  `json:"times"`
+	Points     int64  `json:"points"`
+}
+
+// In-game điểm duyên of one game day per activity (source not topup/admin): how many times and how many points.
+// Read under the vip_accounts row lock by EarnLocked; unlocked for GET /vip/status.
+func (q *Queries) ListVIPEarnDay(ctx context.Context, arg ListVIPEarnDayParams) ([]ListVIPEarnDayRow, error) {
+	rows, err := q.db.Query(ctx, listVIPEarnDay, arg.UserID, arg.GameDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListVIPEarnDayRow{}
+	for rows.Next() {
+		var i ListVIPEarnDayRow
+		if err := rows.Scan(&i.ActivityID, &i.Times, &i.Points); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const stripAppearancePerks = `-- name: StripAppearancePerks :execrows
+UPDATE character_appearance a SET
+    title_id = CASE WHEN a.title_id = ANY($1::text[]) THEN NULL ELSE a.title_id END,
+    avatar_frame_id = CASE WHEN a.avatar_frame_id = ANY($1::text[]) THEN NULL ELSE a.avatar_frame_id END,
+    chat_aura_id = CASE WHEN a.chat_aura_id = ANY($1::text[]) THEN NULL ELSE a.chat_aura_id END,
+    cave_decoration_ids = ARRAY(SELECT x FROM unnest(a.cave_decoration_ids) WITH ORDINALITY AS t(x, n)
+                                WHERE x <> ALL($1::text[]) ORDER BY n),
+    version = a.version + 1, updated_at = $2
+FROM characters c
+WHERE c.id = a.character_id AND c.user_id = $3
+  AND (a.title_id = ANY($1::text[]) OR a.avatar_frame_id = ANY($1::text[]) OR a.chat_aura_id = ANY($1::text[])
+       OR a.cave_decoration_ids && $1::text[])
+`
+
+type StripAppearancePerksParams struct {
+	Ids    []string  `json:"ids"`
+	Now    time.Time `json:"now"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+// The Tiên Duyên level dropped (refund / admin revoke): unequip every perk cosmetic in @ids (perks of tiers above the
+// new level). Caller holds the vip_accounts lock; this locks character_appearance next (lock order vip → appearance).
+func (q *Queries) StripAppearancePerks(ctx context.Context, arg StripAppearancePerksParams) (int64, error) {
+	result, err := q.db.Exec(ctx, stripAppearancePerks, arg.Ids, arg.Now, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }

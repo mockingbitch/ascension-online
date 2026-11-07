@@ -51,6 +51,53 @@ type Character struct {
 	CreatedAt         time.Time   `json:"created_at"`
 }
 
+type CharacterAppearance struct {
+	CharacterID       uuid.UUID   `json:"character_id"`
+	TitleID           pgtype.Text `json:"title_id"`
+	AvatarFrameID     pgtype.Text `json:"avatar_frame_id"`
+	ChatAuraID        pgtype.Text `json:"chat_aura_id"`
+	CaveDecorationIds []string    `json:"cave_decoration_ids"`
+	Version           int64       `json:"version"`
+	UpdatedAt         time.Time   `json:"updated_at"`
+}
+
+type CharacterArtifact struct {
+	CharacterID uuid.UUID `json:"character_id"`
+	ItemID      string    `json:"item_id"`
+	EquippedAt  time.Time `json:"equipped_at"`
+}
+
+type CharacterBuff struct {
+	CharacterID uuid.UUID `json:"character_id"`
+	Slot        string    `json:"slot"`
+	BonusBp     int32     `json:"bonus_bp"`
+	StartsAt    time.Time `json:"starts_at"`
+	EndsAt      time.Time `json:"ends_at"`
+	SourceRef   string    `json:"source_ref"`
+}
+
+type CharacterCosmetic struct {
+	CharacterID    uuid.UUID `json:"character_id"`
+	CosmeticID     string    `json:"cosmetic_id"`
+	Source         string    `json:"source"`
+	Price          int64     `json:"price"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	AcquiredAt     time.Time `json:"acquired_at"`
+}
+
+type CharacterFaction struct {
+	CharacterID          uuid.UUID   `json:"character_id"`
+	FactionID            string      `json:"faction_id"`
+	JoinedAt             time.Time   `json:"joined_at"`
+	LastSwitchAt         *time.Time  `json:"last_switch_at"`
+	LockReason           pgtype.Text `json:"lock_reason"`
+	LockedAt             *time.Time  `json:"locked_at"`
+	LockedUntil          *time.Time  `json:"locked_until"`
+	PendingSplitEffectID pgtype.Int8 `json:"pending_split_effect_id"`
+	Version              int64       `json:"version"`
+	UpdatedAt            time.Time   `json:"updated_at"`
+}
+
 type CharacterProgression struct {
 	CharacterID               uuid.UUID   `json:"character_id"`
 	RealmID                   string      `json:"realm_id"`
@@ -81,6 +128,7 @@ type ChatMessage struct {
 	HiddenAt       *time.Time  `json:"hidden_at"`
 	HiddenBy       pgtype.UUID `json:"hidden_by"`
 	CreatedAt      time.Time   `json:"created_at"`
+	NameFx         pgtype.Text `json:"name_fx"`
 }
 
 type ChatMute struct {
@@ -89,6 +137,17 @@ type ChatMute struct {
 	Reason     string    `json:"reason"`
 	MutedBy    uuid.UUID `json:"muted_by"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type CosmeticEquip struct {
+	ID                int64       `json:"id"`
+	CharacterID       uuid.UUID   `json:"character_id"`
+	TitleID           pgtype.Text `json:"title_id"`
+	AvatarFrameID     pgtype.Text `json:"avatar_frame_id"`
+	ChatAuraID        pgtype.Text `json:"chat_aura_id"`
+	CaveDecorationIds []string    `json:"cave_decoration_ids"`
+	IdempotencyKey    string      `json:"idempotency_key"`
+	CreatedAt         time.Time   `json:"created_at"`
 }
 
 type CultivationCredit struct {
@@ -162,6 +221,15 @@ type DailyContribution struct {
 	UpdatedAt         time.Time   `json:"updated_at"`
 }
 
+type DailyFortune struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	GameDay     pgtype.Date `json:"game_day"`
+	OutcomeID   string      `json:"outcome_id"`
+	RollBp      int32       `json:"roll_bp"`
+	BonusBp     int32       `json:"bonus_bp"`
+	CreatedAt   time.Time   `json:"created_at"`
+}
+
 type DailyTaskProgress struct {
 	CharacterID uuid.UUID   `json:"character_id"`
 	GameDay     pgtype.Date `json:"game_day"`
@@ -169,6 +237,109 @@ type DailyTaskProgress struct {
 	Progress    int32       `json:"progress"`
 	ClaimedAt   *time.Time  `json:"claimed_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type DaoLuBond struct {
+	ID         uuid.UUID   `json:"id"`
+	ProposalID uuid.UUID   `json:"proposal_id"`
+	CharacterA uuid.UUID   `json:"character_a"`
+	CharacterB uuid.UUID   `json:"character_b"`
+	NetFlag    bool        `json:"net_flag"`
+	FormedAt   time.Time   `json:"formed_at"`
+	EndedAt    *time.Time  `json:"ended_at"`
+	EndReason  pgtype.Text `json:"end_reason"`
+}
+
+type DaoLuEvent struct {
+	ID               int64       `json:"id"`
+	BondID           pgtype.UUID `json:"bond_id"`
+	ProposalID       pgtype.UUID `json:"proposal_id"`
+	Kind             string      `json:"kind"`
+	ActorCharacterID pgtype.UUID `json:"actor_character_id"`
+	AdminUserID      pgtype.UUID `json:"admin_user_id"`
+	Reason           string      `json:"reason"`
+	Note             string      `json:"note"`
+	ReportID         pgtype.UUID `json:"report_id"`
+	CreatedAt        time.Time   `json:"created_at"`
+}
+
+type DaoLuMember struct {
+	BondID      uuid.UUID  `json:"bond_id"`
+	CharacterID uuid.UUID  `json:"character_id"`
+	Active      bool       `json:"active"`
+	EndedAt     *time.Time `json:"ended_at"`
+}
+
+type DaoLuProposal struct {
+	ID                  uuid.UUID   `json:"id"`
+	ProposerCharacterID uuid.UUID   `json:"proposer_character_id"`
+	TargetCharacterID   uuid.UUID   `json:"target_character_id"`
+	Status              string      `json:"status"`
+	NetFlag             bool        `json:"net_flag"`
+	IdempotencyKey      string      `json:"idempotency_key"`
+	GameDay             pgtype.Date `json:"game_day"`
+	CreatedAt           time.Time   `json:"created_at"`
+	ExpiresAt           time.Time   `json:"expires_at"`
+	RespondedAt         *time.Time  `json:"responded_at"`
+	RespondKey          pgtype.Text `json:"respond_key"`
+}
+
+type DaoLuSongTuClaim struct {
+	ID             int64       `json:"id"`
+	CharacterID    uuid.UUID   `json:"character_id"`
+	BondID         uuid.UUID   `json:"bond_id"`
+	GameDay        pgtype.Date `json:"game_day"`
+	Seconds        int32       `json:"seconds"`
+	SecondsAfter   int32       `json:"seconds_after"`
+	RawMilli       int64       `json:"raw_milli"`
+	CreditedMilli  int64       `json:"credited_milli"`
+	VipPoints      int32       `json:"vip_points"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type FactionDonation struct {
+	ID             int64       `json:"id"`
+	CharacterID    uuid.UUID   `json:"character_id"`
+	FactionID      string      `json:"faction_id"`
+	Amount         int64       `json:"amount"`
+	TotalAfter     int64       `json:"total_after"`
+	GameDay        pgtype.Date `json:"game_day"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type FactionDonationDay struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	GameDay     pgtype.Date `json:"game_day"`
+	Amount      int64       `json:"amount"`
+}
+
+type FactionDonor struct {
+	FactionID   string    `json:"faction_id"`
+	CharacterID uuid.UUID `json:"character_id"`
+	Total       int64     `json:"total"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type FactionHistory struct {
+	ID             int64       `json:"id"`
+	CharacterID    uuid.UUID   `json:"character_id"`
+	FromFactionID  pgtype.Text `json:"from_faction_id"`
+	ToFactionID    string      `json:"to_faction_id"`
+	FromPath       pgtype.Text `json:"from_path"`
+	ToPath         pgtype.Text `json:"to_path"`
+	Reason         string      `json:"reason"`
+	WorldEffectID  pgtype.Int8 `json:"world_effect_id"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type FactionTreasury struct {
+	FactionID    string    `json:"faction_id"`
+	DonatedTotal int64     `json:"donated_total"`
+	Version      int64     `json:"version"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type InventoryItem struct {
@@ -207,6 +378,26 @@ type LateJoinGrant struct {
 	GrantedAt           time.Time   `json:"granted_at"`
 }
 
+type LectureInsight struct {
+	CharacterID     uuid.UUID   `json:"character_id"`
+	SlotNo          int64       `json:"slot_no"`
+	GameDay         pgtype.Date `json:"game_day"`
+	LectureID       string      `json:"lecture_id"`
+	PresenceSeconds int32       `json:"presence_seconds"`
+	RawMilli        int64       `json:"raw_milli"`
+	CreditedMilli   int64       `json:"credited_milli"`
+	VipPoints       int32       `json:"vip_points"`
+	CreatedAt       time.Time   `json:"created_at"`
+}
+
+type NetSignal struct {
+	UserID      uuid.UUID `json:"user_id"`
+	KeyID       string    `json:"key_id"`
+	IpHash      []byte    `json:"ip_hash"`
+	FirstSeenAt time.Time `json:"first_seen_at"`
+	LastSeenAt  time.Time `json:"last_seen_at"`
+}
+
 type OutboxEvent struct {
 	ID          int64      `json:"id"`
 	Topic       string     `json:"topic"`
@@ -217,6 +408,57 @@ type OutboxEvent struct {
 	Attempts    int32      `json:"attempts"`
 }
 
+type PaymentEvent struct {
+	ID          int64       `json:"id"`
+	Provider    string      `json:"provider"`
+	DedupeKey   string      `json:"dedupe_key"`
+	Source      string      `json:"source"`
+	SignatureOk bool        `json:"signature_ok"`
+	OrderID     pgtype.UUID `json:"order_id"`
+	Kind        string      `json:"kind"`
+	AmountVnd   pgtype.Int8 `json:"amount_vnd"`
+	ProviderRef pgtype.Text `json:"provider_ref"`
+	Outcome     string      `json:"outcome"`
+	Detail      pgtype.Text `json:"detail"`
+	Payload     string      `json:"payload"`
+	ReceivedAt  time.Time   `json:"received_at"`
+	ProcessedAt *time.Time  `json:"processed_at"`
+}
+
+type PaymentOrder struct {
+	ID             uuid.UUID   `json:"id"`
+	UserID         uuid.UUID   `json:"user_id"`
+	PackageID      string      `json:"package_id"`
+	AmountVnd      int64       `json:"amount_vnd"`
+	Points         int64       `json:"points"`
+	Provider       string      `json:"provider"`
+	Status         string      `json:"status"`
+	ProviderRef    pgtype.Text `json:"provider_ref"`
+	CheckoutUrl    pgtype.Text `json:"checkout_url"`
+	CheckoutQr     pgtype.Text `json:"checkout_qr"`
+	FailureReason  pgtype.Text `json:"failure_reason"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	VipLedgerID    pgtype.Int8 `json:"vip_ledger_id"`
+	RefundLedgerID pgtype.Int8 `json:"refund_ledger_id"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+	ExpiresAt      time.Time   `json:"expires_at"`
+	PaidAt         *time.Time  `json:"paid_at"`
+	ClosedAt       *time.Time  `json:"closed_at"`
+	RefundedAt     *time.Time  `json:"refunded_at"`
+	LastCheckedAt  *time.Time  `json:"last_checked_at"`
+	CheckCount     int32       `json:"check_count"`
+	Version        int64       `json:"version"`
+}
+
+type PaymentSandboxCharge struct {
+	OrderID   uuid.UUID `json:"order_id"`
+	Status    string    `json:"status"`
+	AmountVnd int64     `json:"amount_vnd"`
+	EventID   string    `json:"event_id"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type ProgressionEvent struct {
 	ID          int64       `json:"id"`
 	CharacterID uuid.UUID   `json:"character_id"`
@@ -224,6 +466,34 @@ type ProgressionEvent struct {
 	StageID     pgtype.Text `json:"stage_id"`
 	Payload     []byte      `json:"payload"`
 	OccurredAt  time.Time   `json:"occurred_at"`
+}
+
+type ProtectorAssist struct {
+	ID                   int64       `json:"id"`
+	InviteID             uuid.UUID   `json:"invite_id"`
+	ProtectorCharacterID uuid.UUID   `json:"protector_character_id"`
+	GameDay              pgtype.Date `json:"game_day"`
+	IdempotencyKey       string      `json:"idempotency_key"`
+	AcceptedAt           time.Time   `json:"accepted_at"`
+	CountedAt            *time.Time  `json:"counted_at"`
+}
+
+type ProtectorDay struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	GameDay     pgtype.Date `json:"game_day"`
+	Uses        int32       `json:"uses"`
+}
+
+type ProtectorInvite struct {
+	ID             uuid.UUID   `json:"id"`
+	CharacterID    uuid.UUID   `json:"character_id"`
+	FactionID      string      `json:"faction_id"`
+	StageID        string      `json:"stage_id"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	CreatedAt      time.Time   `json:"created_at"`
+	ExpiresAt      time.Time   `json:"expires_at"`
+	UsedAt         *time.Time  `json:"used_at"`
+	UsedRef        pgtype.Text `json:"used_ref"`
 }
 
 type RefreshToken struct {
@@ -254,6 +524,136 @@ type Report struct {
 	CreatedAt         time.Time   `json:"created_at"`
 	ChatMessageID     pgtype.Int8 `json:"chat_message_id"`
 	Evidence          string      `json:"evidence"`
+	TradeOfferID      pgtype.UUID `json:"trade_offer_id"`
+}
+
+type RitualStreak struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	LastDay     pgtype.Date `json:"last_day"`
+	Streak      int32       `json:"streak"`
+	Best        int32       `json:"best"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type SecretRealmDay struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	GameDay     pgtype.Date `json:"game_day"`
+	Runs        int32       `json:"runs"`
+	SpiritStone int64       `json:"spirit_stone"`
+	Materials   int64       `json:"materials"`
+	Artifacts   int32       `json:"artifacts"`
+}
+
+type SecretRealmRun struct {
+	ID          uuid.UUID   `json:"id"`
+	CharacterID uuid.UUID   `json:"character_id"`
+	RealmID     string      `json:"realm_id"`
+	Seed        int64       `json:"seed"`
+	Params      []byte      `json:"params"`
+	IssueKey    string      `json:"issue_key"`
+	IssuedAt    time.Time   `json:"issued_at"`
+	ExpiresAt   time.Time   `json:"expires_at"`
+	GameDay     pgtype.Date `json:"game_day"`
+	SubmitKey   pgtype.Text `json:"submit_key"`
+	SubmittedAt *time.Time  `json:"submitted_at"`
+	Claim       []byte      `json:"claim"`
+	Result      []byte      `json:"result"`
+	Verdict     pgtype.Text `json:"verdict"`
+	Reason      pgtype.Text `json:"reason"`
+	VerdictAt   *time.Time  `json:"verdict_at"`
+	Band        pgtype.Text `json:"band"`
+	Loot        []byte      `json:"loot"`
+}
+
+type ShopDailyCount struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	GameDay     pgtype.Date `json:"game_day"`
+	ListingID   string      `json:"listing_id"`
+	Lots        int32       `json:"lots"`
+}
+
+type ShopPurchase struct {
+	ID             int64       `json:"id"`
+	CharacterID    uuid.UUID   `json:"character_id"`
+	ListingID      string      `json:"listing_id"`
+	ItemID         string      `json:"item_id"`
+	Lots           int32       `json:"lots"`
+	ItemQuantity   int64       `json:"item_quantity"`
+	Currency       string      `json:"currency"`
+	UnitPrice      int64       `json:"unit_price"`
+	TotalPrice     int64       `json:"total_price"`
+	GameDay        pgtype.Date `json:"game_day"`
+	IdempotencyKey string      `json:"idempotency_key"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type TradeDay struct {
+	CharacterID   uuid.UUID   `json:"character_id"`
+	GameDay       pgtype.Date `json:"game_day"`
+	OffersCreated int32       `json:"offers_created"`
+	Completed     int32       `json:"completed"`
+	ValueReceived int64       `json:"value_received"`
+	ValueSent     int64       `json:"value_sent"`
+}
+
+type TradeEvent struct {
+	ID               int64       `json:"id"`
+	OfferID          uuid.UUID   `json:"offer_id"`
+	Kind             string      `json:"kind"`
+	ActorCharacterID pgtype.UUID `json:"actor_character_id"`
+	Detail           []byte      `json:"detail"`
+	CreatedAt        time.Time   `json:"created_at"`
+}
+
+type TradeLine struct {
+	OfferID   uuid.UUID `json:"offer_id"`
+	Side      string    `json:"side"`
+	AssetKind string    `json:"asset_kind"`
+	AssetID   string    `json:"asset_id"`
+	Quantity  int64     `json:"quantity"`
+}
+
+type TradeOffer struct {
+	ID                  uuid.UUID   `json:"id"`
+	Kind                string      `json:"kind"`
+	SenderCharacterID   uuid.UUID   `json:"sender_character_id"`
+	ReceiverCharacterID uuid.UUID   `json:"receiver_character_id"`
+	Status              string      `json:"status"`
+	Relation            string      `json:"relation"`
+	NetFlag             bool        `json:"net_flag"`
+	ValueToReceiver     int64       `json:"value_to_receiver"`
+	ValueToSender       int64       `json:"value_to_sender"`
+	SenderFee           int64       `json:"sender_fee"`
+	ReceiverFee         int64       `json:"receiver_fee"`
+	IdempotencyKey      string      `json:"idempotency_key"`
+	GameDay             pgtype.Date `json:"game_day"`
+	CreatedAt           time.Time   `json:"created_at"`
+	ExpiresAt           time.Time   `json:"expires_at"`
+	RespondedAt         *time.Time  `json:"responded_at"`
+	RespondKey          pgtype.Text `json:"respond_key"`
+	AcceptedDay         pgtype.Date `json:"accepted_day"`
+}
+
+type TrialRun struct {
+	ID             uuid.UUID   `json:"id"`
+	CharacterID    uuid.UUID   `json:"character_id"`
+	Kind           string      `json:"kind"`
+	Seed           int64       `json:"seed"`
+	Params         []byte      `json:"params"`
+	IssueKey       string      `json:"issue_key"`
+	IssuedAt       time.Time   `json:"issued_at"`
+	ExpiresAt      time.Time   `json:"expires_at"`
+	SubmitKey      pgtype.Text `json:"submit_key"`
+	SubmittedAt    *time.Time  `json:"submitted_at"`
+	Claim          []byte      `json:"claim"`
+	Result         []byte      `json:"result"`
+	Verdict        pgtype.Text `json:"verdict"`
+	Reason         pgtype.Text `json:"reason"`
+	VerdictAt      *time.Time  `json:"verdict_at"`
+	CooldownUntil  *time.Time  `json:"cooldown_until"`
+	PassValidUntil *time.Time  `json:"pass_valid_until"`
+	ConsumedAt     *time.Time  `json:"consumed_at"`
+	ConsumedRef    pgtype.Text `json:"consumed_ref"`
 }
 
 type User struct {
@@ -305,15 +705,19 @@ type VipEntitlement struct {
 }
 
 type VipPointLedger struct {
-	ID             int64       `json:"id"`
-	UserID         uuid.UUID   `json:"user_id"`
-	Delta          int64       `json:"delta"`
-	PointsAfter    int64       `json:"points_after"`
-	Reason         string      `json:"reason"`
-	RefType        pgtype.Text `json:"ref_type"`
-	RefID          pgtype.Text `json:"ref_id"`
-	IdempotencyKey string      `json:"idempotency_key"`
-	CreatedAt      time.Time   `json:"created_at"`
+	ID               int64       `json:"id"`
+	UserID           uuid.UUID   `json:"user_id"`
+	Delta            int64       `json:"delta"`
+	PointsAfter      int64       `json:"points_after"`
+	Reason           string      `json:"reason"`
+	RefType          pgtype.Text `json:"ref_type"`
+	RefID            pgtype.Text `json:"ref_id"`
+	IdempotencyKey   string      `json:"idempotency_key"`
+	CreatedAt        time.Time   `json:"created_at"`
+	Source           string      `json:"source"`
+	ActivityID       pgtype.Text `json:"activity_id"`
+	GameDay          pgtype.Date `json:"game_day"`
+	ReversesLedgerID pgtype.Int8 `json:"reverses_ledger_id"`
 }
 
 type WorldDailyTotal struct {
@@ -328,6 +732,49 @@ type WorldDailyTotal struct {
 	ClosedAt            *time.Time  `json:"closed_at"`
 }
 
+type WorldEffect struct {
+	ID          int64      `json:"id"`
+	MilestoneID string     `json:"milestone_id"`
+	EffectIndex int16      `json:"effect_index"`
+	Kind        string     `json:"kind"`
+	DueAt       time.Time  `json:"due_at"`
+	DeadlineAt  *time.Time `json:"deadline_at"`
+	AppliedAt   *time.Time `json:"applied_at"`
+	FinalizedAt *time.Time `json:"finalized_at"`
+	Snapshot    []byte     `json:"snapshot"`
+	NoticedAt   *time.Time `json:"noticed_at"`
+}
+
+type WorldEvent struct {
+	EventID     string     `json:"event_id"`
+	MilestoneID string     `json:"milestone_id"`
+	StartedAt   time.Time  `json:"started_at"`
+	EndsAt      time.Time  `json:"ends_at"`
+	EndedAt     *time.Time `json:"ended_at"`
+}
+
+type WorldMilestoneOverride struct {
+	MilestoneID              string      `json:"milestone_id"`
+	ThresholdPointsPerActive pgtype.Int8 `json:"threshold_points_per_active"`
+	TargetDay                pgtype.Int4 `json:"target_day"`
+	ForceReach               bool        `json:"force_reach"`
+	Paused                   bool        `json:"paused"`
+	UpdatedBy                uuid.UUID   `json:"updated_by"`
+	UpdatedAt                time.Time   `json:"updated_at"`
+}
+
+type WorldMilestonesReached struct {
+	MilestoneID    string      `json:"milestone_id"`
+	Seq            int32       `json:"seq"`
+	ReachedAt      time.Time   `json:"reached_at"`
+	Reason         string      `json:"reason"`
+	ServerDay      int32       `json:"server_day"`
+	ProgressMilli  int64       `json:"progress_milli"`
+	ThresholdMilli int64       `json:"threshold_milli"`
+	TargetDay      int32       `json:"target_day"`
+	AdminUserID    pgtype.UUID `json:"admin_user_id"`
+}
+
 type WorldState struct {
 	ID                  int16       `json:"id"`
 	StartedAt           *time.Time  `json:"started_at"`
@@ -340,4 +787,5 @@ type WorldState struct {
 	PausedAt            *time.Time  `json:"paused_at"`
 	Version             int64       `json:"version"`
 	UpdatedAt           time.Time   `json:"updated_at"`
+	EraStartedAt        *time.Time  `json:"era_started_at"`
 }

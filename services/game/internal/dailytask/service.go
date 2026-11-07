@@ -14,6 +14,7 @@ import (
 	"tiendao/game/internal/economy"
 	"tiendao/game/internal/gameday"
 	"tiendao/game/internal/platform/postgres"
+	"tiendao/game/internal/vip"
 )
 
 var (
@@ -21,6 +22,7 @@ var (
 	ErrUnknownTask    = errors.New("dailytask: unknown task")
 	ErrNotComplete    = errors.New("dailytask: task not complete")
 	ErrAlreadyClaimed = errors.New("dailytask: reward already claimed")
+	ErrUseIncense     = errors.New("dailytask: incense is offered, not claimed")
 )
 
 // Record advances every task of `kind` for today. Call INSIDE the gameplay transaction that caused it.
@@ -45,9 +47,38 @@ func (c *Catalogue) Record(ctx context.Context, q *db.Queries, charID uuid.UUID,
 // View is a task with today's progress.
 type View struct {
 	Task
-	Progress int32 `json:"progress"`
-	Complete bool  `json:"complete"`
-	Claimed  bool  `json:"claimed"`
+	Progress  int32       `json:"progress"`
+	Complete  bool        `json:"complete"`
+	Claimed   bool        `json:"claimed"`
+	VIPPoints int64       `json:"vipPoints,omitempty"` // điểm duyên paid by this claim (0 when capped for the day)
+	Streak    *StreakView `json:"streak,omitempty"`    // incense tasks
+}
+
+// StreakView is the incense streak: Current is still alive today (0 = broken), NextPointsMilli is what the next
+// offering pays (today's if not offered yet, otherwise tomorrow's).
+type StreakView struct {
+	Current         int32 `json:"current"`
+	Best            int32 `json:"best"`
+	OfferedToday    bool  `json:"offeredToday"`
+	NextPointsMilli int64 `json:"nextPointsMilli"`
+}
+
+// StreakOf builds the streak view from a ritual_streaks row (nil = never offered). Pure.
+func StreakOf(t *Task, row *db.RitualStreak, now time.Time) *StreakView {
+	today := gameday.Of(now)
+	v := &StreakView{}
+	var last time.Time
+	if row != nil {
+		last = row.LastDay.Time
+		v.Current, v.Best = LiveStreak(last, row.Streak, today), row.Best
+	}
+	v.OfferedToday = !last.IsZero() && last.Equal(today)
+	if v.OfferedToday {
+		v.NextPointsMilli = t.StreakPoints(v.Current + 1)
+	} else {
+		v.NextPointsMilli = t.StreakPoints(NextStreak(last, v.Current, today))
+	}
+	return v
 }
 
 // Board is today's task list.
@@ -61,6 +92,7 @@ type Board struct {
 type Service struct {
 	Pool *pgxpool.Pool
 	Cat  *Catalogue
+	VIP  *vip.Table // nil → no điểm duyên (decision D: daily_task_claim)
 	Now  func() time.Time
 }
 
@@ -90,6 +122,15 @@ func (s *Service) Board(ctx context.Context, userID uuid.UUID) (Board, error) {
 			v.Progress = t.Target // visiting counts
 		}
 		v.Complete = v.Progress >= t.Target
+		if t.Kind == Incense {
+			var row *db.RitualStreak
+			if r, err := q.GetRitualStreak(ctx, ch.ID); err == nil {
+				row = &r
+			} else if !errors.Is(err, pgx.ErrNoRows) {
+				return Board{}, err
+			}
+			v.Streak = StreakOf(&t, row, now)
+		}
 		b.Tasks = append(b.Tasks, v)
 	}
 	return b, nil
@@ -100,6 +141,9 @@ func (s *Service) Claim(ctx context.Context, userID uuid.UUID, taskID string) (V
 	t, ok := s.Cat.Get(taskID)
 	if !ok {
 		return View{}, ErrUnknownTask
+	}
+	if t.Kind == Incense { // paid by the offering itself (POST /tasks/daily/incense)
+		return View{}, ErrUseIncense
 	}
 	var out View
 	err := postgres.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -131,19 +175,35 @@ func (s *Service) Claim(ctx context.Context, userID uuid.UUID, taskID string) (V
 		}
 		key := fmt.Sprintf("task:%s:%s", gameday.Of(now).Format("20060102"), t.ID)
 		ref := economy.Ref{Reason: "daily_task", Type: "daily_task", ID: t.ID, IdemKey: key}
+		// Global lock order (data-model §2.3): daily_task_progress → vip_accounts → currency_accounts → inventory_items.
+		// Điểm duyên first, then currencies, then items (the shop locks currency before inventory too; any reverse
+		// order could deadlock two transactions of one character).
+		var vipPts int64
+		if s.VIP != nil { // the claimed_at guard below makes this once per task-day; the ledger key mirrors the reward key
+			got, err := s.VIP.EarnLocked(ctx, q, userID, vip.ActDailyTask, vip.Ref{Type: "daily_task", ID: t.ID, IdemKey: key}, now)
+			if err != nil {
+				return fmt.Errorf("earn điểm duyên: %w", err)
+			}
+			vipPts = got.Points
+		}
+		for _, r := range t.Rewards {
+			if r.ItemID == "" {
+				if _, err := economy.Credit(ctx, q, ch.ID, r.Currency, r.Amount, ref); err != nil {
+					return err
+				}
+			}
+		}
 		for _, r := range t.Rewards {
 			if r.ItemID != "" {
 				if _, err := economy.GrantItem(ctx, q, ch.ID, r.ItemID, r.Quantity, ref); err != nil {
 					return err
 				}
-			} else if _, err := economy.Credit(ctx, q, ch.ID, r.Currency, r.Amount, ref); err != nil {
-				return err
 			}
 		}
 		if err := q.MarkDailyTaskClaimed(ctx, db.MarkDailyTaskClaimedParams{CharacterID: ch.ID, GameDay: day, TaskID: t.ID, ClaimedAt: &now}); err != nil {
 			return err
 		}
-		out = View{Task: *t, Progress: row.Progress, Complete: true, Claimed: true}
+		out = View{Task: *t, Progress: row.Progress, Complete: true, Claimed: true, VIPPoints: vipPts}
 		return nil
 	})
 	return out, err

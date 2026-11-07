@@ -1,0 +1,58 @@
+# Trao đổi vật phẩm (Phase 5.2) — plan §3.12, checklist §5.2, cot-truyen §5.5. Loaded by services/game/internal/trade;
+# cross-checked in content.LoadAll. Decisions: docs/decisions.md 2026-11-07 "Chủ dự án chốt trước Phase 4–5" (luật trao
+# đổi) and "Trao đổi vật phẩm (Phase 5.2)".
+#
+# Model: a GIFT (tặng — sender → receiver) or a SWAP (đổi — sender offers `give` lines for the receiver's `take` lines).
+# Nothing is escrowed: the receiver accepts and everything is re-checked and moved in ONE transaction through the
+# ledgers. Whoever receives something must pass `gates.receive`; whoever gives must pass `gates.send` (in a swap both
+# parties do both).
+#
+# Tradable = ONLY the assets listed below: linh thạch and plain materials. The loader + content cross-check refuse
+# anything else: pháp bảo (artifacts — tribulation odds), breakthrough requirement items (realms.yaml), anything the shop
+# sells (shop.yaml), cosmetics, items with any effect field, and every item whose items.yaml `tradable` is false. Every
+# items.yaml item with `tradable: true` MUST be listed here (one source of truth for the UI's "có thể trao đổi").
+#
+# value: stone-equivalent per unit, used for the daily value caps and the admin flow report (not a price; nothing is
+# sold here). Linh Thảo has no shop price (nothing consumes it yet): 5 ≈ bí cảnh 120 stones : 30 materials / 1.
+#
+# Relationship: any player may trade, but the daily RECEIVED-value cap depends on the relation at accept time —
+# đạo lữ > same faction > anyone else (stricter caps between strangers, where real-money deals happen).
+#
+# ⚠ Every number is a beta-tuning placeholder (owner sign-off), in particular the 5% stone fee (a small sink).
+version: 1
+
+assets:
+  - { id: spirit_stone, kind: currency, value: 1 }
+  - { id: linh_thao,    kind: item,     value: 5 }
+
+fee:
+  stone_fee_bp: 500          # 5% of the linh thạch GIVEN, paid on top by the giver and destroyed (sink) — ⚠ owner sign-off
+  min_stone_fee: 1           # any stone line pays at least 1
+
+offers:
+  expiry_hours: 24           # a pending offer lapses after 24 h (worker sweep + read-time filter)
+  max_lines_per_side: 4
+  max_quantity_per_line: 100000
+  max_open_outgoing: 5       # pending offers a character may have out at once
+  list_limit: 20             # incoming/outgoing rows shown
+  history_limit: 30
+
+daily:                       # per character per game day (UTC+7)
+  offers_per_day: 5          # offers CREATED (counted at creation, even if later declined/cancelled)
+  completed_per_day: 5       # trades accepted where the character is a party (either side)
+  sent_value_per_day: 1500   # value a character may give away per day (stone-equivalent, fee excluded)
+  received_value_per_day:    # value a character may receive per day, by relation with the giver
+    stranger: 300
+    faction: 600
+    dao_lu: 1000
+
+gates:
+  send:    { min_account_age_days: 3, min_character_age_days: 1, min_tier: 1 }
+  receive: { min_account_age_days: 7, min_character_age_days: 3, min_tier: 2 }   # new accounts/characters cannot receive
+
+alerts:                      # GET /admin/trades/flows — warnings only, nothing auto-blocks
+  window_days: 7
+  funnel_min_senders: 3      # receivers fed by ≥ 3 distinct characters
+  pair_min_value: 600        # pairs moving ≥ 600 value in the window…
+  lopsided_min_bp: 9000      # …≥ 90% of it in one direction
+  list_limit: 50

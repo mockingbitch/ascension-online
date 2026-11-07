@@ -8,7 +8,17 @@ export type WindowState =
 	| { kind: 'vip' }
 	| { kind: 'notifications' }
 	| { kind: 'chat' } // mobile: the chat panel is docked on desktop
-	| { kind: 'profile'; characterId: string; name: string; stageId: string; messageId?: number };
+	| {
+			kind: 'profile';
+			characterId: string;
+			name: string;
+			stageId: string;
+			messageId?: number;
+			/** equipped cosmetics carried by the row/message (display only) */
+			avatarFrameId?: string;
+			titleId?: string;
+			nameFx?: string;
+	  };
 
 export type WindowKind = WindowState['kind'];
 

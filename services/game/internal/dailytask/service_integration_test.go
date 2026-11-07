@@ -42,7 +42,7 @@ func newWorld(t *testing.T) *world {
 	w := &world{pool: pool, cb: cb, clock: &now}
 	nowFn := func() time.Time { return *w.clock }
 	w.cult = &cultivation.Service{Pool: pool, Realms: cb.Realms, Contribution: cb.Contribution, VIP: cb.VIP, Tasks: cb.DailyTasks, Now: nowFn}
-	w.tasks = &dailytask.Service{Pool: pool, Cat: cb.DailyTasks, Now: nowFn}
+	w.tasks = &dailytask.Service{Pool: pool, Cat: cb.DailyTasks, VIP: cb.VIP, Now: nowFn}
 	w.vip = &vip.Service{Pool: pool, Table: cb.VIP, Now: nowFn}
 	w.user = uuid.New()
 	if _, err := pool.Exec(ctx, "INSERT INTO users (id, email) VALUES ($1, $2)", w.user, w.user.String()+"@t"); err != nil {
@@ -107,8 +107,8 @@ func TestSettleTaskCountsOnlySpacedSettlements(t *testing.T) {
 			t.Fatalf("van_cong progress %d", v.Progress) // the 10s settlement must not count
 		}
 	}
-	if _, err := w.tasks.Claim(ctx, w.user, "trung_kich"); !errors.Is(err, dailytask.ErrNotComplete) {
-		t.Fatalf("breakthrough task should be incomplete: %v", err)
+	if _, err := w.tasks.Claim(ctx, w.user, "nghe_giang"); !errors.Is(err, dailytask.ErrNotComplete) {
+		t.Fatalf("lecture task should be incomplete: %v", err)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestVIPDailyGift(t *testing.T) {
 	if _, err := w.vip.ClaimDailyGift(ctx, w.user, *w.clock); !errors.Is(err, vip.ErrNoGift) {
 		t.Fatalf("VIP0 gift: %v", err)
 	}
-	if _, err := w.vip.Grant(ctx, nil, w.user, 50, "promo", "", "", "grant-key-0001"); err != nil { // → VIP 2
+	if _, err := w.vip.Grant(ctx, nil, w.user, 150, "promo", "", "", "grant-key-0001"); err != nil { // → Tiên Duyên 2
 		t.Fatal(err)
 	}
 	g, err := w.vip.ClaimDailyGift(ctx, w.user, *w.clock)
@@ -171,5 +171,42 @@ func TestVIPDailyGift(t *testing.T) {
 	st, _ := w.vip.Status(ctx, w.user)
 	if !st.GiftClaimedToday {
 		t.Fatal("status should show claimed")
+	}
+}
+
+// Decision D: each task claim pays daily_task_claim điểm duyên once; online settles ≥ 1 h apart pay
+// online_cultivation at most daily_max_times per game day.
+func TestTaskClaimAndSettleEarnDiemDuyen(t *testing.T) {
+	w, ctx := newWorld(t), context.Background()
+	duyen := func(activity string) int64 {
+		return w.scalar(t, "SELECT COALESCE(SUM(delta),0) FROM vip_point_ledger WHERE user_id=$1 AND activity_id=$2", w.user, activity)
+	}
+	v, err := w.tasks.Claim(ctx, w.user, "diem_danh")
+	if err != nil || v.VIPPoints != 1 {
+		t.Fatalf("claim: %+v %v", v, err)
+	}
+	if _, err := w.tasks.Claim(ctx, w.user, "diem_danh"); !errors.Is(err, dailytask.ErrAlreadyClaimed) {
+		t.Fatalf("second claim: %v", err)
+	}
+	if got := duyen(vip.ActDailyTask); got != 1 {
+		t.Fatalf("task điểm duyên %d", got)
+	}
+	// 5 settles: 30 min (too soon), then four ≥ 1 h apart → capped at 3.
+	for i, gap := range []time.Duration{30 * time.Minute, 2 * time.Hour, 70 * time.Minute, 61 * time.Minute, 3 * time.Hour} {
+		w.advance(gap)
+		if _, err := w.cult.Settle(ctx, w.user, "earn-settle-"+string(rune('a'+i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Replaying a settle key changes nothing.
+	if _, err := w.cult.Settle(ctx, w.user, "earn-settle-b"); err != nil {
+		t.Fatal(err)
+	}
+	if got := duyen(vip.ActOnlineCultivation); got != 3 {
+		t.Fatalf("online cultivation điểm duyên %d, want 3", got)
+	}
+	st, err := w.vip.Status(ctx, w.user)
+	if err != nil || st.Points != 4 || st.EarnedToday != 4 {
+		t.Fatalf("status %+v %v", st, err)
 	}
 }

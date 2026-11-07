@@ -1,0 +1,40 @@
+# Nạp Tiên Duyên — top-up packages and payment-framework settings (Phase 4; docs/decisions.md 2026-11-07 "Chủ dự án
+# chốt trước Phase 4–5" + "Khung nạp Tiên Duyên"). Loaded by services/game/internal/payment; cross-checked with vip.yaml
+# in content.LoadAll.
+#
+# FAIRNESS: a top-up only buys điểm duyên at the vip.yaml rate (points_per_1000_vnd: 1.000đ = 10 điểm duyên). Points
+# are NOT authored here: every package's points = vip.PointsForVND(amount_vnd), computed by the loader. No bonus points,
+# no first-top-up doubling, no odds/rate/rank items (economy-balance rules; non-negotiable 3). A bonus scheme needs an
+# explicit owner decision first.
+#
+# Only a signature-verified provider webhook (or the reconciliation job asking the provider) credits an order. The
+# browser's return URL never credits anything.
+#
+# Providers: `sandbox` is the simulated gateway (HMAC-SHA256 signed webhooks, dev "pay now / fail" page); the loader
+# refuses it for prod. Real adapters (payos / vnpay / momo) are listed disabled until a contract + legal review exist;
+# enabling a provider with no adapter in internal/payment fails the loader.
+version: 1
+currency: VND
+min_amount_vnd: 10000              # per order
+max_amount_vnd: 2000000            # per order (typo guard; 20,000 điểm duyên ≤ vip.MaxGrantDelta)
+order_expiry_minutes: 30           # an unpaid order expires after this (worker sweep)
+max_open_orders_per_user: 3        # created/pending orders not yet expired
+reconcile_after_minutes: 5         # pending orders older than this are queried at the provider
+reconcile_every_minutes: 5         # min gap between two queries of the same order
+reconcile_late_hours: 24           # expired orders are still queried this long (a late payment is honoured)
+sweep_batch: 100                   # orders per expiry / reconcile pass (bounded worker batch)
+
+providers:
+  - { id: sandbox, name: Cổng thử nghiệm, enabled: true,  envs: [dev, staging] }
+  - { id: payos,   name: PayOS,           enabled: false, envs: [dev, staging, prod] }   # TODO: adapter after contract + legal review
+  - { id: vnpay,   name: VNPay,           enabled: false, envs: [dev, staging, prod] }
+  - { id: momo,    name: MoMo,            enabled: false, envs: [dev, staging, prod] }
+
+# Strictly increasing amounts, multiples of 1.000đ. Names are display only.
+packages:
+  - { id: so_duyen,    name: Sơ Duyên,    amount_vnd: 20000 }
+  - { id: thien_duyen, name: Thiện Duyên, amount_vnd: 50000 }
+  - { id: ket_duyen,   name: Kết Duyên,   amount_vnd: 100000 }
+  - { id: tham_duyen,  name: Thâm Duyên,  amount_vnd: 200000 }
+  - { id: dai_duyen,   name: Đại Duyên,   amount_vnd: 500000 }
+  - { id: hong_duyen,  name: Hồng Duyên,  amount_vnd: 1000000 }

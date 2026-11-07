@@ -1,11 +1,18 @@
 <script lang="ts">
 	import Icon from '$lib/components/Icon.svelte';
 	import { progressRatio } from '$lib/game/format';
+	import type { Snippet } from 'svelte';
 
-	import type { VipStatus, VipTier } from '$lib/game/types';
+	import type { VipActivity, VipActivityToday, VipStatus, VipTiersResponse } from '$lib/game/types';
 
-	/** compact: inside the game window (no page hero). */
-	let { tiers, status, compact = false }: { tiers: VipTier[]; status: VipStatus | null; compact?: boolean } = $props();
+	/** compact: inside the game window (no page hero). topup: the nạp panel, rendered under the current level. */
+	let {
+		info,
+		status,
+		compact = false,
+		topup
+	}: { info: VipTiersResponse; status: VipStatus | null; compact?: boolean; topup?: Snippet } = $props();
+	const tiers = $derived(info.tiers);
 
 	const perkLabel = (p: string) => {
 		const [k, id] = p.split(':');
@@ -30,15 +37,22 @@
 	const toNext = $derived(
 		status && nextReq !== undefined ? progressRatio(status.points - curReq, nextReq - curReq) : 1
 	);
+	const nextName = $derived(tiers.find((t) => t.tier === status?.nextTier)?.benefits.name ?? '');
+	// Earning sources: today's progress when signed in, the static table otherwise.
+	const activities = $derived<(VipActivity & Partial<VipActivityToday>)[]>(status?.activities.length ? status.activities : info.activities);
+	const earnCap = $derived(status?.earnDailyCap ?? info.earnDailyCap);
+	const earnedRatio = $derived(status ? progressRatio(status.earnedToday, earnCap) : 0);
+	const vnd = (n: number) => n.toLocaleString('vi-VN');
 </script>
 
 {#if !compact}
 <header class="mb-8 text-center">
 	<p class="eyebrow">Tiên Duyên Lệnh</p>
-	<h1 class="mt-2 text-5xl font-bold text-gold-300">Đặc quyền VIP</h1>
+	<h1 class="mt-2 text-5xl font-bold text-gold-300">{info.displayName}</h1>
 	<p class="mx-auto mt-3 max-w-2xl text-sm text-mist-300">
-		VIP kéo dài thời gian bế quan và mở các đặc quyền tiện ích, ngoại hình. VIP <strong class="text-mist-100">không</strong> tăng tốc
-		độ tu luyện, tỉ lệ đột phá hay điểm Thiên Bảng.
+		Tích {info.pointName} qua tu luyện, nghe giảng, nhiệm vụ ngày — cấp {info.displayName} là vĩnh viễn. Tiên Duyên kéo dài thời gian bế
+		quan và mở các đặc quyền tiện ích, ngoại hình, nhưng <strong class="text-mist-100">không</strong> tăng tốc độ tu luyện, tỉ lệ đột phá
+		hay điểm Thiên Bảng.
 	</p>
 </header>
 {:else}
@@ -48,7 +62,7 @@
 {/if}
 
 {#if status}
-	<section class="panel mx-auto mb-8 flex max-w-3xl flex-col items-center gap-6 p-6 sm:flex-row" aria-label="Cấp VIP hiện tại">
+	<section class="panel mx-auto mb-8 flex max-w-3xl flex-col items-center gap-6 p-6 sm:flex-row" aria-label="Cấp Tiên Duyên hiện tại">
 		<div class="seal grid size-28 shrink-0 place-items-center rounded-full text-gold-300">
 			<div class="text-center">
 				<Icon name="seal" size={30} class="mx-auto" />
@@ -59,20 +73,60 @@
 			<p class="eyebrow">Cấp hiện tại</p>
 			<p class="mt-1 font-display text-3xl font-bold text-gold-300">{status.benefits.name}</p>
 			<p class="mt-1 text-sm text-mist-300">
-				{status.points.toLocaleString('vi-VN')} điểm · Bế quan tối đa
+				{status.points.toLocaleString('vi-VN')} {status.pointName} · Bế quan tối đa
 				<span class="font-semibold text-mist-100">{status.benefits.offlineCapHours} canh giờ</span>
 			</p>
 			{#if status.nextTier !== undefined}
-				<div class="mt-3 h-2 bg-ink-950" role="progressbar" aria-label="Tiến độ lên VIP {status.nextTier}" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(toNext * 100)}>
+				<div class="mt-3 h-2 bg-ink-950" role="progressbar" aria-label="Tiến độ lên {nextName}" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(toNext * 100)}>
 					<div class="h-full bg-gradient-to-r from-gold-700 to-gold-300" style:width="{toNext * 100}%"></div>
 				</div>
 				<p class="mt-2 text-sm text-mist-300">
-					Còn <span class="font-semibold text-mist-100 tabular-nums">{status.pointsToNext?.toLocaleString('vi-VN')}</span> điểm để lên VIP {status.nextTier}
+					Còn <span class="font-semibold text-mist-100 tabular-nums">{status.pointsToNext?.toLocaleString('vi-VN')}</span> {status.pointName} để lên {nextName}
 				</p>
 			{/if}
 		</div>
 	</section>
 {/if}
+
+{@render topup?.()}
+
+<section class="panel mx-auto mb-8 max-w-5xl p-4" aria-labelledby="earn-title">
+	<div class="flex flex-wrap items-baseline justify-between gap-2">
+		<h2 id="earn-title" class="panel-title">Kết duyên mỗi ngày</h2>
+		{#if status}
+			<p class="text-sm text-mist-300">
+				Hôm nay <span class="font-semibold text-mist-100 tabular-nums">{status.earnedToday} / {earnCap}</span> {info.pointName}
+			</p>
+		{:else}
+			<p class="text-sm text-mist-300">Tối đa <span class="tabular-nums text-mist-100">{earnCap}</span> {info.pointName} mỗi ngày</p>
+		{/if}
+	</div>
+	{#if status}
+		<div class="mt-2 h-1.5 bg-ink-950" role="progressbar" aria-label="{info.pointName} hôm nay" aria-valuemin={0} aria-valuemax={earnCap} aria-valuenow={status.earnedToday}>
+			<div class="h-full bg-gradient-to-r from-jade-500 to-jade-300" style:width="{earnedRatio * 100}%"></div>
+		</div>
+	{/if}
+	<ul class="mt-3 grid gap-x-6 gap-y-1 sm:grid-cols-2">
+		{#each activities as a (a.id)}
+			{@const done = a.timesToday ?? 0}
+			<li class="earn flex items-center justify-between gap-3 py-1.5 text-sm" class:is-off={!a.live} class:is-full={a.live && done >= a.dailyMaxTimes}>
+				<span class="text-mist-100">{a.name}</span>
+				<span class="tabular-nums text-mist-300">
+					{#if !a.live}
+						<span class="text-mist-500">sắp mở</span>
+					{:else if status}
+						{done}/{a.dailyMaxTimes} lần · +{a.points}
+					{:else}
+						+{a.points} × {a.dailyMaxTimes}/ngày
+					{/if}
+				</span>
+			</li>
+		{/each}
+	</ul>
+	<p class="mt-3 text-xs text-mist-500">
+		Nạp: {vnd(1000)}đ = {info.pointsPer1000Vnd} {info.pointName}, không tính vào trần {earnCap} {info.pointName}/ngày của hoạt động. Hoàn tiền sẽ trừ đúng số {info.pointName} đã cộng, cấp có thể giảm.
+	</p>
+</section>
 
 <section class="panel mx-auto max-w-5xl p-2 sm:p-4" aria-labelledby="tiers-title">
 	<h2 id="tiers-title" class="panel-title px-2 pt-2">Các cấp Tiên Duyên</h2>
@@ -85,7 +139,7 @@
 					{t.benefits.name}
 					{#if cur === t.tier}<span class="ml-1 align-middle font-sans text-xs font-medium tracking-wider text-gold-300 uppercase">· hiện tại</span>{/if}
 				</span>
-				<span class="text-sm text-mist-300 sm:text-right"><span class="sm:hidden">Điểm:&nbsp;</span><span class="tabular-nums text-mist-100">{t.pointsRequired.toLocaleString('vi-VN')}</span></span>
+				<span class="text-sm text-mist-300 sm:text-right"><span class="sm:hidden">Điểm duyên:&nbsp;</span><span class="tabular-nums text-mist-100">{t.pointsRequired.toLocaleString('vi-VN')}</span></span>
 				<span class="col-start-2 text-sm text-mist-300 sm:col-start-auto sm:text-right">
 					<Icon name="clock" size={14} class="mr-1 inline align-[-2px] text-jade-300" /><span class="tabular-nums text-mist-100">{t.benefits.offlineCapHours}h</span>
 					{#if t.benefits.dailyGift}<span class="ml-3 sm:hidden"><Icon name="gift" size={14} class="mr-1 inline align-[-2px] text-gold-500" />{t.benefits.dailyGift}</span>{/if}
@@ -106,6 +160,15 @@
 			0 0 0 6px var(--color-ink-950),
 			0 0 0 7px color-mix(in oklab, var(--color-gold-500) 50%, transparent),
 			0 0 30px -4px color-mix(in oklab, var(--color-gold-300) 45%, transparent);
+	}
+	.earn {
+		border-bottom: 1px solid color-mix(in oklab, var(--color-gold-500) 10%, transparent);
+	}
+	.earn.is-off {
+		opacity: 0.6;
+	}
+	.earn.is-full span:last-child {
+		color: var(--color-jade-300);
 	}
 	.tier-seal {
 		color: var(--color-mist-500);

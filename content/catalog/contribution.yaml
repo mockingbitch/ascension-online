@@ -15,6 +15,7 @@ buckets:                              # decision #8: caps kept
 
 idle:
   rate_milli_per_hour: 2083           # 50 points / 24 h of eligible time; window = Tiên Duyên offline cap (8 h at 0)
+  max_buff_bonus_bp: 2000             # cap on timed rate buffs (gieo quẻ, data-model §9.4); idle bucket cap still applies
 
 speed_items:                          # decision #5
   daily_cap_points: 10                # Σ instant points from speed items used per character per game day

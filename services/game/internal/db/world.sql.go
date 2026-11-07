@@ -51,6 +51,39 @@ func (q *Queries) AuditCreditsForDay(ctx context.Context, gameDay pgtype.Date) (
 	return items, nil
 }
 
+const claimFactionEffect = `-- name: ClaimFactionEffect :one
+
+SELECT id, milestone_id, effect_index, kind, due_at, deadline_at, applied_at, finalized_at, snapshot, noticed_at FROM world_effects
+WHERE kind IN ('split_faction', 'migrate_faction')
+  AND (noticed_at IS NULL
+       OR (applied_at IS NULL AND due_at <= $1)
+       OR (kind = 'split_faction' AND applied_at IS NOT NULL AND finalized_at IS NULL AND deadline_at <= $1))
+ORDER BY id
+LIMIT 1
+FOR UPDATE SKIP LOCKED
+`
+
+// ───────────── Faction effects (Phase 2.2, §5.6 step 5) ─────────────
+// Next faction effect with work to do at @now (single runner under the world advisory lock; SKIP LOCKED anyway):
+// notice not announced yet, due and not applied, or a split past its deadline and not finalized.
+func (q *Queries) ClaimFactionEffect(ctx context.Context, now time.Time) (WorldEffect, error) {
+	row := q.db.QueryRow(ctx, claimFactionEffect, now)
+	var i WorldEffect
+	err := row.Scan(
+		&i.ID,
+		&i.MilestoneID,
+		&i.EffectIndex,
+		&i.Kind,
+		&i.DueAt,
+		&i.DeadlineAt,
+		&i.AppliedAt,
+		&i.FinalizedAt,
+		&i.Snapshot,
+		&i.NoticedAt,
+	)
+	return i, err
+}
+
 const closeWorldDay = `-- name: CloseWorldDay :exec
 UPDATE world_daily_totals SET median_position_milli = $1, closed_at = $2
 WHERE game_day = $3 AND closed_at IS NULL
@@ -65,6 +98,23 @@ type CloseWorldDayParams struct {
 func (q *Queries) CloseWorldDay(ctx context.Context, arg CloseWorldDayParams) error {
 	_, err := q.db.Exec(ctx, closeWorldDay, arg.MedianPositionMilli, arg.ClosedAt, arg.GameDay)
 	return err
+}
+
+const endWorldEvent = `-- name: EndWorldEvent :execrows
+UPDATE world_events SET ended_at = $1 WHERE event_id = $2 AND ended_at IS NULL
+`
+
+type EndWorldEventParams struct {
+	EndedAt *time.Time `json:"ended_at"`
+	EventID string     `json:"event_id"`
+}
+
+func (q *Queries) EndWorldEvent(ctx context.Context, arg EndWorldEventParams) (int64, error) {
+	result, err := q.db.Exec(ctx, endWorldEvent, arg.EndedAt, arg.EventID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const foldWorldProgress = `-- name: FoldWorldProgress :exec
@@ -95,6 +145,25 @@ func (q *Queries) FoldWorldProgress(ctx context.Context, arg FoldWorldProgressPa
 	return err
 }
 
+const getMilestoneOverride = `-- name: GetMilestoneOverride :one
+SELECT milestone_id, threshold_points_per_active, target_day, force_reach, paused, updated_by, updated_at FROM world_milestone_overrides WHERE milestone_id = $1
+`
+
+func (q *Queries) GetMilestoneOverride(ctx context.Context, milestoneID string) (WorldMilestoneOverride, error) {
+	row := q.db.QueryRow(ctx, getMilestoneOverride, milestoneID)
+	var i WorldMilestoneOverride
+	err := row.Scan(
+		&i.MilestoneID,
+		&i.ThresholdPointsPerActive,
+		&i.TargetDay,
+		&i.ForceReach,
+		&i.Paused,
+		&i.UpdatedBy,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getWorldDailyTotal = `-- name: GetWorldDailyTotal :one
 SELECT game_day, credited_milli, catch_up_bonus_milli, countable_milli, dau, per_capita_milli, median_position_milli, computed_at, closed_at FROM world_daily_totals WHERE game_day = $1
 `
@@ -116,8 +185,30 @@ func (q *Queries) GetWorldDailyTotal(ctx context.Context, gameDay pgtype.Date) (
 	return i, err
 }
 
+const getWorldEffect = `-- name: GetWorldEffect :one
+SELECT id, milestone_id, effect_index, kind, due_at, deadline_at, applied_at, finalized_at, snapshot, noticed_at FROM world_effects WHERE id = $1
+`
+
+func (q *Queries) GetWorldEffect(ctx context.Context, id int64) (WorldEffect, error) {
+	row := q.db.QueryRow(ctx, getWorldEffect, id)
+	var i WorldEffect
+	err := row.Scan(
+		&i.ID,
+		&i.MilestoneID,
+		&i.EffectIndex,
+		&i.Kind,
+		&i.DueAt,
+		&i.DeadlineAt,
+		&i.AppliedAt,
+		&i.FinalizedAt,
+		&i.Snapshot,
+		&i.NoticedAt,
+	)
+	return i, err
+}
+
 const getWorldState = `-- name: GetWorldState :one
-SELECT id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at FROM world_state WHERE id = 1
+SELECT id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at, era_started_at FROM world_state WHERE id = 1
 `
 
 func (q *Queries) GetWorldState(ctx context.Context) (WorldState, error) {
@@ -135,12 +226,38 @@ func (q *Queries) GetWorldState(ctx context.Context) (WorldState, error) {
 		&i.PausedAt,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.EraStartedAt,
+	)
+	return i, err
+}
+
+const getWorldStateForShare = `-- name: GetWorldStateForShare :one
+SELECT id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at, era_started_at FROM world_state WHERE id = 1 FOR SHARE
+`
+
+// Join/switch read the era under FOR SHARE so the world tick can't change it mid-transaction (L2).
+func (q *Queries) GetWorldStateForShare(ctx context.Context) (WorldState, error) {
+	row := q.db.QueryRow(ctx, getWorldStateForShare)
+	var i WorldState
+	err := row.Scan(
+		&i.ID,
+		&i.StartedAt,
+		&i.EraID,
+		&i.LastMilestoneID,
+		&i.ProgressMilli,
+		&i.ClosedThroughDay,
+		&i.MedianPositionMilli,
+		&i.MedianGameDay,
+		&i.PausedAt,
+		&i.Version,
+		&i.UpdatedAt,
+		&i.EraStartedAt,
 	)
 	return i, err
 }
 
 const getWorldStateForUpdate = `-- name: GetWorldStateForUpdate :one
-SELECT id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at FROM world_state WHERE id = 1 FOR UPDATE
+SELECT id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at, era_started_at FROM world_state WHERE id = 1 FOR UPDATE
 `
 
 func (q *Queries) GetWorldStateForUpdate(ctx context.Context) (WorldState, error) {
@@ -158,8 +275,100 @@ func (q *Queries) GetWorldStateForUpdate(ctx context.Context) (WorldState, error
 		&i.PausedAt,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.EraStartedAt,
 	)
 	return i, err
+}
+
+const insertMilestoneReached = `-- name: InsertMilestoneReached :one
+INSERT INTO world_milestones_reached (milestone_id, seq, reached_at, reason, server_day, progress_milli,
+                                      threshold_milli, target_day, admin_user_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+        $9)
+ON CONFLICT DO NOTHING
+RETURNING milestone_id
+`
+
+type InsertMilestoneReachedParams struct {
+	MilestoneID    string      `json:"milestone_id"`
+	Seq            int32       `json:"seq"`
+	ReachedAt      time.Time   `json:"reached_at"`
+	Reason         string      `json:"reason"`
+	ServerDay      int32       `json:"server_day"`
+	ProgressMilli  int64       `json:"progress_milli"`
+	ThresholdMilli int64       `json:"threshold_milli"`
+	TargetDay      int32       `json:"target_day"`
+	AdminUserID    pgtype.UUID `json:"admin_user_id"`
+}
+
+// W1: idempotent. pgx.ErrNoRows = already reached (or the seq is taken) → do nothing.
+func (q *Queries) InsertMilestoneReached(ctx context.Context, arg InsertMilestoneReachedParams) (string, error) {
+	row := q.db.QueryRow(ctx, insertMilestoneReached,
+		arg.MilestoneID,
+		arg.Seq,
+		arg.ReachedAt,
+		arg.Reason,
+		arg.ServerDay,
+		arg.ProgressMilli,
+		arg.ThresholdMilli,
+		arg.TargetDay,
+		arg.AdminUserID,
+	)
+	var milestone_id string
+	err := row.Scan(&milestone_id)
+	return milestone_id, err
+}
+
+const insertWorldEffect = `-- name: InsertWorldEffect :exec
+INSERT INTO world_effects (milestone_id, effect_index, kind, due_at, deadline_at, applied_at, snapshot)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (milestone_id, effect_index) DO NOTHING
+`
+
+type InsertWorldEffectParams struct {
+	MilestoneID string     `json:"milestone_id"`
+	EffectIndex int16      `json:"effect_index"`
+	Kind        string     `json:"kind"`
+	DueAt       time.Time  `json:"due_at"`
+	DeadlineAt  *time.Time `json:"deadline_at"`
+	AppliedAt   *time.Time `json:"applied_at"`
+	Snapshot    []byte     `json:"snapshot"`
+}
+
+func (q *Queries) InsertWorldEffect(ctx context.Context, arg InsertWorldEffectParams) error {
+	_, err := q.db.Exec(ctx, insertWorldEffect,
+		arg.MilestoneID,
+		arg.EffectIndex,
+		arg.Kind,
+		arg.DueAt,
+		arg.DeadlineAt,
+		arg.AppliedAt,
+		arg.Snapshot,
+	)
+	return err
+}
+
+const insertWorldEvent = `-- name: InsertWorldEvent :exec
+INSERT INTO world_events (event_id, milestone_id, started_at, ends_at)
+VALUES ($1, $2, $3, $4)
+ON CONFLICT (event_id) DO NOTHING
+`
+
+type InsertWorldEventParams struct {
+	EventID     string    `json:"event_id"`
+	MilestoneID string    `json:"milestone_id"`
+	StartedAt   time.Time `json:"started_at"`
+	EndsAt      time.Time `json:"ends_at"`
+}
+
+func (q *Queries) InsertWorldEvent(ctx context.Context, arg InsertWorldEventParams) error {
+	_, err := q.db.Exec(ctx, insertWorldEvent,
+		arg.EventID,
+		arg.MilestoneID,
+		arg.StartedAt,
+		arg.EndsAt,
+	)
+	return err
 }
 
 const listClosedDaysAfter = `-- name: ListClosedDaysAfter :many
@@ -198,10 +407,329 @@ func (q *Queries) ListClosedDaysAfter(ctx context.Context, after pgtype.Date) ([
 	return items, nil
 }
 
+const listDueWorldEvents = `-- name: ListDueWorldEvents :many
+SELECT event_id, milestone_id, started_at, ends_at, ended_at FROM world_events WHERE ended_at IS NULL AND ends_at <= $1 ORDER BY ends_at, event_id LIMIT $2
+`
+
+type ListDueWorldEventsParams struct {
+	Now time.Time `json:"now"`
+	Lim int32     `json:"lim"`
+}
+
+// Events whose duration has passed and that are not ended yet (bounded per tick).
+func (q *Queries) ListDueWorldEvents(ctx context.Context, arg ListDueWorldEventsParams) ([]WorldEvent, error) {
+	rows, err := q.db.Query(ctx, listDueWorldEvents, arg.Now, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorldEvent{}
+	for rows.Next() {
+		var i WorldEvent
+		if err := rows.Scan(
+			&i.EventID,
+			&i.MilestoneID,
+			&i.StartedAt,
+			&i.EndsAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMilestoneOverrides = `-- name: ListMilestoneOverrides :many
+SELECT milestone_id, threshold_points_per_active, target_day, force_reach, paused, updated_by, updated_at FROM world_milestone_overrides ORDER BY milestone_id
+`
+
+func (q *Queries) ListMilestoneOverrides(ctx context.Context) ([]WorldMilestoneOverride, error) {
+	rows, err := q.db.Query(ctx, listMilestoneOverrides)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorldMilestoneOverride{}
+	for rows.Next() {
+		var i WorldMilestoneOverride
+		if err := rows.Scan(
+			&i.MilestoneID,
+			&i.ThresholdPointsPerActive,
+			&i.TargetDay,
+			&i.ForceReach,
+			&i.Paused,
+			&i.UpdatedBy,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMilestonesReached = `-- name: ListMilestonesReached :many
+SELECT milestone_id, seq, reached_at, reason, server_day, progress_milli, threshold_milli, target_day, admin_user_id FROM world_milestones_reached ORDER BY seq
+`
+
+func (q *Queries) ListMilestonesReached(ctx context.Context) ([]WorldMilestonesReached, error) {
+	rows, err := q.db.Query(ctx, listMilestonesReached)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorldMilestonesReached{}
+	for rows.Next() {
+		var i WorldMilestonesReached
+		if err := rows.Scan(
+			&i.MilestoneID,
+			&i.Seq,
+			&i.ReachedAt,
+			&i.Reason,
+			&i.ServerDay,
+			&i.ProgressMilli,
+			&i.ThresholdMilli,
+			&i.TargetDay,
+			&i.AdminUserID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOpenWorldEvents = `-- name: ListOpenWorldEvents :many
+SELECT event_id, milestone_id, started_at, ends_at, ended_at FROM world_events WHERE ended_at IS NULL ORDER BY started_at, event_id
+`
+
+func (q *Queries) ListOpenWorldEvents(ctx context.Context) ([]WorldEvent, error) {
+	rows, err := q.db.Query(ctx, listOpenWorldEvents)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorldEvent{}
+	for rows.Next() {
+		var i WorldEvent
+		if err := rows.Scan(
+			&i.EventID,
+			&i.MilestoneID,
+			&i.StartedAt,
+			&i.EndsAt,
+			&i.EndedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingWorldEffects = `-- name: ListPendingWorldEffects :many
+SELECT id, milestone_id, effect_index, kind, due_at, deadline_at, applied_at, finalized_at, snapshot, noticed_at FROM world_effects WHERE applied_at IS NULL OR (kind = 'split_faction' AND finalized_at IS NULL)
+ORDER BY due_at, id LIMIT $1
+`
+
+func (q *Queries) ListPendingWorldEffects(ctx context.Context, lim int32) ([]WorldEffect, error) {
+	rows, err := q.db.Query(ctx, listPendingWorldEffects, lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorldEffect{}
+	for rows.Next() {
+		var i WorldEffect
+		if err := rows.Scan(
+			&i.ID,
+			&i.MilestoneID,
+			&i.EffectIndex,
+			&i.Kind,
+			&i.DueAt,
+			&i.DeadlineAt,
+			&i.AppliedAt,
+			&i.FinalizedAt,
+			&i.Snapshot,
+			&i.NoticedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentWorldTotals = `-- name: ListRecentWorldTotals :many
+SELECT game_day, credited_milli, catch_up_bonus_milli, countable_milli, dau, per_capita_milli, median_position_milli, computed_at, closed_at FROM world_daily_totals ORDER BY game_day DESC LIMIT $1
+`
+
+func (q *Queries) ListRecentWorldTotals(ctx context.Context, lim int32) ([]WorldDailyTotal, error) {
+	rows, err := q.db.Query(ctx, listRecentWorldTotals, lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WorldDailyTotal{}
+	for rows.Next() {
+		var i WorldDailyTotal
+		if err := rows.Scan(
+			&i.GameDay,
+			&i.CreditedMilli,
+			&i.CatchUpBonusMilli,
+			&i.CountableMilli,
+			&i.Dau,
+			&i.PerCapitaMilli,
+			&i.MedianPositionMilli,
+			&i.ComputedAt,
+			&i.ClosedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markWorldEffectApplied = `-- name: MarkWorldEffectApplied :exec
+UPDATE world_effects
+SET applied_at = $1,
+    deadline_at = CASE WHEN deadline_at IS NULL THEN NULL ELSE GREATEST(deadline_at, $2) END
+WHERE id = $3 AND applied_at IS NULL
+`
+
+type MarkWorldEffectAppliedParams struct {
+	AppliedAt     *time.Time `json:"applied_at"`
+	MinDeadlineAt *time.Time `json:"min_deadline_at"`
+	ID            int64      `json:"id"`
+}
+
+// deadline_at only ever moves later: a split applied late still gets its full choose window (H1).
+func (q *Queries) MarkWorldEffectApplied(ctx context.Context, arg MarkWorldEffectAppliedParams) error {
+	_, err := q.db.Exec(ctx, markWorldEffectApplied, arg.AppliedAt, arg.MinDeadlineAt, arg.ID)
+	return err
+}
+
+const markWorldEffectFinalized = `-- name: MarkWorldEffectFinalized :exec
+UPDATE world_effects SET finalized_at = $1 WHERE id = $2 AND finalized_at IS NULL
+`
+
+type MarkWorldEffectFinalizedParams struct {
+	FinalizedAt *time.Time `json:"finalized_at"`
+	ID          int64      `json:"id"`
+}
+
+func (q *Queries) MarkWorldEffectFinalized(ctx context.Context, arg MarkWorldEffectFinalizedParams) error {
+	_, err := q.db.Exec(ctx, markWorldEffectFinalized, arg.FinalizedAt, arg.ID)
+	return err
+}
+
+const markWorldEffectNoticed = `-- name: MarkWorldEffectNoticed :exec
+UPDATE world_effects SET noticed_at = $1 WHERE id = $2 AND noticed_at IS NULL
+`
+
+type MarkWorldEffectNoticedParams struct {
+	NoticedAt *time.Time `json:"noticed_at"`
+	ID        int64      `json:"id"`
+}
+
+func (q *Queries) MarkWorldEffectNoticed(ctx context.Context, arg MarkWorldEffectNoticedParams) error {
+	_, err := q.db.Exec(ctx, markWorldEffectNoticed, arg.NoticedAt, arg.ID)
+	return err
+}
+
+const rescheduleWorldEffect = `-- name: RescheduleWorldEffect :exec
+UPDATE world_effects
+SET due_at = GREATEST(due_at, $1),
+    deadline_at = CASE WHEN deadline_at IS NULL THEN NULL ELSE GREATEST(deadline_at, $2) END
+WHERE id = $3 AND applied_at IS NULL
+`
+
+type RescheduleWorldEffectParams struct {
+	DueAt      time.Time  `json:"due_at"`
+	DeadlineAt *time.Time `json:"deadline_at"`
+	ID         int64      `json:"id"`
+}
+
+// A notice announced late (outage, failing tick): the full notice period starts now (H1). Only later, never earlier.
+func (q *Queries) RescheduleWorldEffect(ctx context.Context, arg RescheduleWorldEffectParams) error {
+	_, err := q.db.Exec(ctx, rescheduleWorldEffect, arg.DueAt, arg.DeadlineAt, arg.ID)
+	return err
+}
+
+const setWorldEra = `-- name: SetWorldEra :exec
+
+UPDATE world_state SET era_id = $1, era_started_at = $2, version = version + 1, updated_at = now()
+WHERE id = 1
+`
+
+type SetWorldEraParams struct {
+	EraID        pgtype.Text `json:"era_id"`
+	EraStartedAt *time.Time  `json:"era_started_at"`
+}
+
+// ───────────── Milestones (Phase 2.1, §5.4–5.6) ─────────────
+func (q *Queries) SetWorldEra(ctx context.Context, arg SetWorldEraParams) error {
+	_, err := q.db.Exec(ctx, setWorldEra, arg.EraID, arg.EraStartedAt)
+	return err
+}
+
+const setWorldLastMilestone = `-- name: SetWorldLastMilestone :exec
+UPDATE world_state SET last_milestone_id = $1, version = version + 1, updated_at = now() WHERE id = 1
+`
+
+func (q *Queries) SetWorldLastMilestone(ctx context.Context, milestoneID pgtype.Text) error {
+	_, err := q.db.Exec(ctx, setWorldLastMilestone, milestoneID)
+	return err
+}
+
+const setWorldPaused = `-- name: SetWorldPaused :one
+UPDATE world_state SET paused_at = $1, version = version + 1, updated_at = now() WHERE id = 1
+RETURNING id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at, era_started_at
+`
+
+func (q *Queries) SetWorldPaused(ctx context.Context, pausedAt *time.Time) (WorldState, error) {
+	row := q.db.QueryRow(ctx, setWorldPaused, pausedAt)
+	var i WorldState
+	err := row.Scan(
+		&i.ID,
+		&i.StartedAt,
+		&i.EraID,
+		&i.LastMilestoneID,
+		&i.ProgressMilli,
+		&i.ClosedThroughDay,
+		&i.MedianPositionMilli,
+		&i.MedianGameDay,
+		&i.PausedAt,
+		&i.Version,
+		&i.UpdatedAt,
+		&i.EraStartedAt,
+	)
+	return i, err
+}
+
 const startWorld = `-- name: StartWorld :one
 UPDATE world_state SET started_at = COALESCE(started_at, $1), version = version + 1, updated_at = now()
 WHERE id = 1
-RETURNING id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at
+RETURNING id, started_at, era_id, last_milestone_id, progress_milli, closed_through_day, median_position_milli, median_game_day, paused_at, version, updated_at, era_started_at
 `
 
 // Idempotent: only the first start sets started_at.
@@ -219,6 +747,55 @@ func (q *Queries) StartWorld(ctx context.Context, startedAt *time.Time) (WorldSt
 		&i.MedianGameDay,
 		&i.PausedAt,
 		&i.Version,
+		&i.UpdatedAt,
+		&i.EraStartedAt,
+	)
+	return i, err
+}
+
+const upsertMilestoneOverride = `-- name: UpsertMilestoneOverride :one
+INSERT INTO world_milestone_overrides (milestone_id, threshold_points_per_active, target_day, force_reach, paused,
+                                       updated_by, updated_at)
+VALUES ($1, $2, $3, $4, $5,
+        $6, $7)
+ON CONFLICT (milestone_id) DO UPDATE
+SET threshold_points_per_active = EXCLUDED.threshold_points_per_active,
+    target_day                  = EXCLUDED.target_day,
+    force_reach                 = EXCLUDED.force_reach,
+    paused                      = EXCLUDED.paused,
+    updated_by                  = EXCLUDED.updated_by,
+    updated_at                  = EXCLUDED.updated_at
+RETURNING milestone_id, threshold_points_per_active, target_day, force_reach, paused, updated_by, updated_at
+`
+
+type UpsertMilestoneOverrideParams struct {
+	MilestoneID              string      `json:"milestone_id"`
+	ThresholdPointsPerActive pgtype.Int8 `json:"threshold_points_per_active"`
+	TargetDay                pgtype.Int4 `json:"target_day"`
+	ForceReach               bool        `json:"force_reach"`
+	Paused                   bool        `json:"paused"`
+	UpdatedBy                uuid.UUID   `json:"updated_by"`
+	UpdatedAt                time.Time   `json:"updated_at"`
+}
+
+func (q *Queries) UpsertMilestoneOverride(ctx context.Context, arg UpsertMilestoneOverrideParams) (WorldMilestoneOverride, error) {
+	row := q.db.QueryRow(ctx, upsertMilestoneOverride,
+		arg.MilestoneID,
+		arg.ThresholdPointsPerActive,
+		arg.TargetDay,
+		arg.ForceReach,
+		arg.Paused,
+		arg.UpdatedBy,
+		arg.UpdatedAt,
+	)
+	var i WorldMilestoneOverride
+	err := row.Scan(
+		&i.MilestoneID,
+		&i.ThresholdPointsPerActive,
+		&i.TargetDay,
+		&i.ForceReach,
+		&i.Paused,
+		&i.UpdatedBy,
 		&i.UpdatedAt,
 	)
 	return i, err

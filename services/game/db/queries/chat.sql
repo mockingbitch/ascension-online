@@ -4,8 +4,12 @@ SELECT * FROM chat_messages WHERE user_id = $1 AND idempotency_key = $2;
 -- name: GetChatSender :one
 -- Sender snapshot + posting gate input (caller holds LockUser, so sends serialise per player without
 -- touching the hot progression row's lock).
-SELECT c.id AS character_id, c.name, p.stage_id
+-- name_fx = the chat aura equipped right now (snapshot into the message).
+-- vip_points: the Tiên Duyên level gates perk auras (a level drop hides them; cosmetic.Visible).
+SELECT c.id AS character_id, c.name, p.stage_id, a.chat_aura_id AS name_fx, COALESCE(v.points, 0)::BIGINT AS vip_points
 FROM characters c JOIN character_progressions p ON p.character_id = c.id
+LEFT JOIN character_appearance a ON a.character_id = c.id
+LEFT JOIN vip_accounts v ON v.user_id = c.user_id
 WHERE c.user_id = $1;
 
 -- name: GetChatMute :one
@@ -18,13 +22,13 @@ SELECT EXISTS (
 ) AS dup;
 
 -- name: InsertChatMessage :one
-INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at)
-VALUES (@channel, @user_id, @character_id, @character_name, @stage_id, @body, @raw_body, @idempotency_key, @now)
+INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at, name_fx)
+VALUES (@channel, @user_id, @character_id, @character_name, @stage_id, @body, @raw_body, @idempotency_key, @now, @name_fx)
 RETURNING *;
 
 -- name: ListChatMessages :many
 -- Newest first; @before_id = 0 means "from the newest".
-SELECT id, channel, character_id, character_name, stage_id, body, created_at
+SELECT id, channel, character_id, character_name, stage_id, body, created_at, name_fx
 FROM chat_messages
 WHERE channel = @channel AND hidden_at IS NULL AND (@before_id::bigint = 0 OR id < @before_id::bigint)
 ORDER BY id DESC

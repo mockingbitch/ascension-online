@@ -37,6 +37,24 @@
 		<path d="M28 14h8v36h-8Z" /><path d="M24 20h16M24 44h16" />
 		<path d="M30 26l2 4 2-4M30 34l2 4 2-4" />
 		<path d="M16 30c2-4 6-4 8 0M40 30c2-4 6-4 8 0" />
+	{:else if id === 'thu_nhat_vien' || id === 'lap_cuc_vien' || id === 'van_luu_vien'}
+		<!-- one arc of the Huyền Khung vault per viện -->
+		{#if id === 'thu_nhat_vien'}
+			<path d="M18 38a14 14 0 0 1 28 0" /><circle cx="32" cy="38" r="3" fill="currentColor" />
+		{:else if id === 'lap_cuc_vien'}
+			<path d="M14 40a18 18 0 0 1 36 0" /><path d="M32 22v20M26 42h12" />
+		{:else}
+			<path d="M10 42a22 22 0 0 1 44 0" /><path d="M18 46c4-3 8-3 12 0s8 3 12 0 4-2 6-1" />
+		{/if}
+		<path d="M16 48h32" />
+	{:else if id === 'kim_sa_giao'}
+		<!-- Kim Sa Môn's dunes and sun, with a four-point star of the new creed -->
+		<circle cx="32" cy="28" r="6" />
+		<path d="M12 44c6-6 12-6 18 0s12 6 22-2" /><path d="M14 50c8-4 14-4 20 0s10 4 16 0" />
+		<path d="M32 12l1.5 3.5L37 17l-3.5 1.5L32 22l-1.5-3.5L27 17l3.5-1.5Z" fill="currentColor" />
+	{:else if id === 'nhan_toc'}
+		<!-- a figure shaped from earth, standing on a field line -->
+		<circle cx="32" cy="22" r="5" /><path d="M32 27v13M24 32l8 3 8-3M26 50l6-10 6 10" /><path d="M14 50h36" />
 	{:else}
 		<path d="M24 32h16M32 24v16" />
 	{/if}

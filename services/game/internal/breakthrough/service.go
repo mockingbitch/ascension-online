@@ -12,15 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/artifact"
 	"tiendao/game/internal/contribution"
 	"tiendao/game/internal/cultivation"
 	"tiendao/game/internal/dailytask"
 	"tiendao/game/internal/db"
 	"tiendao/game/internal/fixedpoint"
 	"tiendao/game/internal/gameday"
+	"tiendao/game/internal/item"
 	"tiendao/game/internal/leaderboard"
 	"tiendao/game/internal/platform/postgres"
+	"tiendao/game/internal/protector"
 	"tiendao/game/internal/realm"
+	"tiendao/game/internal/trial"
 )
 
 // ErrNotReady carries the preview explaining what is missing.
@@ -49,6 +53,7 @@ type Result struct {
 	SuccessBP        int64                   `json:"successBp"`
 	Consumed         []realm.ItemRequirement `json:"consumed"`
 	Tribulation      bool                    `json:"tribulation"`
+	TrialConsumed    string                  `json:"trialConsumed,omitempty"` // trial kind whose pass this success used
 	Guaranteed       bool                    `json:"guaranteed"`
 	LossMilli        int64                   `json:"lossMilli"` // cultivation removed by a failed tribulation
 	StageID          string                  `json:"stageId"`   // stage after the attempt
@@ -64,6 +69,45 @@ type Service struct {
 	Pool        *pgxpool.Pool
 	Cultivation *cultivation.Service
 	RNG         RNG
+	Trials      *trial.Catalogue   // nil → no mini-game gates
+	Items       *item.Catalogue    // nil → no pháp bảo bonus
+	Protectors  *protector.Service // nil → no hộ pháp
+}
+
+// bonuses reads the Phase 3.4 tribulation bonus sources for a character at stage: the equipped pháp bảo and the
+// protectors that count (presence from snap, read before any transaction). lock = attempt (invite FOR UPDATE).
+func (s *Service) bonuses(ctx context.Context, q *db.Queries, charID uuid.UUID, stage *realm.Stage, snap protector.Snapshot, now time.Time, lock bool) (string, int64, *protector.Counted, error) {
+	last := s.cat().LastOfRealm(stage)
+	if !last.Tribulation || stage != last {
+		return "", 0, nil, nil
+	}
+	artID, artBP, err := artifact.BonusLocked(ctx, q, s.Items, charID)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	counted, err := s.Protectors.CountLocked(ctx, q, charID, stage, snap, now, lock)
+	if err != nil {
+		return "", 0, nil, err
+	}
+	return artID, artBP, counted, nil
+}
+
+// trialGate looks up the trial gating the realm's major breakthrough and the character's valid pass (locked FOR
+// UPDATE in the attempt: lock order progression → daily_contribution → trial_runs → inventory).
+func (s *Service) trialGate(ctx context.Context, q *db.Queries, charID uuid.UUID, stage *realm.Stage, now time.Time, lock bool) (*TrialGate, *db.TrialRun, error) {
+	k, ok := s.Trials.GateFor(stage.Tier)
+	if !ok {
+		return nil, nil, nil
+	}
+	pass, err := trial.ValidPass(ctx, q, charID, k.ID, now, lock)
+	if err != nil {
+		return nil, nil, err
+	}
+	g := &TrialGate{Kind: k.ID, Name: k.Name}
+	if pass != nil {
+		g.ValidUntil = pass.PassValidUntil
+	}
+	return g, pass, nil
 }
 
 func (s *Service) cat() *realm.Catalogue { return s.Cultivation.Realms }
@@ -87,14 +131,24 @@ func (s *Service) Preview(ctx context.Context, userID uuid.UUID) (Preview, error
 		return Preview{}, err
 	}
 	stage := proj.Credit.After.Stage
+	now := s.Cultivation.Now().UTC()
+	gate, _, err := s.trialGate(ctx, q, ch.ID, stage, now, false)
+	if err != nil {
+		return Preview{}, err
+	}
 	inv, err := inventory(ctx, q, ch.ID, s.cat().LastOfRealm(stage), false)
+	if err != nil {
+		return Preview{}, err
+	}
+	artID, artBP, counted, err := s.bonuses(ctx, q, ch.ID, stage, s.Protectors.Prepare(ctx, q, ch.ID), now, false)
 	if err != nil {
 		return Preview{}, err
 	}
 	pv := Evaluate(s.cat(), stage, State{
 		CultivationMilli: proj.Credit.After.StoredMilli, FailStreak: int64(p.BreakthroughFailStreak),
-		CooldownUntil: p.BreakthroughCooldownUntil, Inventory: inv,
-	}, s.Cultivation.Now().UTC())
+		CooldownUntil: p.BreakthroughCooldownUntil, Inventory: inv, Trial: gate,
+		ItemBonusBP: artBP, ArtifactID: artID, ProtectorMembers: counted.N(),
+	}, now)
 	s.quote(&pv, stage, proj.Credit.After.StoredMilli)
 	return pv, nil
 }
@@ -117,7 +171,29 @@ func (s *Service) quote(pv *Preview, stage *realm.Stage, stored int64) {
 // releases any late-join reserve into the new realm. acceptLossMilli (optional) is a GUARD only: if the loss the
 // server would apply is larger, nothing is written and ErrQuoteChanged returns a fresh preview.
 func (s *Service) Attempt(ctx context.Context, userID uuid.UUID, idemKey string, acceptLossMilli *int64) (Result, error) {
+	return s.AttemptGuarded(ctx, userID, idemKey, Guard{AcceptLossMilli: acceptLossMilli})
+}
+
+// Guard carries the quote the player confirmed. Both fields are compare-only (never used as values):
+//   - AcceptLossMilli: refuse (ErrQuoteChanged) if the tribulation loss is now larger;
+//   - AcceptSuccessBP: refuse (ErrQuoteChanged) if the success chance is now LOWER than the one shown (anti-cheat M3:
+//     a protector going offline or an artifact unequipped between preview and attempt).
+type Guard struct {
+	AcceptLossMilli *int64
+	AcceptSuccessBP *int64
+}
+
+// AttemptGuarded is Attempt with the full quote guard.
+func (s *Service) AttemptGuarded(ctx context.Context, userID uuid.UUID, idemKey string, guard Guard) (Result, error) {
+	acceptLossMilli := guard.AcceptLossMilli
 	var out Result
+	// Hộ pháp presence is read from Redis BEFORE the transaction (never inside it); the tx re-reads the invite under lock.
+	var snap protector.Snapshot
+	if s.Protectors != nil {
+		if ch, err := db.New(s.Pool).GetCharacterByUser(ctx, userID); err == nil {
+			snap = s.Protectors.Prepare(ctx, db.New(s.Pool), ch.ID)
+		}
+	}
 	err := postgres.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		ch, err := q.GetCharacterByUser(ctx, userID)
@@ -152,13 +228,23 @@ func (s *Service) Attempt(ctx context.Context, userID uuid.UUID, idemKey string,
 		if err != nil {
 			return err
 		}
+		now := s.Cultivation.Now().UTC()
+		gate, pass, err := s.trialGate(ctx, q, ch.ID, stage, now, true)
+		if err != nil {
+			return err
+		}
+		// Lock order: … trial_runs → protector_invites (FOR UPDATE) → inventory.
+		artID, artBP, counted, err := s.bonuses(ctx, q, ch.ID, stage, snap, now, true)
+		if err != nil {
+			return err
+		}
 		inv, err := inventory(ctx, q, ch.ID, s.cat().LastOfRealm(stage), true)
 		if err != nil {
 			return err
 		}
-		now := s.Cultivation.Now().UTC()
 		pv := Evaluate(s.cat(), stage, State{
 			CultivationMilli: p.CultivationMilli, FailStreak: int64(p.BreakthroughFailStreak), CooldownUntil: p.BreakthroughCooldownUntil, Inventory: inv,
+			Trial: gate, ItemBonusBP: artBP, ArtifactID: artID, ProtectorMembers: counted.N(),
 		}, now)
 		s.quote(&pv, stage, p.CultivationMilli)
 		if !pv.Ready {
@@ -173,6 +259,9 @@ func (s *Service) Attempt(ctx context.Context, userID uuid.UUID, idemKey string,
 			if trib.LossMilli > *acceptLossMilli {
 				return &ErrQuoteChanged{Preview: pv} // rolls back the settlement too: nothing is written
 			}
+		}
+		if guard.AcceptSuccessBP != nil && pv.SuccessBP < *guard.AcceptSuccessBP {
+			return &ErrQuoteChanged{Preview: pv}
 		}
 		next := s.cat().Next(stage)
 
@@ -207,12 +296,26 @@ func (s *Service) Attempt(ctx context.Context, userID uuid.UUID, idemKey string,
 			return err
 		}
 
+		// The hộ pháp invite is spent by this tribulation attempt (either outcome); counted protectors are credited by the
+		// worker from the outbox (protector.assist_counted).
+		// A guaranteed attempt needs no protection: the invite stays open and nobody is paid (L3).
+		if trib != nil && !trib.Guaranteed && counted != nil {
+			if err := s.Protectors.UseLocked(ctx, q, counted, "bt:"+idemKey, now); err != nil {
+				return err
+			}
+		}
 		if err := s.Cultivation.Tasks.Record(ctx, q, ch.ID, now, dailytask.BreakthroughAttempt, 0); err != nil {
 			return err
 		}
 		out = Result{Success: o.Success, Kind: pv.Kind, From: stage.ID, To: next.ID, SuccessBP: o.SuccessBP, Consumed: pv.Consumes,
 			Tribulation: trib != nil, Guaranteed: guaranteed && o.Success, LossMilli: loss, StagesAdvanced: []string{}}
 		if o.Success {
+			if pass != nil { // the trial pass is kept through failures and consumed by the success (decisions 2026-11-07)
+				if err := trial.ConsumePass(ctx, q, pass.ID, "bt:"+idemKey, now); err != nil {
+					return err
+				}
+				out.TrialConsumed = pass.Kind
+			}
 			return s.applySuccess(ctx, q, ch, p, stage, next, idemKey, now, &out)
 		}
 		var cd time.Time

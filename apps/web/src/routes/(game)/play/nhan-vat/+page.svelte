@@ -1,8 +1,10 @@
-<!-- Nhân Vật: who I am. Server data (name, realm, tu vi, rank, resources, Tiên Duyên); faction and equipment slots
-     are previews until those systems exist (no invented combat stats — the game has no combat yet). -->
+<!-- Nhân Vật: who I am. Server data (name, realm, tu vi, rank, resources, Tiên Duyên, faction); equipment slots
+     are previews until that system exists (no invented combat stats — the game has no combat yet). -->
 <script lang="ts">
 	import Icon from '$lib/components/Icon.svelte';
+	import NameFx from '$lib/components/NameFx.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
+	import { cosmetics } from '$lib/game/cosmetics.svelte';
 	import RealmBadge from '$lib/components/RealmBadge.svelte';
 	import ScreenFrame from '$lib/components/ScreenFrame.svelte';
 	import { artFirst } from '$lib/game/art';
@@ -10,8 +12,8 @@
 	import { useIdleClock } from '$lib/game/idle.svelte';
 	import { game } from '$lib/game/store.svelte';
 	import { openWindow } from '$lib/game/windows';
-	import { factionById, factionColor } from '$lib/mock/factions';
-	import { factionChoice, loadFactionChoice } from '$lib/mock/factionChoice.svelte';
+	import FactionEmblem from '$lib/components/FactionEmblem.svelte';
+	import { factionColor, factionOf, factions } from '$lib/game/faction.svelte';
 
 	const clock = useIdleClock();
 	const ch = $derived(game.character!);
@@ -19,8 +21,7 @@
 	const realm = $derived(cat.realmOf(ch.stageId));
 	const stage = $derived(cat.stages.get(ch.stageId));
 	const aura = $derived(realm?.visual.aura ?? 'none');
-	$effect(() => loadFactionChoice(ch.id));
-	const faction = $derived(factionById(factionChoice.id));
+	const faction = $derived(factionOf(factions.me?.factionId));
 	// Full-body art per realm (art-prompts §4): this realm's, else the closest lower realm's, else the portrait.
 	const body = $derived(
 		artFirst(
@@ -45,21 +46,24 @@
 <ScreenFrame title="Nhân Vật" subtitle="Đạo hiệu, cảnh giới và hành trang" icon="person">
 	<div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
 		<!-- portrait plate -->
-		<section class="hero relative flex flex-col items-center overflow-hidden px-4 py-8 text-center" style:--aura="var(--color-aura-{aura})" style:--fc={faction ? factionColor(faction) : 'var(--color-gold-500)'}>
+		<section class="hero relative flex flex-col items-center overflow-hidden px-4 py-8 text-center" style:--aura="var(--color-aura-{aura})" style:--fc={factionColor(faction)}>
 			<div class="halo absolute inset-0" aria-hidden="true"></div>
 			{#if body}
 				<img src={body.src} srcset={body.srcset} alt="" class="body relative h-[340px] object-contain" draggable="false" />
+				{#if ch.appearance?.avatarFrameId}<div class="absolute top-4 left-4"><Portrait {aura} size={60} frameId={ch.appearance.avatarFrameId} /></div>{/if}
 			{:else}
-				<div class="relative"><Portrait {aura} size={168} /></div>
+				<div class="relative"><Portrait {aura} size={168} frameId={ch.appearance?.avatarFrameId} /></div>
 			{/if}
 			<p class="relative mt-4 eyebrow">{realm?.title ?? 'Tu sĩ'}</p>
-			<h2 class="relative font-display text-4xl font-bold text-mist-100">{ch.name}</h2>
+			<h2 class="relative font-display text-4xl font-bold text-mist-100"><NameFx fx={ch.appearance?.chatAuraId}>{ch.name}</NameFx></h2>
+			{#if cosmetics.name(ch.appearance?.titleId)}<p class="relative text-sm text-gold-300">「{cosmetics.name(ch.appearance?.titleId)}」</p>{/if}
 			{#if realm}<div class="relative mt-2"><RealmBadge name={realm.name} aura={realm.visual.aura} /></div>{/if}
 			<p class="relative mt-1 text-mist-300">{stage?.name}</p>
 			<a href="/play/the-luc" class="relative mt-4 inline-flex items-center gap-2 text-sm" style:color="var(--fc)">
-				<Icon name="sect" size={16} />
+				{#if faction}<FactionEmblem id={faction.id} size={20} />{:else}<Icon name="sect" size={16} />{/if}
 				{faction ? faction.name : 'Chưa gia nhập thế lực'}
 			</a>
+			<a href="/play/tui-do?tab=trang-phuc" class="btn btn-ghost relative mt-3 h-10 px-3 text-sm"><Icon name="spark" size={14} /> Trang phục & trang trí</a>
 		</section>
 
 		<div class="space-y-5">

@@ -14,9 +14,9 @@ SELECT count(*) FROM reports WHERE reporter_user_id = $1 AND created_at >= @sinc
 
 -- name: InsertReport :one
 INSERT INTO reports (reporter_user_id, target_character_id, target_name, reason, note, idempotency_key, created_at,
-                     chat_message_id, evidence)
+                     chat_message_id, evidence, trade_offer_id)
 VALUES (@reporter_user_id, @target_character_id, @target_name, @reason, @note, @idempotency_key, @now,
-        sqlc.narg(chat_message_id), @evidence)
+        sqlc.narg(chat_message_id), @evidence, sqlc.narg(trade_offer_id))
 RETURNING *;
 
 -- name: GetReportForUpdate :one

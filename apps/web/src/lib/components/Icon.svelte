@@ -19,7 +19,7 @@
 		stone: 'M7 4h10l4 5-9 11L3 9l4-5ZM3 9h18M9 9l3 11 3-11M7 4l2 5M17 4l-2 5M12 4v5',
 		// Talisman paper
 		talisman: 'M7 3h10v18l-5-3-5 3V3ZM10 7h4M12 7v8M10 11h4M10.5 14l1.5 1.5 1.5-1.5',
-		// Seal (VIP)
+		// Seal (Tiên Duyên)
 		seal: 'M12 3 14 5h3v3l2 2-2 2v3h-3l-2 2-2-2H7v-3l-2-2 2-2V5h3l2-2ZM9.5 10h5M12 10v4.5M10 14.5h4',
 		gift: 'M4 10h16v3H4zM5 13h14v8H5zM12 10v11M12 10c-1-3-4.5-4-5.5-2.5S8 10 12 10Zm0 0c1-3 4.5-4 5.5-2.5S16 10 12 10Z',
 		// Folded map — thế giới

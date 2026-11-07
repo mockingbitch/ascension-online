@@ -21,6 +21,14 @@ type SettleInput struct {
 	RateCarry        int64         // remainder of rate × seconds not yet turned into milli, 0..3599
 	RateMilliPerHour int64         // idle rate (contribution.yaml)
 	OfflineCap       time.Duration // Tiên Duyên window (+ pending Tụ Linh Phù) at settlement time
+	Buff             Buff          // timed rate buff (gieo quẻ); zero = none
+}
+
+// Buff is a timed idle-rate bonus (data-model §9.4): BonusBP applies only to eligible seconds inside [Start, End).
+// The caller caps BonusBP (contribution idle.max_buff_bonus_bp).
+type Buff struct {
+	BonusBP    int64
+	Start, End time.Time
 }
 
 // SettleResult is the raw idle amount; caps/bottleneck are applied afterwards by Credit.
@@ -31,7 +39,8 @@ type SettleResult struct {
 	RateCarry        int64
 	LastCultivatedAt time.Time
 	HitOfflineCap    bool
-	ClockAnomaly     bool // last_cultivated_at in the future → treated as 0 elapsed
+	ClockAnomaly     bool  // last_cultivated_at in the future → treated as 0 elapsed
+	BuffSeconds      int64 // eligible seconds the buff covered
 }
 
 // Settle computes raw idle points: raw = (rate × eligible_seconds + carry) / 3600, carry = … % 3600.
@@ -53,10 +62,36 @@ func Settle(in SettleInput) SettleResult {
 	}
 	res.EligibleSeconds = eligible
 
-	total := fixedpoint.SatAdd(fixedpoint.MulDiv(in.RateMilliPerHour, eligible, 1), in.RateCarry)
+	// The eligible window is the FIRST `eligible` seconds after the last settlement (the offline window fills, then
+	// stops). The buff adds bonus_bp of the rate on the part of that window inside [Buff.Start, Buff.End).
+	base := fixedpoint.MulDiv(in.RateMilliPerHour, eligible, 1)
+	if in.Buff.BonusBP > 0 {
+		winStart := in.LastCultivatedAt
+		winEnd := winStart.Add(time.Duration(eligible) * time.Second)
+		from, to := maxTime(winStart, in.Buff.Start), minTime(winEnd, in.Buff.End)
+		if to.After(from) {
+			res.BuffSeconds = int64(to.Sub(from) / time.Second)
+			base = fixedpoint.SatAdd(base, fixedpoint.MulBP(fixedpoint.MulDiv(in.RateMilliPerHour, res.BuffSeconds, 1), in.Buff.BonusBP))
+		}
+	}
+	total := fixedpoint.SatAdd(base, in.RateCarry)
 	res.RawMilli = total / SecondsPerHour
 	res.RateCarry = total % SecondsPerHour
 	// Only whole seconds were consumed; keep the sub-second part for the next settlement.
 	res.LastCultivatedAt = in.LastCultivatedAt.Add(time.Duration(res.ElapsedSeconds) * time.Second)
 	return res
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
 }

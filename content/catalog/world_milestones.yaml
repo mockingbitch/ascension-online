@@ -1,8 +1,23 @@
 # Server story clock (decisions 2026-11-06 "Phase 0" #4 + "bổ sung" B, H). Loaded by internal/world.
 # Reference: docs/design/data-model-the-gioi-chung.md §5.
 #
-# Phase 1 ships only `settings` (used by the worker's per-day totals and day close / server median).
-# Eras and milestones land in Phase 2 (factions, milestone effects); the loader accepts empty lists until then.
+# Names: milestones from content/story/timeline/hong-hoang-timeline.md, eras and real faction ids from
+# content/story/world/milestone-effects.md. Every `announce` key and every `world.event_end.<event_id>` key must
+# exist in content/story/announcements/world-milestones.yaml (checked at worker start + TestShippedAnnouncements).
+#
+# Reach rule (§5.3): milestones fire strictly in order, at most one per worker tick, when
+#   elapsed ≥ target_day × min_pct_bp AND world progress ≥ threshold   (reason "threshold")
+#   or elapsed ≥ target_day × max_pct_bp                               (reason "max_time")
+# World progress = Σ over closed game days of (Σ min(100, credited − ×2 bonus) ÷ DAU), in points per active player.
+# Thresholds = target_day × reference_points_per_active_day (decision B), written out explicitly.
+#
+# Effects:
+#   set_era        { era_id }                                    applied at once; the era never moves backwards
+#   start_event    { event_id, duration_days ≥ 1, on_end? }      runs duration_days; on_end only allows set_era
+#   split_faction  { from, into[], notice_days, choose_days }    pending world_effects row, executed by faction.Effects
+#   migrate_faction{ from, to, notice_days }                     pending world_effects row, executed by faction.Effects
+# Era-start effects: factions.yaml `on_close: split` factions are split (computed targets) when the era first reaches
+# their close_from_era — scheduled by whatever moves the era (a set_era here or an on_end), same lifecycle as above.
 version: 1
 
 settings:
@@ -15,5 +30,110 @@ settings:
   day_close_grace_seconds: 300            # a game day is closed 5 min after midnight (late commits)
   median_window_days: 7                   # server median over characters with points in the last N game days
 
-eras: []
-milestones: []
+# Ordered; set_era effects must follow this order (an era never moves backwards at runtime either).
+eras:
+  - { id: khai_giang, name: Tử Tiêu khai giảng }
+  - { id: dai_chien,  name: Đại chiến Huyết Tinh }
+  - { id: luan_hoi,   name: Luân hồi sơ chuyển }      # set when the dai_chien event ends
+  - { id: tao_nhan,   name: Nữ Oa tạo người }
+  - { id: thanh_nhan, name: Thánh vị định tọa }
+  - { id: nhan_toc,   name: Nhân tộc hưng khởi }
+  - { id: phong_than, name: Phong Thần lượng kiếp }
+  - { id: thien_dinh, name: Thiên Đình tái lập }
+  - { id: tay_du,     name: Tây Du }
+
+milestones:          # strictly ordered, no minimum gap (decision H). APPEND-ONLY after launch: seq = position
+                     # (TestShippedMilestoneSeqIsStable); never reorder or remove a milestone
+  - id: khai_giang
+    name: Tử Tiêu Cung khai giảng
+    target_day: 0
+    threshold_points_per_active: 0        # reached on the first tick after POST /admin/world/start
+    announce: world.khai_giang
+    effects:
+      - { kind: set_era, era_id: khai_giang }
+
+  - id: giang_dao_2
+    name: Hồng Quân giảng đạo lần hai
+    target_day: 30
+    threshold_points_per_active: 2010
+    announce: world.giang_dao_2
+    effects:
+      - { kind: start_event, event_id: giang_dao_2, duration_days: 1 }
+
+  - id: giang_dao_3
+    name: Hồng Quân giảng đạo lần ba
+    target_day: 60
+    threshold_points_per_active: 4020
+    announce: world.giang_dao_3
+    effects:
+      - { kind: start_event, event_id: giang_dao_3, duration_days: 1 }
+
+  - id: dai_chien                         # story window day 100–115
+    name: Đại chiến Huyết Tinh
+    target_day: 100
+    threshold_points_per_active: 6700
+    announce: world.dai_chien
+    effects:
+      - { kind: set_era, era_id: dai_chien }
+      - kind: start_event
+        event_id: dai_chien
+        duration_days: 15
+        on_end:
+          - { kind: set_era, era_id: luan_hoi }
+
+  - id: nu_oa
+    name: Nữ Oa tạo người
+    target_day: 130
+    threshold_points_per_active: 8710
+    announce: world.nu_oa
+    effects:
+      - { kind: set_era, era_id: tao_nhan }
+
+  - id: thanh_nhan                        # story window day 140–170
+    name: Thánh nhân xuất thế
+    target_day: 140
+    threshold_points_per_active: 9380
+    announce: world.thanh_nhan
+    effects:
+      - { kind: set_era, era_id: thanh_nhan }
+      - { kind: start_event, event_id: thanh_nhan, duration_days: 30 }
+      - kind: split_faction               # decision 9: 3-day notice, 7-day choice, default = fewest members
+        from: huyen_khung_mon
+        into: [thu_nhat_vien, lap_cuc_vien, van_luu_vien]   # order = tie-break order for the default branch
+        notice_days: 3
+        choose_days: 7
+      - { kind: migrate_faction, from: kim_sa_mon, to: kim_sa_giao, notice_days: 3 }
+
+  - id: nhan_toc                          # story window day 150–210
+    name: Tam Hoàng Ngũ Đế
+    target_day: 150
+    threshold_points_per_active: 10050
+    announce: world.nhan_toc
+    effects:
+      - { kind: set_era, era_id: nhan_toc }
+      - { kind: start_event, event_id: tam_hoang, duration_days: 60 }
+
+  - id: phong_than                        # story window day 240–300
+    name: Phong Thần Lượng Kiếp
+    target_day: 240
+    threshold_points_per_active: 16080
+    announce: world.phong_than
+    effects:
+      - { kind: set_era, era_id: phong_than }
+      - { kind: start_event, event_id: phong_than, duration_days: 60 }
+
+  - id: thien_dinh
+    name: Thiên Đình tái lập
+    target_day: 310
+    threshold_points_per_active: 20770
+    announce: world.thien_dinh
+    effects:
+      - { kind: set_era, era_id: thien_dinh }
+
+  - id: tay_du
+    name: Tây Du
+    target_day: 330
+    threshold_points_per_active: 22110
+    announce: world.tay_du
+    effects:
+      - { kind: set_era, era_id: tay_du }

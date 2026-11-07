@@ -288,6 +288,14 @@ func (s *Service) Settle(ctx context.Context, userID uuid.UUID, idemKey string) 
 			if err := s.Tasks.Record(ctx, q, ch.ID, res.Now, dailytask.Settle, res.Settle.ElapsedSeconds); err != nil {
 				return err
 			}
+			// Điểm duyên for online cultivation (decision D: 1 × 3/day, settles ≥ min_elapsed_seconds apart). Only this
+			// player-initiated settle counts, not the settlements other mutations run first.
+			if a, ok := s.VIP.Activity(vip.ActOnlineCultivation); ok && res.Settle.ElapsedSeconds >= a.MinElapsedSeconds {
+				if _, err := s.VIP.EarnLocked(ctx, q, userID, vip.ActOnlineCultivation,
+					vip.Ref{Type: "settlement", ID: idemKey, IdemKey: "settle:" + idemKey}, res.Now); err != nil {
+					return fmt.Errorf("earn điểm duyên: %w", err)
+				}
+			}
 		}
 		out, err = s.statusOf(ctx, q, userID, p, res, res.Now)
 		return err
@@ -305,7 +313,12 @@ func (s *Service) SettleLocked(ctx context.Context, q *db.Queries, userID uuid.U
 		return p, SettleOutcome{}, err
 	}
 	rate := s.Contribution.IdleRateMilliPerHour
-	res := Settle(SettleInput{Now: now, LastCultivatedAt: p.LastCultivatedAt, RateCarry: int64(p.RateCarry), RateMilliPerHour: rate, OfflineCap: offlineCap})
+	buff, err := s.Buff(ctx, q, p.CharacterID)
+	if err != nil {
+		return p, SettleOutcome{}, err
+	}
+	res := Settle(SettleInput{Now: now, LastCultivatedAt: p.LastCultivatedAt, RateCarry: int64(p.RateCarry), RateMilliPerHour: rate,
+		OfflineCap: offlineCap, Buff: buff})
 	out := SettleOutcome{Now: now, Settle: res, OfflineCap: offlineCap}
 	// Too soon since the last settlement: no idle credit and last_cultivated_at stays put, so the elapsed time is
 	// counted by the next settlement (no loss, no double award, no row spam). The late-join reserve is still released
@@ -351,6 +364,13 @@ func (s *Service) SettleLocked(ctx context.Context, q *db.Queries, userID uuid.U
 
 // insertSettlement logs a settlement. stage_id is the stage AFTER the settlement (pairs with
 // cultivation_after_milli); cultivation_credits.stage_id is the stage BEFORE the credit.
+// SettleLockedRow is SettleLocked returning only the updated row (injected into services that can't import this
+// package, e.g. faction: settle before a membership change so offline accrual stays with the old faction).
+func (s *Service) SettleLockedRow(ctx context.Context, q *db.Queries, userID uuid.UUID, p db.CharacterProgression, idemKey string) (db.CharacterProgression, error) {
+	p, _, err := s.SettleLocked(ctx, q, userID, p, idemKey)
+	return p, err
+}
+
 func (s *Service) insertSettlement(ctx context.Context, q *db.Queries, p db.CharacterProgression, idemKey string, res SettleResult,
 	rate int64, offlineCap time.Duration, a contribution.Applied, now time.Time) error {
 	mult := a.MultiplierBP
@@ -380,6 +400,21 @@ func (s *Service) OfflineCap(ctx context.Context, q *db.Queries, userID uuid.UUI
 	return s.VIP.OfflineCap(tier), s.VIP.EffectiveOfflineCap(tier, bonus), nil
 }
 
+// BuffSlotFortune is the character_buffs slot of the gieo quẻ buff.
+const BuffSlotFortune = "fortune"
+
+// Buff loads the character's timed rate buff (zero when none), capped by contribution idle.max_buff_bonus_bp.
+// Read without lock: buffs are written only under the progression lock the settling caller holds.
+func (s *Service) Buff(ctx context.Context, q *db.Queries, charID uuid.UUID) (Buff, error) {
+	b, err := q.GetCharacterBuff(ctx, db.GetCharacterBuffParams{CharacterID: charID, Slot: BuffSlotFortune})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Buff{}, nil
+	} else if err != nil {
+		return Buff{}, fmt.Errorf("load buff: %w", err)
+	}
+	return Buff{BonusBP: min(int64(b.BonusBp), s.Contribution.MaxBuffBonusBP), Start: b.StartsAt, End: b.EndsAt}, nil
+}
+
 // Projection is what a settlement now would yield, computed WITHOUT writing (same pure functions as SettleLocked,
 // so the breakthrough preview shows exactly what the attempt will apply).
 type Projection struct {
@@ -389,6 +424,15 @@ type Projection struct {
 	CatchUp    bool
 	Day        contribution.Day // today's totals including the projected credit
 	Snapshot   Snapshot
+}
+
+// ProjectedStage is the stage after the pending idle settlement (read-only; same path as the breakthrough preview).
+func (s *Service) ProjectedStage(ctx context.Context, q *db.Queries, userID uuid.UUID, p db.CharacterProgression) (*realm.Stage, error) {
+	proj, err := s.Project(ctx, q, userID, p)
+	if err != nil {
+		return nil, err
+	}
+	return proj.Credit.After.Stage, nil
 }
 
 // Project computes the projected state for read-only views.
@@ -410,9 +454,13 @@ func (s *Service) Project(ctx context.Context, q *db.Queries, userID uuid.UUID, 
 	if err != nil {
 		return Projection{}, err
 	}
+	buff, err := s.Buff(ctx, q, p.CharacterID)
+	if err != nil {
+		return Projection{}, err
+	}
 	pr := Projection{OfflineCap: offlineCap, CatchUp: s.catchUp(w, stage, p.CultivationMilli, now)}
 	pr.Settle = Settle(SettleInput{Now: now, LastCultivatedAt: p.LastCultivatedAt, RateCarry: int64(p.RateCarry),
-		RateMilliPerHour: s.Contribution.IdleRateMilliPerHour, OfflineCap: offlineCap})
+		RateMilliPerHour: s.Contribution.IdleRateMilliPerHour, OfflineCap: offlineCap, Buff: buff})
 	raw := pr.Settle.RawMilli
 	if pr.Settle.ElapsedSeconds < MinSettleSeconds {
 		raw = 0

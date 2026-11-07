@@ -1,11 +1,12 @@
-# One image, two binaries (api + worker); pick with `command`.
+# One image: api + worker (pick with `command`) + opsctl (operator CLI: `docker compose run --rm api /app/opsctl status`).
 FROM golang:1.26-alpine AS build
 WORKDIR /src
 COPY services/game/go.mod services/game/go.sum ./
 RUN go mod download
 COPY services/game/ ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/api ./cmd/api \
- && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/worker ./cmd/worker
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/worker ./cmd/worker \
+ && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/opsctl ./cmd/opsctl
 
 FROM gcr.io/distroless/static-debian12:nonroot
 WORKDIR /app

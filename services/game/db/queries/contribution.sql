@@ -2,8 +2,10 @@
 SELECT * FROM daily_contribution WHERE character_id = $1 AND game_day = $2;
 
 -- name: EnsureDailyContribution :exec
--- Call under the progression lock before GetDailyContributionForUpdate.
-INSERT INTO daily_contribution (character_id, game_day) VALUES ($1, $2)
+-- Call under the progression lock before GetDailyContributionForUpdate. The day is stamped with the character's
+-- faction at its first credit (faction merit, §10); a plain read — character_faction is locked later in §2.3 order.
+INSERT INTO daily_contribution (character_id, game_day, faction_id)
+VALUES ($1, $2, (SELECT cf.faction_id FROM character_faction cf WHERE cf.character_id = $1))
 ON CONFLICT DO NOTHING;
 
 -- name: GetDailyContributionForUpdate :one
@@ -54,3 +56,6 @@ INSERT INTO late_join_grants (user_id, character_id, server_day, median_position
 VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (user_id) DO NOTHING
 RETURNING grant_milli;
+
+-- name: GetItemDailyUses :one
+SELECT COALESCE((SELECT uses FROM item_daily_uses WHERE character_id = $1 AND game_day = $2 AND item_id = $3), 0)::INT AS uses;

@@ -59,6 +59,8 @@ func (d Deps) chatSend(w http.ResponseWriter, r *http.Request) {
 	var muted *chat.MutedError
 	switch {
 	case err == nil:
+		d.Metrics.ChatMessage(msg.Channel)
+		d.markActive(r, true)
 		writeJSON(w, 200, msg)
 	case errors.Is(err, chat.ErrUnknownChannel):
 		writeError(w, 404, "unknown_channel", "unknown chat channel")

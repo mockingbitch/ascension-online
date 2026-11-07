@@ -3,11 +3,18 @@
 # kind:
 #   checkin               complete on first visit of the day
 #   settle                counts settlements with elapsed ≥ min_elapsed_seconds (nudges returning, not spamming)
-#   breakthrough_attempt  counts breakthrough attempts (success or failure)
+#   breakthrough_attempt  counts breakthrough attempts (success or failure) — no shipped task uses it any more
+#   lecture_attend        a paid ngộ đạo moment in Tử Tiêu Cung (decision Phase 0 #13 replaced trung_kich)
+#   incense               morning incense (data-model §9.2): POST /tasks/daily/incense, once per game day.
+#                         Pays streak_rewards (points_milli through the single credit path, source ritual,
+#                         activity bucket) at the offering — no separate claim. Neutral framing: quiet the mind,
+#                         no "nhận lộc", not addressed to any real religious figure.
 # rewards: { item_id, quantity } or { currency, amount }. Only soft currency (spirit_stone) may be rewarded.
+# Spirit stones from tasks (≤ 450/day) are spent in the shop (shop.yaml): speed items ≤ 250/day, requirement items,
+# cosmetics (decision G).
 #
 # Tụ Linh Phù comes from the CHECK-IN task on purpose: it exists to help players who log in once a day
-# (docs/decisions.md — VIP fairness). Budget: tasks are the main spirit-stone source until the economy lands.
+# (docs/decisions.md — Tiên Duyên fairness). Budget: tasks are the main spirit-stone source until the economy lands.
 version: 1
 tasks:
   - id: diem_danh
@@ -28,10 +35,20 @@ tasks:
     rewards:
       - { currency: spirit_stone, amount: 150 }
 
-  - id: trung_kich
-    name: Trùng kích bình cảnh
-    description: Thử đột phá 1 lần.
-    kind: breakthrough_attempt
+  - id: nghe_giang
+    name: Nghe giảng
+    description: Đến Tử Tiêu Cung nghe Hồng Quân giảng đạo và nắm lấy một khoảnh khắc ngộ đạo.
+    kind: lecture_attend
     target: 1
     rewards:
       - { currency: spirit_stone, amount: 200 }
+
+  - id: dang_huong
+    name: Dâng hương tĩnh tâm
+    description: Thắp một nén hương buổi sớm, lặng lòng trước khi tu luyện. Giữ chuỗi ngày liên tiếp để tâm cảnh thêm vững.
+    kind: incense
+    target: 1
+    streak_rewards:                    # points_milli: 1 point = 1000; highest tier with min_streak ≤ streak
+      - { min_streak: 1, points_milli: 200 }
+      - { min_streak: 3, points_milli: 300 }
+      - { min_streak: 7, points_milli: 400 }

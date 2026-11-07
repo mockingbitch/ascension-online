@@ -1,7 +1,7 @@
 <script lang="ts">
-	// Keep in sync with what the server actually stores (migrations 000001/000003/000006, auth service, nginx logs).
+	// Keep in sync with what the server actually stores (migrations 000001/000003/000006/000017, auth service, netsig, nginx logs).
 	// Any new personal field → update this page in the same PR.
-	const updated = '06/11/2026';
+	const updated = '07/11/2026';
 </script>
 
 <svelte:head><title>Chính sách dữ liệu · Tiên Đạo</title></svelte:head>
@@ -34,6 +34,10 @@
 				bản gốc trước khi che được giữ riêng cho ban quản trị để xử lý vi phạm. Tin nhắn tự xóa sau 90 ngày.
 			</li>
 			<li>Báo cáo bạn gửi và báo cáo về nhân vật của bạn (kèm nội dung tin nhắn bị báo cáo, nếu có). Người bị báo cáo không được biết ai đã báo cáo.</li>
+			<li>
+				<strong>Đạo lữ:</strong> lời cầu thân bạn gửi và nhận, mối đạo lữ (ngày kết, ngày và lý do chấm dứt) và thời gian song tu đã nhận. Đạo lữ của
+				bạn thấy đạo hiệu, cảnh giới và việc bạn đang trực tuyến hay không.
+			</li>
 		</ul>
 
 		<h2>3. Dữ liệu kỹ thuật</h2>
@@ -41,6 +45,14 @@
 			<li>
 				<strong>Phiên đăng nhập:</strong> một cookie bảo mật (HttpOnly) giữ phiên tối đa 30 ngày. Máy chủ chỉ lưu bản băm của
 				mã phiên, chuỗi nhận diện trình duyệt (user agent) và thời điểm đăng nhập, dùng để duy trì đăng nhập và phát hiện phiên bị đánh cắp.
+			</li>
+			<li>
+				<strong>Dấu vết mạng (chống một người dùng nhiều tài khoản):</strong> mỗi lần bạn đăng nhập hoặc làm mới phiên, máy chủ lưu một mã băm
+				được tạo từ địa chỉ IP của bạn cùng một khóa bí mật của máy chủ — <strong>không lưu địa chỉ IP gốc</strong>, và không thể dịch ngược
+				mã này thành IP nếu không có khóa bí mật của máy chủ. Với IPv4, mã được tạo từ cả địa chỉ; với IPv6, chỉ từ phần mạng (64 bit đầu,
+				thường là cả mạng gia đình bạn). Mã tự xóa sau 30 ngày không dùng tới. Nó chỉ dùng để báo cho ban quản trị khi hai tài khoản có vẻ
+				dùng chung một mạng trong các hoạt động giữa người chơi (song tu đạo lữ, tặng/đổi đồ, hộ pháp); các dấu cảnh báo này cũng tự xóa sau
+				30 ngày. Hệ thống không tự khóa ai vì mã này, người chơi khác không bao giờ thấy nó, và mỗi lần ban quản trị xem đều được ghi nhật ký.
 			</li>
 			<li>
 				<strong>Địa chỉ IP:</strong> dùng tạm để giới hạn số lần đăng nhập và kết nối (tự xóa sau vài phút). Máy chủ web có thể ghi

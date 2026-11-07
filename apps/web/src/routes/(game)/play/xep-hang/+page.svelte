@@ -1,5 +1,6 @@
-<!-- Xếp Hạng: Thiên Bảng (server) with a Top-3 podium; faction and contribution boards are previews. -->
+<!-- Xếp Hạng: Thiên Bảng (server) with a Top-3 podium, and the faction merit board (GET /factions). -->
 <script lang="ts">
+	import { cosmetics } from '$lib/game/cosmetics.svelte';
 	import { api, ApiError } from '$lib/api/client';
 	import Icon from '$lib/components/Icon.svelte';
 	import Portrait from '$lib/components/Portrait.svelte';
@@ -9,7 +10,8 @@
 	import { game } from '$lib/game/store.svelte';
 	import type { LeaderboardPage } from '$lib/game/types';
 	import { openWindow } from '$lib/game/windows';
-	import { factionColor, factions } from '$lib/mock/factions';
+	import { factionColor, factions, loadFactions } from '$lib/game/faction.svelte';
+	import { formatPoints } from '$lib/game/format';
 
 	type Tab = 'personal' | 'faction';
 	let tab = $state<Tab>('personal');
@@ -29,13 +31,17 @@
 	const podium = $derived(offset === 0 ? (data?.entries.slice(0, 3) ?? []) : []);
 	const rest = $derived(offset === 0 ? (data?.entries.slice(3) ?? []) : (data?.entries ?? []));
 	const order = ['', 'sm:order-2', 'sm:order-1', 'sm:order-3'];
-	const byFaction = [...factions].sort((a, b) => b.totalCultivation - a.totalCultivation);
-	const profile = (e: { characterId: string; name: string; stageId: string }) => openWindow({ kind: 'profile', characterId: e.characterId, name: e.name, stageId: e.stageId });
+	$effect(() => {
+		if (tab === 'faction') void loadFactions();
+	});
+	const byFaction = $derived((factions.list?.factions ?? []).filter((f) => f.meritRank > 0).sort((a, b) => a.meritRank - b.meritRank));
+	const profile = (e: { characterId: string; name: string; stageId: string; avatarFrameId?: string; titleId?: string }) =>
+		openWindow({ kind: 'profile', characterId: e.characterId, name: e.name, stageId: e.stageId, avatarFrameId: e.avatarFrameId, titleId: e.titleId });
 </script>
 
 <svelte:head><title>Xếp Hạng · Tiên Đạo</title></svelte:head>
 
-<ScreenFrame title="Thiên Bảng" subtitle="Toàn cõi Thiên Nguyên Giới" icon="rank" status={tab === 'faction' ? 'preview' : 'live'}>
+<ScreenFrame title="Thiên Bảng" subtitle="Toàn cõi Thiên Nguyên Giới" icon="rank" >
 	<div class="mb-4 flex gap-1" role="tablist">
 		<button role="tab" aria-selected={tab === 'personal'} class="tab" class:is-on={tab === 'personal'} onclick={() => (tab = 'personal')}>Tu sĩ</button>
 		<button role="tab" aria-selected={tab === 'faction'} class="tab" class:is-on={tab === 'faction'} onclick={() => (tab = 'faction')}>Thế lực</button>
@@ -54,8 +60,9 @@
 						<li class={['podium', e.rank === 1 && 'first', order[e.rank]]} style:--aura="var(--color-aura-{r?.visual.aura ?? 'none'})">
 							<button type="button" class="flex w-full flex-col items-center px-3 pt-5 pb-4 text-center" onclick={() => profile(e)}>
 								<RankMedal rank={e.rank} size={e.rank === 1 ? 48 : 40} />
-								<div class="mt-3"><Portrait aura={r?.visual.aura ?? 'none'} size={e.rank === 1 ? 96 : 76} /></div>
+								<div class="mt-3"><Portrait aura={r?.visual.aura ?? 'none'} size={e.rank === 1 ? 96 : 76} frameId={e.avatarFrameId} /></div>
 								<p class="mt-3 w-full truncate font-display text-xl font-bold text-mist-100">{e.name}</p>
+								{#if e.titleId}<p class="w-full truncate text-xs text-gold-300">「{cosmetics.name(e.titleId)}」</p>{/if}
 								{#if r}<div class="mt-1"><RealmBadge name={r.name} aura={r.visual.aura} size="sm" /></div>{/if}
 							</button>
 						</li>
@@ -69,7 +76,7 @@
 						<button type="button" class="row flex w-full items-center gap-3 px-2 py-2.5 text-left" class:me={e.characterId === game.character?.id} onclick={() => profile(e)}>
 							<RankMedal rank={e.rank} size={34} />
 							<span class="min-w-0 flex-1">
-								<span class="block truncate font-medium text-mist-100">{e.name}</span>
+								<span class="block truncate font-medium text-mist-100">{e.name}{#if e.titleId}<span class="ml-1.5 text-xs text-gold-300">「{cosmetics.name(e.titleId)}」</span>{/if}</span>
 								<span class="block truncate text-xs text-mist-500">{cat.stageLabel(e.stageId)}</span>
 							</span>
 							{#if r}<RealmBadge name={r.name} aura={r.visual.aura} size="sm" />{/if}
@@ -84,18 +91,23 @@
 			</div>
 		{/if}
 	{:else}
-		<ol class="space-y-2">
-			{#each byFaction as f, i (f.id)}
-				<li class="frow flex items-center gap-3 px-3 py-3" style:--fc={factionColor(f)}>
-					<RankMedal rank={i + 1} size={34} />
-					<span class="min-w-0 flex-1">
-						<span class="block truncate font-display text-xl font-bold" style:color="var(--fc)">{f.name}</span>
-						<span class="block truncate text-xs text-mist-500">{f.members.toLocaleString('vi-VN')} đệ tử (mẫu)</span>
-					</span>
-					<span class="text-right text-sm tabular-nums text-mist-100">{f.totalCultivation.toLocaleString('vi-VN')}<span class="block text-xs text-mist-500">tổng tu vi (mẫu)</span></span>
-				</li>
-			{/each}
-		</ol>
+		{#if !factions.list}
+			<p class="text-mist-500">Đang mở bảng thế lực…</p>
+		{:else}
+			<p class="mb-3 text-xs text-mist-500">Điểm công = tổng tu vi đồng môn tích được trong thời kỳ hiện tại.</p>
+			<ol class="space-y-2">
+				{#each byFaction as f (f.id)}
+					<li class="frow flex items-center gap-3 px-3 py-3" style:--fc={factionColor(f)}>
+						<RankMedal rank={f.meritRank} size={34} />
+						<span class="min-w-0 flex-1">
+							<span class="block truncate font-display text-xl font-bold" style:color="var(--fc)">{f.name}</span>
+							<span class="block truncate text-xs text-mist-500">{f.members.toLocaleString('vi-VN')} đệ tử</span>
+						</span>
+						<span class="text-right text-sm tabular-nums text-mist-100">{formatPoints(f.meritMilli)}<span class="block text-xs text-mist-500">điểm công</span></span>
+					</li>
+				{/each}
+			</ol>
+		{/if}
 	{/if}
 </ScreenFrame>
 

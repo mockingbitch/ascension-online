@@ -10,21 +10,29 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const getLeaderboardRows = `-- name: GetLeaderboardRows :many
-SELECT c.id, c.name, p.stage_id, p.stage_reached_at
+SELECT c.id, c.name, p.stage_id, p.stage_reached_at, a.avatar_frame_id, a.title_id, COALESCE(v.points, 0)::BIGINT AS vip_points
 FROM characters c JOIN character_progressions p ON p.character_id = c.id
+LEFT JOIN character_appearance a ON a.character_id = c.id
+LEFT JOIN vip_accounts v ON v.user_id = c.user_id
 WHERE c.id = ANY($1::uuid[])
 `
 
 type GetLeaderboardRowsRow struct {
-	ID             uuid.UUID `json:"id"`
-	Name           string    `json:"name"`
-	StageID        string    `json:"stage_id"`
-	StageReachedAt time.Time `json:"stage_reached_at"`
+	ID             uuid.UUID   `json:"id"`
+	Name           string      `json:"name"`
+	StageID        string      `json:"stage_id"`
+	StageReachedAt time.Time   `json:"stage_reached_at"`
+	AvatarFrameID  pgtype.Text `json:"avatar_frame_id"`
+	TitleID        pgtype.Text `json:"title_id"`
+	VipPoints      int64       `json:"vip_points"`
 }
 
+// Appearance (frame/title) is display only: it never affects the score.
+// vip_points lets the caller hide Tiên Duyên perks above the current level (cosmetic.Visible).
 func (q *Queries) GetLeaderboardRows(ctx context.Context, ids []uuid.UUID) ([]GetLeaderboardRowsRow, error) {
 	rows, err := q.db.Query(ctx, getLeaderboardRows, ids)
 	if err != nil {
@@ -39,6 +47,9 @@ func (q *Queries) GetLeaderboardRows(ctx context.Context, ids []uuid.UUID) ([]Ge
 			&i.Name,
 			&i.StageID,
 			&i.StageReachedAt,
+			&i.AvatarFrameID,
+			&i.TitleID,
+			&i.VipPoints,
 		); err != nil {
 			return nil, err
 		}

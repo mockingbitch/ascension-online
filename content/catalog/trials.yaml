@@ -1,0 +1,99 @@
+# Trial (thí luyện) catalogue — the breakthrough mini games (cot-truyen §5.4, decisions D6, Phase 3.1/3.2).
+# Loaded by services/game/internal/trial; cross-checked against realms.yaml in internal/content.LoadAll.
+# Rules: docs/design/tam-ma-luat-choi.md, docs/design/hoa-pham-luat-choi.md. Decisions: docs/decisions.md 2026-11-07
+# "Mini game: khung thử luyện + Tâm Ma" and "Hóa Phàm (Phase 3.3)".
+#
+# Server-issued seeded sessions, server-verified results (deterministic replay of the input log), rewards = gate only
+# (+ the vip.yaml `trial_pass` điểm duyên activity, already capped there).
+#
+# Units:
+#   *_seconds  server-clock durations
+#   *_ticks    simulation ticks (params.tick_ms each); the game is deterministic in ticks, never in wall time
+#   *_bp       basis points (10000 = 100%)
+#
+# Per kind:
+#   engine                 which simulator replays the run (tam_ma | hoa_pham)
+#   gate.tier              the MAJOR breakthrough LEAVING this tier needs a valid pass (all paths: tiers are equal)
+#   opens_at               last_stage = can start only on the gated realm's last stage (in front of the bình cảnh)
+#                          realm      = any stage of the gated realm
+#   expire_after_seconds   a run must be submitted before issued_at + this (covers the time limit + pauses)
+#   min_elapsed_bp         submitted_at − issued_at ≥ simulated game time × this / 10000 (too-fast replay = rejected)
+#   lose_cooldown_seconds  after any non-pass verdict (fail, rejected, expired/abandoned) before the next start
+#   pass_valid_seconds     how long a pass gates the breakthrough; kept until the breakthrough SUCCEEDS (consumed then)
+#   params                 the simulator's rules, snapshotted into each run and sent to the client
+#
+# ⚠ Difficulty numbers are first guesses — tune in closed beta (pass rate target ≈ 70–85% within 3 tries).
+version: 1
+
+kinds:
+  - id: tam_ma
+    name: Vượt Tâm Ma
+    summary: Tạp niệm hóa khối rơi xuống thức hải. Xếp cho kín hàng để tiêu trừ trước khi chúng lấp đầy tâm cảnh.
+    engine: tam_ma
+    gate: { tier: 3 }                  # Kim Đan → Nguyên Anh (Vu: tier 3 → 4)
+    opens_at: last_stage
+    expire_after_seconds: 480          # 3 min of play + 5 min slack; was 900 (seed retried locally ≤ ~2.5×, M1)
+    min_elapsed_bp: 9000
+    lose_cooldown_seconds: 1800        # 30 min (checklist §3.1)
+    pass_valid_seconds: 604800         # 7 days
+    params:
+      rules_version: 2                 # v2 (anti-cheat M1): input window cap, lock gap, min pass time
+      tick_ms: 50                      # 20 ticks/s
+      width: 9
+      height: 16
+      time_limit_ticks: 3600           # 180 s
+      pass_lines: 12                   # tiêu trừ 12 hàng tạp niệm …
+      min_pass_ticks: 1500             # … and hold the mind ≥ 75 s: a pass costs real time (bot at 2–5 inputs/s: 78–90%)
+      gravity: { start_ticks: 14, min_ticks: 5, step_every_ticks: 400 }   # 0.7 s/row, 1 tick faster every 20 s
+      rise_every_ticks: 400            # a tạp niệm row rises every 20 s (not while tĩnh tâm)
+      calm: { charge_per_line: 1, charge_max: 4, duration_ticks: 160 }    # 4 lines → 8 s of tĩnh tâm
+      line_scores: [0, 100, 300, 600, 1000, 1500]
+      max_inputs: 4000                 # × ~12 bytes must fit trial.MaxClaimBytes (loader-checked)
+      input_window_ticks: 20           # human cadence: ≤ 16 inputs in any 1 s window, else implausible_input
+      max_inputs_per_window: 16
+      min_lock_gap_ticks: 6            # a drop sooner than 300 ms after the previous lock is ignored (game rule)
+      pieces:                          # original ink-blot set: 3- or 5-cell, never tetrominoes
+        - { id: vong, name: Vọng Niệm, weight: 3, cells: [[0, 0], [1, 0], [2, 0]] }                 # 3 ô thẳng
+        - { id: chap, name: Chấp Niệm, weight: 3, cells: [[0, 0], [0, 1], [1, 1]] }                 # 3 ô gấp
+        - { id: tham, name: Tham,      weight: 1, cells: [[0, 0], [0, 1], [0, 2], [1, 2], [2, 2]] } # móc lớn
+        - { id: san,  name: Sân,       weight: 1, cells: [[0, 0], [1, 0], [0, 1], [1, 1], [0, 2]] } # khối lửa
+        - { id: si,   name: Si,        weight: 1, cells: [[0, 0], [1, 0], [2, 0], [1, 1], [1, 2]] } # chữ đinh dài
+        - { id: man,  name: Mạn,       weight: 1, cells: [[0, 0], [1, 0], [2, 0], [3, 0], [4, 0]] } # thanh ngạo 5 ô
+
+  - id: hoa_pham
+    name: Hóa Phàm
+    summary: Trần duyên kết thành những nút mực trôi lên. Vung bút chém đứt chúng, nhưng giữ cho đèn chân tâm còn sáng.
+    engine: hoa_pham
+    gate: { tier: 4 }                  # Nguyên Anh → Hóa Thần (Vu: tier 4 → 5)
+    opens_at: last_stage
+    expire_after_seconds: 300          # 90 s of play + slack; short so a known seed can be retried locally ≤ ~3× (M1)
+    min_elapsed_bp: 9000
+    lose_cooldown_seconds: 1800        # 30 min, like tâm ma
+    pass_valid_seconds: 604800         # 7 days
+    params:
+      rules_version: 1
+      tick_ms: 40                      # 25 ticks/s; one pointer sample per tick while pressed
+      width: 120                       # field in grid units (portrait 3:4); pointer points are whole units
+      height: 160
+      time_limit_ticks: 2250           # 90 s
+      pass_score: 75                   # đoạn 75 điểm trần duyên …
+      min_pass_ticks: 1500             # … and hold ≥ 60 s: a pass costs real time (bot at human paces: 82–100%)
+      lanterns: 3                      # tâm đăng: cutting the 3rd chân tâm lantern fails the run
+      gravity_sub: 3                   # knots: sub-units/tick² (32 sub-units per grid unit)
+      knot_motion: { vy_sub: { min: 125, max: 170 }, vx_max_sub: 12 }      # thrown up from below, peak inside the field
+      lantern_motion: { vy_sub: { min: 40, max: 60 }, vx_max_sub: 6 }      # rise steadily and leave through the top
+      spawn: { start_ticks: 44, min_ticks: 22, step_every_ticks: 60, wave_max: 4, wave_grow_every_ticks: 500, margin: 16 }
+      min_cut_step: 3                  # a segment shorter than 3 units in one tick cuts nothing (a drag is not a stroke)
+      combo: { step_bonus: 1, max_bonus: 3 }                              # k-th knot of one stroke: +min(3, k−1)
+      calm: { charge_per_cut: 1, charge_max: 12, duration_ticks: 125 }    # 12 clean cuts → 5 s of tâm tĩnh (half speed)
+      max_strokes: 600                 # loader: 2250 points × 9 B + 600 strokes × 24 B must fit trial.MaxClaimBytes
+      max_step: 48                     # the brush follows the pointer ≤ 48 units per tick (client clamps; more = teleport)
+      input_window_ticks: 25           # in any 1 s window: ≤ 720 units of travel and ≤ 8 stroke starts
+      max_window_travel: 720
+      max_strokes_per_window: 8
+      min_lift_ticks: 2                # ≥ 80 ms between releasing and pressing again
+      objects:                         # original ink motifs; never fruit
+        - { id: ket,  name: Kết Trần Duyên, role: knot,    weight: 6, radius: 9,  points: 1, hp: 1 }  # nút chỉ rối
+        - { id: to,   name: Tơ Vương,       role: knot,    weight: 3, radius: 6,  points: 2, hp: 1 }  # sợi tơ sen nhỏ
+        - { id: luoi, name: Lưới Nghiệp,    role: knot,    weight: 1, radius: 13, points: 3, hp: 2 }  # lưới lớn, 2 nét
+        - { id: den,  name: Đăng Chân Tâm,  role: lantern, weight: 2, radius: 9,  points: 0, hp: 1 }  # đừng chém

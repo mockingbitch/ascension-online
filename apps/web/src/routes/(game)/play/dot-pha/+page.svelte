@@ -3,10 +3,12 @@
 <script lang="ts">
 	import BreakthroughPanel from '$lib/components/BreakthroughPanel.svelte';
 	import CultivationScene from '$lib/components/CultivationScene.svelte';
+	import ProtectorPanel from '$lib/components/ProtectorPanel.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import RealmBadge from '$lib/components/RealmBadge.svelte';
 	import ScreenFrame from '$lib/components/ScreenFrame.svelte';
 	import { formatPoints } from '$lib/game/format';
+	import { trialRoutes } from '$lib/game/nav';
 	import { useIdleClock } from '$lib/game/idle.svelte';
 	import { game } from '$lib/game/store.svelte';
 
@@ -18,11 +20,19 @@
 	const toRealm = $derived(pv?.to ? cat.realmOf(pv.to) : undefined);
 	const toStage = $derived(pv?.to ? cat.stages.get(pv.to) : undefined);
 
-	// Which trial guards the target realm (cot-truyen §5.4). Mini games are Phase 3: shown, not yet required.
+	// Which trial guards the target realm (cot-truyen §5.4). A gate the server reports (preview.trial) is live and
+	// required; its copy is chosen by kind.
+	const trialText: Record<string, string> = {
+		tam_ma: 'Tạp niệm hóa khối rơi xuống thức hải — xếp kín hàng để tiêu trừ. Phải vượt qua mới được đột phá.',
+		hoa_pham: 'Trần duyên kết thành nút mực trôi lên — vung bút chém đứt, giữ đèn chân tâm còn sáng. Phải vượt qua mới được đột phá.'
+	};
 	const trial = $derived.by(() => {
-		if (pv?.tribulation) return { name: pv.tribulation.name, icon: 'bolt', text: 'Thiên kiếp giáng xuống: vượt qua để bước vào cảnh giới mới. Thất bại mất một phần tu vi tầng hiện tại, không tụt tầng.', live: true } as const;
-		if (toRealm?.id === 'nguyen_anh') return { name: 'Vượt tâm ma', icon: 'spark', text: 'Ván xếp khối "tâm ma" — trận thử tâm cảnh trước khi kết Nguyên Anh.', live: false } as const;
-		if (toRealm?.id === 'hoa_than') return { name: 'Hóa phàm', icon: 'spark', text: 'Trở về phàm trần, chém tạp niệm như chém quả rơi — buông bỏ để hóa thần.', live: false } as const;
+		if (pv?.tribulation) return { name: pv.tribulation.name, icon: 'bolt', text: 'Thiên kiếp giáng xuống: vượt qua để bước vào cảnh giới mới. Thất bại mất một phần tu vi tầng hiện tại, không tụt tầng.', live: true, href: undefined, passed: false } as const;
+		if (pv?.trial) {
+			const t = pv.trial;
+			const text = trialText[t.kind] ?? 'Phải vượt qua thử luyện này mới được đột phá.';
+			return { name: t.name, icon: t.kind === 'hoa_pham' ? 'lotus' : 'spark', text, live: true, href: trialRoutes[t.kind], passed: t.passed } as const;
+		}
 		return null;
 	});
 </script>
@@ -30,7 +40,7 @@
 <svelte:head><title>Đột Phá · Tiên Đạo</title></svelte:head>
 
 <ScreenFrame title="Đột Phá" subtitle="Thiên địa biến sắc khi bình cảnh vỡ" icon="bolt" bleed>
-	<div class="grid h-full min-h-0 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden">
+	<div class="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] overflow-y-auto lg:grid-cols-[minmax(0,1fr)_400px] lg:overflow-hidden">
 		<section class="stage relative flex min-h-[380px] flex-col items-center justify-center px-4 py-4 lg:min-h-0" style:--to="var(--color-aura-{toRealm?.visual.aura ?? 'jade'})">
 			<div class="skyfire absolute inset-0" class:is-trib={!!pv?.tribulation} aria-hidden="true"></div>
 			<div class="relative flex w-full max-w-xl items-center justify-between gap-3">
@@ -60,12 +70,27 @@
 					<p class="flex items-center gap-2 font-display text-xl font-bold text-gold-300"><Icon name={trial.icon} size={18} /> {trial.name}</p>
 					<p class="mt-1 text-sm text-mist-300">{trial.text}</p>
 					{#if !trial.live}<p class="mt-2 text-xs text-mist-500">Trận thử này sẽ khai mở ở bản cập nhật mini game; hiện chưa bắt buộc.</p>{/if}
+					{#if trial.href}
+						<a href={trial.href} class={['btn mt-3 h-11 w-full', trial.passed ? 'btn-ghost' : 'btn-jade']}>
+							<Icon name={trial.passed ? 'check' : 'spark'} size={16} /> {trial.passed ? 'Đã vượt — xem ấn chứng' : 'Vào thử luyện'}
+						</a>
+					{/if}
 				</div>
 			{/if}
 			<BreakthroughPanel preview={pv} catalogue={cat} failStreak={ch.failStreak} busy={game.busy} onattempt={() => void game.attempt()} />
-			<p class="text-xs text-mist-500">
-				Tỉ lệ đã công bố gồm tâm cảnh sau thất bại và tu vi dư. Pháp bảo, đan dược hộ thân và đồng môn hộ pháp sẽ cộng vào tỉ lệ khi các hệ thống đó khai mở — luôn có trần.
-			</p>
+			{#if pv?.tribulation}
+				<ProtectorPanel catalogue={cat} tribulation={!!pv?.tribulation} />
+				<p class="text-xs text-mist-500">
+					Tỉ lệ đã công bố gồm tu vi dư, pháp bảo hộ thân (<a href="/play/tui-do" class="text-jade-300 underline underline-offset-2">Túi Đồ</a>) và đồng môn hộ
+					pháp — mỗi phần có trần riêng, tổng cộng thêm và tỉ lệ cuối cũng có trần. Pháp bảo chỉ rơi từ
+					<a href="/play/bi-canh" class="text-jade-300 underline underline-offset-2">bí cảnh</a>.
+				</p>
+			{:else}
+				<ProtectorPanel catalogue={cat} tribulation={false} />
+				<p class="text-xs text-mist-500">
+					Tỉ lệ đã công bố gồm tâm cảnh sau thất bại. Từ lôi kiếp trở đi, tu vi dư, pháp bảo hộ thân và đồng môn hộ pháp cộng thêm — luôn có trần.
+				</p>
+			{/if}
 		</aside>
 	</div>
 </ScreenFrame>

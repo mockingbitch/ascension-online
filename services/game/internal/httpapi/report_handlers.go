@@ -45,11 +45,18 @@ func (d Deps) submitReport(w http.ResponseWriter, r *http.Request) {
 		Reason            string    `json:"reason"`
 		Note              string    `json:"note"`
 		ChatMessageID     int64     `json:"chatMessageId"`
+		TradeOfferID      uuid.UUID `json:"tradeOfferId"` // reason trade_abuse: the counterpart is derived from the offer
 	}
 	if !decodeJSON(w, r, &body) {
 		return
 	}
-	rep, err := d.Reports.Submit(r.Context(), userFrom(r.Context()), body.TargetCharacterID, body.Reason, body.Note, key, body.ChatMessageID)
+	var rep report.Report
+	var err error
+	if body.TradeOfferID != uuid.Nil || body.Reason == report.ReasonTradeAbuse {
+		rep, err = d.Reports.SubmitTrade(r.Context(), userFrom(r.Context()), body.TradeOfferID, body.Note, key)
+	} else {
+		rep, err = d.Reports.Submit(r.Context(), userFrom(r.Context()), body.TargetCharacterID, body.Reason, body.Note, key, body.ChatMessageID)
+	}
 	switch {
 	case errors.Is(err, report.ErrInvalidReport):
 		writeError(w, 400, "invalid_report", "Lý do không hợp lệ hoặc ghi chú quá dài")

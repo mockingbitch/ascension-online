@@ -5,6 +5,7 @@
 package breakthrough
 
 import (
+	"fmt"
 	"time"
 
 	"tiendao/game/internal/fixedpoint"
@@ -20,17 +21,35 @@ type RNG interface {
 // Missing describes one unmet requirement, with the exact shortfall for the UI.
 // For kind "cultivation", Have/Need are milli measured from the start of the current realm.
 type Missing struct {
-	Kind    string     `json:"kind"` // cultivation | item | cooldown | final_stage
-	ItemID  string     `json:"itemId,omitempty"`
-	Have    int64      `json:"have"`
-	Need    int64      `json:"need"`
-	ReadyAt *time.Time `json:"readyAt,omitempty"`
+	Kind   string `json:"kind"` // cultivation | item | trial | cooldown | final_stage
+	ItemID string `json:"itemId,omitempty"`
+	// TrialKind (kind "trial"): the trials.yaml kind whose valid pass is needed (e.g. tam_ma).
+	TrialKind string     `json:"trialKind,omitempty"`
+	Have      int64      `json:"have"`
+	Need      int64      `json:"need"`
+	ReadyAt   *time.Time `json:"readyAt,omitempty"`
 }
 
-// OddsPart is one disclosed component of the success chance.
+// OddsPart is one disclosed component of the success chance. For a non-guaranteed tribulation the parts sum to
+// successBp: the bonus parts are listed uncapped, then bonus_cap (≤ 0, the 12% total-bonus cap) and max_cap (≤ 0, the
+// 90% final cap) — so the player sees every cap that bit. A guaranteed attempt adds "guarantee" up to 10000.
 type OddsPart struct {
-	Source string `json:"source"` // base | pity | surplus | items | protector
-	BP     int64  `json:"bp"`
+	Source string `json:"source"`           // base | pity | surplus | items | protector | bonus_cap | max_cap | guarantee
+	BP     int64  `json:"bp"`               //
+	Detail string `json:"detail,omitempty"` // items: the equipped pháp bảo id; protector: counted members
+}
+
+// OddsCaps discloses the decision-F caps next to the breakdown (tribulations only).
+type OddsCaps struct {
+	SurplusMaxBP     int64  `json:"surplusMaxBp"`
+	ItemMaxBP        int64  `json:"itemMaxBp"`
+	ProtectorPerBP   int64  `json:"protectorPerMemberBp"`
+	ProtectorMaxBP   int64  `json:"protectorMaxBp"`
+	TotalBonusMaxBP  int64  `json:"totalBonusMaxBp"`
+	MaxSuccessBP     int64  `json:"maxSuccessBp"`
+	ArtifactID       string `json:"artifactId"`       // equipped pháp bảo counted in "items" ("" = none)
+	ArtifactBonusBP  int64  `json:"artifactBonusBp"`  // its raw bonus (before item_bonus_max_bp)
+	ProtectorMembers int64  `json:"protectorMembers"` // protectors that count now
 }
 
 // TribulationPreview discloses the tribulation stakes before the attempt.
@@ -62,6 +81,17 @@ type Preview struct {
 	Odds                      []OddsPart              `json:"odds"`
 	CooldownSeconds           int64                   `json:"cooldownSeconds"` // started on failure
 	Tribulation               *TribulationPreview     `json:"tribulation,omitempty"`
+	Trial                     *TrialGate              `json:"trial,omitempty"` // set when a trial guards this breakthrough
+	Caps                      *OddsCaps               `json:"caps,omitempty"`  // tribulations: decision-F caps + bonus sources
+}
+
+// TrialGate discloses the mini-game gate of this breakthrough (trials.yaml gate.tier). The pass is kept through
+// failed attempts and consumed by the successful one.
+type TrialGate struct {
+	Kind       string     `json:"kind"`
+	Name       string     `json:"name"`
+	Passed     bool       `json:"passed"`
+	ValidUntil *time.Time `json:"validUntil"` // of the valid pass; null when there is none
 }
 
 // State is the minimal character state needed to evaluate a breakthrough.
@@ -70,9 +100,13 @@ type State struct {
 	FailStreak       int64
 	CooldownUntil    *time.Time
 	Inventory        map[string]int64
-	// Phase 3 slots — always 0 in Phase 1 (pháp bảo/đan hộ thân, online fellow faction members).
+	// Phase 3.4: the equipped pháp bảo's tribulation bonus and the protectors that count (online fellow members who
+	// accepted the open hộ pháp invite). Capped in TribulationOdds by realms.yaml (decision F).
 	ItemBonusBP      int64
+	ArtifactID       string
 	ProtectorMembers int64
+	// Trial is the gate of the realm's major breakthrough (nil = none). ValidUntil = the valid pass's expiry.
+	Trial *TrialGate
 }
 
 // EffectiveSuccessBP = base + min(pityMax, failStreak × pityStep), clamped to [0, 10000]. Pre-tribulation majors.
@@ -97,13 +131,23 @@ func TribulationOdds(cat *realm.Catalogue, last *realm.Stage, st State) (int64, 
 	base := cat.TribulationBaseBP(last)
 	surplus := SurplusBonusBP(t, last.RequiredMilli, st.CultivationMilli)
 	items := min(t.ItemBonusMaxBP, max(0, st.ItemBonusBP))
-	protector := min(t.ProtectorMaxBP, max(0, st.ProtectorMembers)*t.ProtectorPerBP)
-	odds := []OddsPart{{"base", base}, {"surplus", surplus}, {"items", items}, {"protector", protector}}
-	if st.FailStreak >= int64(t.GuaranteeAfter) {
-		return fixedpoint.BPScale, odds, true
+	members := min(max(0, st.ProtectorMembers), t.ProtectorMaxBP/max(t.ProtectorPerBP, 1))
+	protector := min(t.ProtectorMaxBP, members*t.ProtectorPerBP)
+	odds := []OddsPart{{Source: "base", BP: base}, {Source: "surplus", BP: surplus}, {Source: "items", BP: items, Detail: st.ArtifactID},
+		{Source: "protector", BP: protector, Detail: fmt.Sprint(members)}}
+	raw := surplus + items + protector
+	bonus := min(t.MaxTotalBonusBP, raw)
+	if bonus < raw {
+		odds = append(odds, OddsPart{Source: "bonus_cap", BP: bonus - raw})
 	}
-	bonus := min(t.MaxTotalBonusBP, surplus+items+protector)
-	return min(t.MaxSuccessBP, base+bonus), odds, false
+	success := min(t.MaxSuccessBP, base+bonus)
+	if success < base+bonus {
+		odds = append(odds, OddsPart{Source: "max_cap", BP: success - base - bonus})
+	}
+	if st.FailStreak >= int64(t.GuaranteeAfter) {
+		return fixedpoint.BPScale, append(odds, OddsPart{Source: "guarantee", BP: fixedpoint.BPScale - success}), true
+	}
+	return success, odds, false
 }
 
 // LossMilli is what a failed tribulation removes from the current stage: stored × loss_bp / 10000.
@@ -146,8 +190,11 @@ func Evaluate(cat *realm.Catalogue, from *realm.Stage, st State, now time.Time) 
 	if last.Tribulation {
 		t := cat.Tribulation()
 		bp, odds, guaranteed := TribulationOdds(cat, last, State{CultivationMilli: surplusStored, FailStreak: st.FailStreak,
-			ItemBonusBP: st.ItemBonusBP, ProtectorMembers: st.ProtectorMembers})
+			ItemBonusBP: st.ItemBonusBP, ArtifactID: st.ArtifactID, ProtectorMembers: st.ProtectorMembers})
 		p.SuccessBP, p.Odds, p.CooldownSeconds = bp, odds, t.CooldownSeconds
+		p.Caps = &OddsCaps{SurplusMaxBP: t.SurplusBonus.MaxBP, ItemMaxBP: t.ItemBonusMaxBP, ProtectorPerBP: t.ProtectorPerBP,
+			ProtectorMaxBP: t.ProtectorMaxBP, TotalBonusMaxBP: t.MaxTotalBonusBP, MaxSuccessBP: t.MaxSuccessBP, ArtifactID: st.ArtifactID,
+			ArtifactBonusBP: st.ItemBonusBP, ProtectorMembers: min(max(0, st.ProtectorMembers), t.ProtectorMaxBP/max(t.ProtectorPerBP, 1))}
 		tp := &TribulationPreview{Name: t.Names[from.Path], Guaranteed: guaranteed, FailStreak: st.FailStreak,
 			GuaranteeAfter: t.GuaranteeAfter, LossBP: t.LossBP, CooldownSeconds: t.CooldownSeconds}
 		if !guaranteed {
@@ -158,7 +205,7 @@ func Evaluate(cat *realm.Catalogue, from *realm.Stage, st State, now time.Time) 
 	} else {
 		rule := last.Breakthrough
 		p.SuccessBP = EffectiveSuccessBP(rule, st.FailStreak, cat.Settings.PityMaxBonusBP)
-		p.Odds = []OddsPart{{"base", rule.SuccessBP}, {"pity", p.SuccessBP - rule.SuccessBP}}
+		p.Odds = []OddsPart{{Source: "base", BP: rule.SuccessBP}, {Source: "pity", BP: p.SuccessBP - rule.SuccessBP}}
 		p.CooldownSeconds = rule.CooldownSeconds
 	}
 
@@ -172,6 +219,15 @@ func Evaluate(cat *realm.Catalogue, from *realm.Stage, st State, now time.Time) 
 		if have := st.Inventory[req.ItemID]; have < req.Quantity {
 			p.Missing = append(p.Missing, Missing{Kind: "item", ItemID: req.ItemID, Have: have, Need: req.Quantity})
 		}
+	}
+	if g := st.Trial; g != nil {
+		gate := *g
+		gate.Passed = gate.ValidUntil != nil && now.Before(*gate.ValidUntil)
+		if !gate.Passed {
+			gate.ValidUntil = nil
+			p.Missing = append(p.Missing, Missing{Kind: "trial", TrialKind: gate.Kind})
+		}
+		p.Trial = &gate
 	}
 	if st.CooldownUntil != nil && now.Before(*st.CooldownUntil) {
 		at := *st.CooldownUntil

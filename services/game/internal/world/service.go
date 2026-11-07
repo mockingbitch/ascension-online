@@ -24,7 +24,8 @@ const LockID = 7_310_002
 
 const medianPage = 1000
 
-// Service runs the world clock jobs. Phase 1: per-day totals, day close + server median, fold into world_state.
+// Service runs the world clock jobs: per-day totals, day close + server median, fold into world_state, ranged event
+// ends and the milestone reach rule (one tx under the advisory lock, §5.6). It also serves GET /world and admin.
 type Service struct {
 	Pool         *pgxpool.Pool
 	Realms       *realm.Catalogue
@@ -41,11 +42,15 @@ type State struct {
 	ProgressMilli       int64      `json:"progressMilli"`
 	ClosedThroughDay    string     `json:"closedThroughDay,omitempty"`
 	MedianPositionMilli int64      `json:"medianPositionMilli"`
+	EraID               string     `json:"eraId,omitempty"`
+	LastMilestoneID     string     `json:"lastMilestoneId,omitempty"`
+	PausedAt            *time.Time `json:"pausedAt"`
 }
 
 func stateOf(ws db.WorldState, now time.Time) State {
 	st := State{StartedAt: ws.StartedAt, ServerDay: ServerDay(ws.StartedAt, now), ProgressMilli: ws.ProgressMilli,
-		MedianPositionMilli: ws.MedianPositionMilli}
+		MedianPositionMilli: ws.MedianPositionMilli, EraID: ws.EraID.String, LastMilestoneID: ws.LastMilestoneID.String,
+		PausedAt: ws.PausedAt}
 	if ws.ClosedThroughDay.Valid {
 		st.ClosedThroughDay = ws.ClosedThroughDay.Time.Format(time.DateOnly)
 	}
@@ -79,10 +84,12 @@ func (s *Service) Start(ctx context.Context, admin uuid.UUID) (State, error) {
 
 // TickResult reports what a world tick did.
 type TickResult struct {
-	Ran        bool // false when another worker holds the lock
-	Recomputed int  // game days recomputed
-	Closed     int  // game days closed this tick
-	Violations int  // audit violations found on closed days (C1 ceiling, C3 credits = points)
+	Ran         bool   // false when another worker holds the lock
+	Recomputed  int    // game days recomputed
+	Closed      int    // game days closed this tick
+	Violations  int    // audit violations found on closed days (C1 ceiling, C3 credits = points)
+	EventsEnded int    // ranged events ended this tick
+	Reached     string // milestone reached this tick ("" = none)
 }
 
 // MaxCatchUpDays bounds how many game days one tick recomputes after a long outage (the rest follow next ticks).
@@ -90,8 +97,10 @@ const MaxCatchUpDays = 400
 
 // Tick recomputes per-day totals for every game day from closed_through_day + 1 (or the launch day, or yesterday
 // before launch) through today — days without any row get a DAU 0 row — closes finished days IN ORDER (with the
-// server median and an invariant audit), and folds closed days into world_state. Replay-safe: totals are
-// recomputed, closed rows never change, folding is guarded by closed_through_day under the world_state row lock.
+// server median and an invariant audit), folds closed days into world_state, then (after launch) ends due ranged
+// events and evaluates the reach rule. Replay-safe: totals are recomputed, closed rows never change, folding is
+// guarded by closed_through_day under the world_state row lock, events end once (ended_at) and milestones are
+// recorded with ON CONFLICT DO NOTHING. Everything runs in one tx, so effects and outbox rows commit together.
 func (s *Service) Tick(ctx context.Context) (TickResult, error) {
 	var res TickResult
 	err := postgres.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -142,20 +151,35 @@ func (s *Service) Tick(ctx context.Context) (TickResult, error) {
 		}
 		// 3. Fold newly closed days into world_state.
 		closed, err := q.ListClosedDaysAfter(ctx, ws.ClosedThroughDay)
-		if err != nil || len(closed) == 0 {
+		if err != nil {
 			return err
 		}
-		progress, median, medianDay := ws.ProgressMilli, ws.MedianPositionMilli, ws.MedianGameDay
-		for _, c := range closed {
-			if ws.StartedAt != nil && !c.GameDay.Time.Before(gameday.Of(*ws.StartedAt)) {
-				progress += c.PerCapitaMilli
+		if len(closed) > 0 {
+			progress, median, medianDay := ws.ProgressMilli, ws.MedianPositionMilli, ws.MedianGameDay
+			for _, c := range closed {
+				if ws.StartedAt != nil && !c.GameDay.Time.Before(gameday.Of(*ws.StartedAt)) {
+					progress += c.PerCapitaMilli
+				}
+				if c.MedianPositionMilli.Valid {
+					median, medianDay = c.MedianPositionMilli.Int64, c.GameDay
+				}
 			}
-			if c.MedianPositionMilli.Valid {
-				median, medianDay = c.MedianPositionMilli.Int64, c.GameDay
+			if err := q.FoldWorldProgress(ctx, db.FoldWorldProgressParams{ProgressMilli: progress, ClosedThroughDay: closed[len(closed)-1].GameDay,
+				MedianPositionMilli: median, MedianGameDay: medianDay}); err != nil {
+				return err
 			}
+			ws.ProgressMilli = progress
 		}
-		return q.FoldWorldProgress(ctx, db.FoldWorldProgressParams{ProgressMilli: progress, ClosedThroughDay: closed[len(closed)-1].GameDay,
-			MedianPositionMilli: median, MedianGameDay: medianDay})
+		if ws.StartedAt == nil {
+			return nil
+		}
+		// 4. End ranged events whose duration has passed (on_end effects, world.event_ended).
+		if res.EventsEnded, err = s.endEvents(ctx, q, &ws, now); err != nil {
+			return err
+		}
+		// 5. Reach rule: at most one milestone, recorded idempotently with its effects (world.milestone_reached).
+		res.Reached, err = s.reach(ctx, q, &ws, now)
+		return err
 	})
 	return res, err
 }

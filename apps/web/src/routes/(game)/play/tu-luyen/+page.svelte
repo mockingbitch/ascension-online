@@ -2,6 +2,7 @@
 <script lang="ts">
 	import CultivationScene from '$lib/components/CultivationScene.svelte';
 	import DailyTasks from '$lib/components/DailyTasks.svelte';
+	import FortuneCard from '$lib/components/FortuneCard.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import QiBar from '$lib/components/QiBar.svelte';
 	import RealmBadge from '$lib/components/RealmBadge.svelte';
@@ -46,7 +47,7 @@
 			</header>
 
 			<div class="scene-box relative min-h-0 flex-1">
-				<div class="scene-fit"><CultivationScene {aura} ready={clock.atBottleneck} backlash={game.backlash} /></div>
+				<div class="scene-fit"><CultivationScene {aura} ready={clock.atBottleneck} backlash={game.backlash} decorations={game.character?.appearance?.caveDecorationIds} /></div>
 				<div class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-live="polite">
 					{#each game.floats as f (f.id)}<span class="float font-display text-3xl font-bold text-jade-300">{f.text}</span>{/each}
 				</div>
@@ -88,7 +89,10 @@
 				<button class="btn btn-ghost w-full" disabled={game.busy} onclick={game.usePhu}><Icon name="talisman" size={16} /> Dùng Tụ Linh Phù (+4 canh giờ)</button>
 			{/if}
 			<div class="border-t border-gold-500/15 pt-3">
-				<DailyTasks board={game.board} catalogue={cat} busy={game.busy} onclaim={game.claimTask} />
+				<FortuneCard />
+			</div>
+			<div class="border-t border-gold-500/15 pt-3">
+				<DailyTasks board={game.board} catalogue={cat} busy={game.busy} onclaim={game.claimTask} onincense={game.offerIncense} />
 			</div>
 		</aside>
 	</div>

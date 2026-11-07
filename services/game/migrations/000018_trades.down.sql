@@ -1,0 +1,11 @@
+ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_trade_reason_check;
+ALTER TABLE reports DROP COLUMN IF EXISTS trade_offer_id;
+DELETE FROM reports WHERE reason = 'trade_abuse';
+ALTER TABLE reports DROP CONSTRAINT reports_reason_check;
+ALTER TABLE reports ADD CONSTRAINT reports_reason_check CHECK (reason IN ('offensive_name', 'harassment'));
+DROP TABLE IF EXISTS trade_events;
+DROP TABLE IF EXISTS trade_days;
+DROP TABLE IF EXISTS trade_lines;
+DROP TRIGGER IF EXISTS trade_offers_status_guard ON trade_offers;
+DROP TABLE IF EXISTS trade_offers;
+DROP FUNCTION IF EXISTS trade_offers_status_guard();

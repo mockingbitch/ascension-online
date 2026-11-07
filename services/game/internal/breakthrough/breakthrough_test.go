@@ -183,3 +183,100 @@ func TestQuoteBound(t *testing.T) {
 		t.Fatal("at the bình cảnh cap the bound equals the loss")
 	}
 }
+
+// Kim Đan → Nguyên Anh is gated by Tâm Ma: without a valid pass the preview lists missing "trial"; an expired
+// pass counts as none; a valid pass discloses its expiry and the breakthrough is ready.
+func TestEvaluateTrialGate(t *testing.T) {
+	cat := loadCat(t)
+	last := lastOf(t, cat, "kim_dan")
+	now := time.Date(2026, 11, 7, 12, 0, 0, 0, time.UTC)
+	full := State{CultivationMilli: last.RequiredMilli}
+	cases := []struct {
+		name   string
+		until  *time.Time
+		ready  bool
+		passed bool
+	}{
+		{"no pass", nil, false, false},
+		{"expired pass", ptr(now.Add(-time.Second)), false, false},
+		{"pass expiring now", ptr(now), false, false},
+		{"valid pass", ptr(now.Add(time.Hour)), true, true},
+	}
+	for _, c := range cases {
+		st := full
+		st.Trial = &TrialGate{Kind: "tam_ma", Name: "Vượt Tâm Ma", ValidUntil: c.until}
+		p := Evaluate(cat, last, st, now)
+		if p.Ready != c.ready || p.Trial == nil || p.Trial.Passed != c.passed {
+			t.Fatalf("%s: ready %v trial %+v missing %+v", c.name, p.Ready, p.Trial, p.Missing)
+		}
+		hasTrial := len(p.Missing) == 1 && p.Missing[0].Kind == "trial" && p.Missing[0].TrialKind == "tam_ma"
+		if hasTrial == c.ready {
+			t.Fatalf("%s: missing %+v", c.name, p.Missing)
+		}
+		if !c.passed && p.Trial.ValidUntil != nil {
+			t.Fatalf("%s: a lapsed pass must not be shown as valid", c.name)
+		}
+	}
+	// No gate → no trial in the preview.
+	if p := Evaluate(cat, last, full, now); p.Trial != nil || !p.Ready {
+		t.Fatalf("ungated: %+v", p)
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
+
+// Decision F at each cap boundary (Phase 3.4): items ≤ item_bonus_max_bp, protectors ≤ max members, total bonus ≤
+// max_total_bonus_bp, final ≤ max_success_bp unless guaranteed; the disclosed parts always sum to the success chance.
+func TestTribulationCapBoundaries(t *testing.T) {
+	cat := loadCat(t)
+	tr := cat.Tribulation()
+	low := lastOf(t, cat, "dai_la_kim_tien") // base 53%: the final cap never bites, the bonus cap does
+	high := lastOf(t, cat, "hoa_than")       // base 80%: the final cap bites
+	sum := func(p []OddsPart) (s int64) {
+		for _, x := range p {
+			s += x.BP
+		}
+		return
+	}
+	get := func(p []OddsPart, src string) int64 {
+		for _, x := range p {
+			if x.Source == src {
+				return x.BP
+			}
+		}
+		return 0
+	}
+	cases := []struct {
+		name                      string
+		stage                     *realm.Stage
+		surplus                   bool
+		items, members            int64
+		want, wantItems, wantProt int64
+		wantBonusCap, wantMaxCap  int64
+	}{
+		{"items at cap", low, false, tr.ItemBonusMaxBP, 0, 5300 + tr.ItemBonusMaxBP, tr.ItemBonusMaxBP, 0, 0, 0},
+		{"items above cap", low, false, tr.ItemBonusMaxBP + 100, 0, 5300 + tr.ItemBonusMaxBP, tr.ItemBonusMaxBP, 0, 0, 0},
+		{"protectors at cap", low, false, 0, 3, 5300 + tr.ProtectorMaxBP, 0, tr.ProtectorMaxBP, 0, 0},
+		{"protectors above cap", low, false, 0, 5, 5300 + tr.ProtectorMaxBP, 0, tr.ProtectorMaxBP, 0, 0},
+		{"total exactly 12%", low, false, tr.ItemBonusMaxBP, 3, 5300 + 1000, 700, 300, 0, 0},
+		{"total above 12%", low, true, tr.ItemBonusMaxBP, 3, 5300 + tr.MaxTotalBonusBP, 700, 300, tr.MaxTotalBonusBP - 1500, 0},
+		{"final cap", high, true, tr.ItemBonusMaxBP, 0, tr.MaxSuccessBP, 700, 0, 0, tr.MaxSuccessBP - 8000 - 500 - 700},
+		{"both caps", high, true, tr.ItemBonusMaxBP, 3, tr.MaxSuccessBP, 700, 300, tr.MaxTotalBonusBP - 1500, tr.MaxSuccessBP - 8000 - tr.MaxTotalBonusBP},
+	}
+	for _, c := range cases {
+		stored := c.stage.RequiredMilli
+		if c.surplus {
+			stored = c.stage.CapMilli
+		}
+		bp, odds, g := TribulationOdds(cat, c.stage, State{CultivationMilli: stored, ItemBonusBP: c.items, ProtectorMembers: c.members})
+		if g || bp != c.want || sum(odds) != bp || get(odds, "items") != c.wantItems || get(odds, "protector") != c.wantProt ||
+			get(odds, "bonus_cap") != c.wantBonusCap || get(odds, "max_cap") != c.wantMaxCap {
+			t.Errorf("%s: %d %+v", c.name, bp, odds)
+		}
+	}
+	// Guaranteed: 10000 and the guarantee part closes the sum.
+	bp, odds, g := TribulationOdds(cat, high, State{CultivationMilli: high.CapMilli, FailStreak: int64(tr.GuaranteeAfter), ItemBonusBP: 700, ProtectorMembers: 3})
+	if !g || bp != 10000 || sum(odds) != 10000 {
+		t.Fatalf("guaranteed: %d %+v", bp, odds)
+	}
+}

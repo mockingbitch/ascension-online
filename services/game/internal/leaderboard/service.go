@@ -30,6 +30,10 @@ type Entry struct {
 	StageID        string    `json:"stageId"`
 	Score          float64   `json:"score"`
 	StageReachedAt time.Time `json:"stageReachedAt"`
+	// Equipped cosmetics (cosmetics.yaml ids) so others see the frame/title next to the portrait. Display only:
+	// never part of the score.
+	AvatarFrameID string `json:"avatarFrameId,omitempty"`
+	TitleID       string `json:"titleId,omitempty"`
 }
 
 // Service reads/writes the global realm leaderboard.
@@ -38,6 +42,9 @@ type Service struct {
 	Redis  *redis.Client
 	Realms *realm.Catalogue
 	Key    string // defaults to KeyGlobalRealm
+	// Look filters the frame/title shown on a row by the player's điểm duyên (cosmetic.Catalogue.BoardFilter): Tiên
+	// Duyên perks above the current level are hidden. nil → shown as equipped. Display only, never the score.
+	Look func(frame, title string, vipPoints int64) (string, string)
 }
 
 func (s *Service) key() string {
@@ -179,7 +186,12 @@ func (s *Service) hydrate(ctx context.Context, zs []redis.Z) ([]Entry, error) {
 	}
 	out := make([]Entry, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, Entry{CharacterID: r.ID, Name: r.Name, StageID: r.StageID, Score: scores[r.ID], StageReachedAt: r.StageReachedAt})
+		frame, title := r.AvatarFrameID.String, r.TitleID.String
+		if s.Look != nil {
+			frame, title = s.Look(frame, title, r.VipPoints)
+		}
+		out = append(out, Entry{CharacterID: r.ID, Name: r.Name, StageID: r.StageID, Score: scores[r.ID], StageReachedAt: r.StageReachedAt,
+			AvatarFrameID: frame, TitleID: title})
 	}
 	return out, nil
 }

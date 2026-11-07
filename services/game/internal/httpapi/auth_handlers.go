@@ -75,6 +75,7 @@ func (d Deps) googleCallback(w http.ResponseWriter, r *http.Request) {
 		fail("server_error")
 		return
 	}
+	d.recordNet(r, sess.User.ID) // salted network hash (anti multi-account signal; never the raw IP)
 	d.setRefreshCookie(w, sess)
 	http.Redirect(w, r, d.PublicBaseURL+st.ReturnTo, http.StatusFound)
 }
@@ -113,6 +114,7 @@ func (d Deps) refresh(w http.ResponseWriter, r *http.Request) {
 		d.internal(w, r, "refresh", err)
 		return
 	}
+	d.recordNet(r, sess.User.ID)
 	d.setRefreshCookie(w, sess)
 	writeJSON(w, 200, sessionResponse{AccessToken: sess.AccessToken, ExpiresIn: int64(sess.AccessExpiresIn / time.Second), User: sess.User})
 }

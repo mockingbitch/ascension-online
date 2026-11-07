@@ -1,0 +1,34 @@
+# Tử Tiêu Cung — Hồng Quân lectures all day (decision 2026-11-07, replaces the 2 fixed sessions of data-model §9.1).
+# Loaded by internal/lecture; scripts (what Hồng Quân says) live in content/story/lectures/*.yaml.
+#
+# Flow: enter the hall → a seat (Redis, rebuildable) → heartbeat every `heartbeat_seconds` accrues listening time
+# (server clock; gaps longer than `max_gap_seconds` are not counted) → every `insight.every_seconds` a "ngộ đạo"
+# moment opens for `insight.window_seconds`; tapping it pays the accrued time as tu vi through the single credit
+# path (source `lecture`, activity bucket). No per-player timer: payment happens only on that action.
+# Units: *_points whole points (1 point = 1000 milli). Balance: lectures keep the 2 × 10 = 20 points/day share
+# of the activity bucket (balance-the-gioi-chung.md §3) — continuous listening only spreads it over the day.
+version: 1
+
+hall:
+  seats: 36                       # cushions drawn in the hall; later arrivals listen "ngoài điện" (same reward)
+  chat_channel: tu_tieu_cung      # chat.yaml channel shown as speech bubbles over seated listeners
+
+cycle:
+  epoch: "2026-11-01T00:00:00+07:00"   # lecture loop position = (now − epoch) mod Σ script length
+
+presence:
+  heartbeat_seconds: 30
+  max_gap_seconds: 75             # a beat further than this from the previous one counts nothing for the gap
+
+insight:
+  every_seconds: 600              # a ngộ đạo moment every 10 minutes, same for the whole server
+  window_seconds: 120             # open for 2 minutes
+
+reward:
+  points_per_hour: 10             # 10 points per hour listened → the daily cap after 2 hours
+  daily_cap_points: 20            # lecture share of the activity bucket per character per game day
+  max_seconds_per_insight: 720    # listening older than this since the last ngộ đạo is not paid (anti-AFK)
+  attend_min_seconds: 300         # daily task "Nghe giảng" counts a ngộ đạo only after ≥ 5 minutes of listening
+  # điểm duyên: once each day when the day's lecture tu vi first reaches each mark. The amount and the daily max come
+  # from vip.yaml earn activity `lecture_attendance` (decision D: 3 × 2); content check: marks ≤ its daily_max_times.
+  vip_milestones_points: [10, 20]

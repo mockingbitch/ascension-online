@@ -1,4 +1,5 @@
-// Package vip resolves VIP level from cumulative points and the benefits of each level.
+// Package vip resolves the Tiên Duyên level (player-facing name of VIP, 0–12) from cumulative điểm duyên, the benefits
+// of each level, and the in-game earning table (decision D). Identifiers stay "vip"; display strings come from vip.yaml.
 //
 // Fairness invariants (enforced by the loader, see content/catalog/vip.yaml header):
 //   - VIP affects only the offline accumulation window, daily gift and cosmetic/convenience perks.
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"tiendao/game/internal/fixedpoint"
 )
 
 // MaxTier is the highest VIP level supported by the game.
@@ -47,21 +50,67 @@ type Benefits struct {
 	Flags           []string `json:"flags"`        // "garden_auto_harvest"
 }
 
-// Table is the immutable VIP ladder.
+// Activity is one in-game source of điểm duyên (decision D). Credited only by EarnLocked.
+type Activity struct {
+	ID                string `yaml:"id" json:"id"`
+	Source            string `yaml:"source" json:"source"` // ledger source
+	Name              string `yaml:"name" json:"name"`
+	Points            int64  `yaml:"points" json:"points"`
+	DailyMaxTimes     int64  `yaml:"daily_max_times" json:"dailyMaxTimes"`
+	Live              bool   `yaml:"live" json:"live"` // false: the feature does not exist yet
+	MinElapsedSeconds int64  `yaml:"min_elapsed_seconds,omitempty" json:"minElapsedSeconds,omitempty"`
+}
+
+// Activity IDs the game code credits. The loader requires each to exist (and be live) in vip.yaml.
+const (
+	ActOnlineCultivation = "online_cultivation"
+	ActLecture           = "lecture_attendance"
+	ActDailyTask         = "daily_task_claim"
+	ActTrialPass         = "trial_pass"
+	ActProtectorAssist   = "protector_assist" // hộ pháp counted by a tribulation attempt (Phase 3.4, worker)
+	ActDualCultivation   = "dual_cultivation" // đạo lữ song tu claim reaching dao_lu.yaml duyen_min_seconds (Phase 5.1)
+)
+
+var wiredActivities = []string{ActOnlineCultivation, ActLecture, ActDailyTask, ActTrialPass, ActProtectorAssist, ActDualCultivation}
+
+// Ledger sources (vip_point_ledger.source). Top-up and admin rows are never activities and never count toward caps.
+const (
+	SourceTopup = "topup"
+	SourceAdmin = "admin"
+)
+
+var activitySources = map[string]bool{"cultivation": true, "lecture": true, "interaction": true, "task": true, "trial": true, "event": true}
+
+// Earn is the in-game earning table.
+type Earn struct {
+	DailyCapPoints int64      `yaml:"daily_cap_points"`
+	Activities     []Activity `yaml:"activities"`
+}
+
+// Config is vip.yaml as authored.
+type Config struct {
+	Version                      int    `yaml:"version"`
+	DisplayName                  string `yaml:"display_name"`
+	PointName                    string `yaml:"point_name"`
+	PointsPer1000VND             int64  `yaml:"points_per_1000_vnd"`
+	HardMaxOfflineCapHours       int    `yaml:"hard_max_offline_cap_hours"`
+	DailyCultivationCeilingHours int    `yaml:"daily_cultivation_ceiling_hours"`
+	Earn                         Earn   `yaml:"earn"`
+	Tiers                        []Tier `yaml:"tiers"`
+}
+
+// Table is the immutable Tiên Duyên ladder + earning table.
 type Table struct {
-	PointValueVND     int64
+	DisplayName       string
+	PointName         string
+	PointsPer1000VND  int64
+	EarnDailyCap      int64
 	HardMaxOfflineCap time.Duration
 	DailyCeiling      time.Duration
 	tiers             []Tier
 	benefits          []Benefits
-}
-
-type file struct {
-	Version                      int    `yaml:"version"`
-	PointValueVND                int64  `yaml:"point_value_vnd"`
-	HardMaxOfflineCapHours       int    `yaml:"hard_max_offline_cap_hours"`
-	DailyCultivationCeilingHours int    `yaml:"daily_cultivation_ceiling_hours"`
-	Tiers                        []Tier `yaml:"tiers"`
+	activities        []Activity
+	actByID           map[string]*Activity
 }
 
 // LoadFile parses and validates vip.yaml.
@@ -70,23 +119,30 @@ func LoadFile(path string) (*Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	var f file
+	var c Config
 	dec := yaml.NewDecoder(strings.NewReader(string(b)))
 	dec.KnownFields(true)
-	if err := dec.Decode(&f); err != nil {
+	if err := dec.Decode(&c); err != nil {
 		return nil, fmt.Errorf("vip: decode: %w", err)
 	}
-	if f.Version != 2 {
-		return nil, fmt.Errorf("vip: unsupported version %d", f.Version)
+	if c.Version != 3 {
+		return nil, fmt.Errorf("vip: unsupported version %d", c.Version)
 	}
-	return New(f.Tiers, f.HardMaxOfflineCapHours, f.DailyCultivationCeilingHours, f.PointValueVND)
+	return New(c)
 }
 
-// New validates the ladder and precomputes cumulative benefits.
-func New(tiers []Tier, hardMaxHours, dailyCeilingHours int, pointValueVND int64) (*Table, error) {
+// New validates the ladder and earning table and precomputes cumulative benefits.
+func New(c Config) (*Table, error) {
 	var errs []error
 	fail := func(format string, a ...any) { errs = append(errs, fmt.Errorf(format, a...)) }
+	tiers, hardMaxHours, dailyCeilingHours := c.Tiers, c.HardMaxOfflineCapHours, c.DailyCultivationCeilingHours
 
+	if strings.TrimSpace(c.DisplayName) == "" || strings.TrimSpace(c.PointName) == "" {
+		fail("display_name and point_name required")
+	}
+	if c.PointsPer1000VND <= 0 {
+		fail("points_per_1000_vnd must be > 0")
+	}
 	if len(tiers) != MaxTier+1 {
 		fail("need exactly %d tiers (0..%d), got %d", MaxTier+1, MaxTier, len(tiers))
 	}
@@ -94,15 +150,56 @@ func New(tiers []Tier, hardMaxHours, dailyCeilingHours int, pointValueVND int64)
 		fail("daily_cultivation_ceiling_hours must be 1..24")
 	}
 	t := &Table{
-		PointValueVND:     pointValueVND,
+		DisplayName:       c.DisplayName,
+		PointName:         c.PointName,
+		PointsPer1000VND:  c.PointsPer1000VND,
+		EarnDailyCap:      c.Earn.DailyCapPoints,
 		HardMaxOfflineCap: time.Duration(hardMaxHours) * time.Hour,
 		DailyCeiling:      time.Duration(dailyCeilingHours) * time.Hour,
 		tiers:             tiers,
+		activities:        c.Earn.Activities,
+		actByID:           map[string]*Activity{},
+	}
+	if c.Earn.DailyCapPoints <= 0 {
+		fail("earn.daily_cap_points must be > 0")
+	}
+	for i := range t.activities {
+		a := &t.activities[i]
+		if !slugRe.MatchString(a.ID) {
+			fail("earn activity[%d]: invalid id %q", i, a.ID)
+		}
+		if _, dup := t.actByID[a.ID]; dup {
+			fail("earn activity %q: duplicate", a.ID)
+		}
+		t.actByID[a.ID] = a
+		if !activitySources[a.Source] {
+			fail("earn activity %q: source %q not allowed (topup/admin are not activities)", a.ID, a.Source)
+		}
+		if strings.TrimSpace(a.Name) == "" {
+			fail("earn activity %q: name required", a.ID)
+		}
+		if a.Points <= 0 || a.DailyMaxTimes < 1 {
+			fail("earn activity %q: points > 0 and daily_max_times ≥ 1", a.ID)
+		}
+		if a.Points > c.Earn.DailyCapPoints {
+			fail("earn activity %q: points exceed earn.daily_cap_points", a.ID)
+		}
+		if a.MinElapsedSeconds < 0 {
+			fail("earn activity %q: negative min_elapsed_seconds", a.ID)
+		}
+	}
+	for _, id := range wiredActivities {
+		if a, ok := t.actByID[id]; !ok || !a.Live {
+			fail("earn activity %q is credited by the game and must exist with live: true", id)
+		}
 	}
 	var acc Benefits
 	for i, tr := range tiers {
 		if tr.Tier != i {
 			fail("tier at position %d has tier=%d", i, tr.Tier)
+		}
+		if strings.TrimSpace(tr.Name) == "" || strings.Contains(strings.ToUpper(tr.Name), "VIP") {
+			fail("tier %d: name %q must be set and must not say VIP (display name is Tiên Duyên)", i, tr.Name)
 		}
 		if i == 0 && tr.PointsRequired != 0 {
 			fail("tier 0 must require 0 points")
@@ -136,7 +233,7 @@ func New(tiers []Tier, hardMaxHours, dailyCeilingHours int, pointValueVND int64)
 			case !hasID && perkFlag[key]:
 				acc.Flags = append(acc.Flags, key)
 			default:
-				fail("tier %d: perk %q not allowed (VIP perks must be cosmetic/convenience only)", i, p)
+				fail("tier %d: perk %q not allowed (Tiên Duyên perks must be cosmetic/convenience only)", i, p)
 			}
 		}
 		b := acc
@@ -148,6 +245,43 @@ func New(tiers []Tier, hardMaxHours, dailyCeilingHours int, pointValueVND int64)
 		return nil, fmt.Errorf("vip: invalid ladder: %w", errors.Join(errs...))
 	}
 	return t, nil
+}
+
+// Activities returns the earning table as authored.
+func (t *Table) Activities() []Activity { return t.activities }
+
+// Activity looks up an earning activity.
+func (t *Table) Activity(id string) (Activity, bool) {
+	a, ok := t.actByID[id]
+	if !ok {
+		return Activity{}, false
+	}
+	return *a, true
+}
+
+// EarnAmount is the pure daily-max rule: how many điểm duyên the next credit of activityID pays, given how many times
+// it was already credited this game day and how many in-game points the user earned today across all activities.
+// 0 when the activity is used up or the daily cap is reached; a credit that would cross the cap is clipped to it.
+func (t *Table) EarnAmount(activityID string, timesToday, earnedToday int64) (int64, error) {
+	a, ok := t.actByID[activityID]
+	if !ok {
+		return 0, fmt.Errorf("%w: %q", ErrUnknownActivity, activityID)
+	}
+	if !a.Live {
+		return 0, fmt.Errorf("%w: %q is not live", ErrUnknownActivity, activityID)
+	}
+	if timesToday >= a.DailyMaxTimes {
+		return 0, nil
+	}
+	return max(0, min(a.Points, t.EarnDailyCap-earnedToday)), nil
+}
+
+// PointsForVND converts a top-up amount to điểm duyên (floor; 1.000đ = PointsPer1000VND).
+func (t *Table) PointsForVND(amountVND int64) int64 {
+	if amountVND <= 0 {
+		return 0
+	}
+	return fixedpoint.MulDiv(amountVND, t.PointsPer1000VND, 1000)
 }
 
 // TierForPoints returns the highest tier whose threshold is ≤ points.

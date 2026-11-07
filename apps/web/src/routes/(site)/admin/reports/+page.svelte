@@ -11,7 +11,11 @@
 		{ status: 'actioned', label: 'Đã xử lý' },
 		{ status: 'dismissed', label: 'Đã bỏ qua' }
 	];
-	const reasonLabel: Record<ReportReason, string> = { offensive_name: 'Đạo hiệu không phù hợp', harassment: 'Quấy rối' };
+	const reasonLabel: Record<ReportReason, string> = {
+		offensive_name: 'Đạo hiệu không phù hợp',
+		harassment: 'Quấy rối',
+		trade_abuse: 'Giao dịch bất thường'
+	};
 	const when = (iso: string) => new Date(iso).toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
 
 	// Per-report form state, keyed by report id.
@@ -102,7 +106,7 @@
 				</p>
 				{#if r.evidence}
 					<p class="mt-2 border-l-2 border-cinnabar-500 bg-ink-950/40 py-1 pl-3 text-sm text-mist-100">
-						<span class="mr-1 text-xs text-mist-500">Tin nhắn:</span>{r.evidence}
+						<span class="mr-1 text-xs text-mist-500">{r.tradeOfferId ? "Giao dịch:" : "Tin nhắn:"}</span>{r.evidence}
 					</p>
 				{/if}
 				{#if r.note}<p class="mt-2 border-l-2 border-ink-600 pl-3 text-sm whitespace-pre-line text-mist-300">{r.note}</p>{/if}

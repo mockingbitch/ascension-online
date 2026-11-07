@@ -30,7 +30,7 @@ func (q *Queries) CountReportsSince(ctx context.Context, arg CountReportsSincePa
 }
 
 const getOpenReport = `-- name: GetOpenReport :one
-SELECT id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence FROM reports
+SELECT id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence, trade_offer_id FROM reports
 WHERE reporter_user_id = $1 AND target_character_id = $2 AND reason = $3 AND status = 'open'
 `
 
@@ -58,12 +58,13 @@ func (q *Queries) GetOpenReport(ctx context.Context, arg GetOpenReportParams) (R
 		&i.CreatedAt,
 		&i.ChatMessageID,
 		&i.Evidence,
+		&i.TradeOfferID,
 	)
 	return i, err
 }
 
 const getReportByKey = `-- name: GetReportByKey :one
-SELECT id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence FROM reports WHERE reporter_user_id = $1 AND idempotency_key = $2
+SELECT id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence, trade_offer_id FROM reports WHERE reporter_user_id = $1 AND idempotency_key = $2
 `
 
 type GetReportByKeyParams struct {
@@ -89,12 +90,13 @@ func (q *Queries) GetReportByKey(ctx context.Context, arg GetReportByKeyParams) 
 		&i.CreatedAt,
 		&i.ChatMessageID,
 		&i.Evidence,
+		&i.TradeOfferID,
 	)
 	return i, err
 }
 
 const getReportForUpdate = `-- name: GetReportForUpdate :one
-SELECT id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence FROM reports WHERE id = $1 FOR UPDATE
+SELECT id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence, trade_offer_id FROM reports WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetReportForUpdate(ctx context.Context, id uuid.UUID) (Report, error) {
@@ -115,16 +117,17 @@ func (q *Queries) GetReportForUpdate(ctx context.Context, id uuid.UUID) (Report,
 		&i.CreatedAt,
 		&i.ChatMessageID,
 		&i.Evidence,
+		&i.TradeOfferID,
 	)
 	return i, err
 }
 
 const insertReport = `-- name: InsertReport :one
 INSERT INTO reports (reporter_user_id, target_character_id, target_name, reason, note, idempotency_key, created_at,
-                     chat_message_id, evidence)
+                     chat_message_id, evidence, trade_offer_id)
 VALUES ($1, $2, $3, $4, $5, $6, $7,
-        $8, $9)
-RETURNING id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence
+        $8, $9, $10)
+RETURNING id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence, trade_offer_id
 `
 
 type InsertReportParams struct {
@@ -137,6 +140,7 @@ type InsertReportParams struct {
 	Now               time.Time   `json:"now"`
 	ChatMessageID     pgtype.Int8 `json:"chat_message_id"`
 	Evidence          string      `json:"evidence"`
+	TradeOfferID      pgtype.UUID `json:"trade_offer_id"`
 }
 
 func (q *Queries) InsertReport(ctx context.Context, arg InsertReportParams) (Report, error) {
@@ -150,6 +154,7 @@ func (q *Queries) InsertReport(ctx context.Context, arg InsertReportParams) (Rep
 		arg.Now,
 		arg.ChatMessageID,
 		arg.Evidence,
+		arg.TradeOfferID,
 	)
 	var i Report
 	err := row.Scan(
@@ -167,12 +172,13 @@ func (q *Queries) InsertReport(ctx context.Context, arg InsertReportParams) (Rep
 		&i.CreatedAt,
 		&i.ChatMessageID,
 		&i.Evidence,
+		&i.TradeOfferID,
 	)
 	return i, err
 }
 
 const listReports = `-- name: ListReports :many
-SELECT r.id, r.reporter_user_id, r.target_character_id, r.target_name, r.reason, r.note, r.status, r.resolution_note, r.resolved_by, r.resolved_at, r.idempotency_key, r.created_at, r.chat_message_id, r.evidence, t.name AS target_current_name, t.user_id AS target_user_id,
+SELECT r.id, r.reporter_user_id, r.target_character_id, r.target_name, r.reason, r.note, r.status, r.resolution_note, r.resolved_by, r.resolved_at, r.idempotency_key, r.created_at, r.chat_message_id, r.evidence, r.trade_offer_id, t.name AS target_current_name, t.user_id AS target_user_id,
        COALESCE(rc.name, '')::text AS reporter_name,
        (SELECT count(*) FROM reports o WHERE o.target_character_id = r.target_character_id AND o.status = 'open') AS open_against_target
 FROM reports r
@@ -204,6 +210,7 @@ type ListReportsRow struct {
 	CreatedAt         time.Time   `json:"created_at"`
 	ChatMessageID     pgtype.Int8 `json:"chat_message_id"`
 	Evidence          string      `json:"evidence"`
+	TradeOfferID      pgtype.UUID `json:"trade_offer_id"`
 	TargetCurrentName string      `json:"target_current_name"`
 	TargetUserID      uuid.UUID   `json:"target_user_id"`
 	ReporterName      string      `json:"reporter_name"`
@@ -234,6 +241,7 @@ func (q *Queries) ListReports(ctx context.Context, arg ListReportsParams) ([]Lis
 			&i.CreatedAt,
 			&i.ChatMessageID,
 			&i.Evidence,
+			&i.TradeOfferID,
 			&i.TargetCurrentName,
 			&i.TargetUserID,
 			&i.ReporterName,
@@ -306,7 +314,7 @@ func (q *Queries) ResolveOpenReportsForTarget(ctx context.Context, arg ResolveOp
 const resolveReport = `-- name: ResolveReport :one
 UPDATE reports SET status = $1, resolution_note = $2, resolved_by = $3, resolved_at = $4
 WHERE id = $5 AND status = 'open'
-RETURNING id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence
+RETURNING id, reporter_user_id, target_character_id, target_name, reason, note, status, resolution_note, resolved_by, resolved_at, idempotency_key, created_at, chat_message_id, evidence, trade_offer_id
 `
 
 type ResolveReportParams struct {
@@ -341,6 +349,7 @@ func (q *Queries) ResolveReport(ctx context.Context, arg ResolveReportParams) (R
 		&i.CreatedAt,
 		&i.ChatMessageID,
 		&i.Evidence,
+		&i.TradeOfferID,
 	)
 	return i, err
 }

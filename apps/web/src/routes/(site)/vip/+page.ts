@@ -1,9 +1,4 @@
-import { api } from '$lib/api/client';
-import { ensureSession } from '$lib/api/session.svelte';
-import type { PageLoad } from './$types';
+import { redirect } from '@sveltejs/kit';
 
-export const load: PageLoad = async ({ fetch }) => {
-	const tiers = (await api.vipTiers(fetch)).tiers;
-	const status = (await ensureSession(fetch)) ? await api.vipStatus(fetch).catch(() => null) : null;
-	return { tiers, status };
-};
+// Old URL (bookmarks): the VIP page is now Tiên Duyên.
+export const load = () => redirect(308, '/tien-duyen');

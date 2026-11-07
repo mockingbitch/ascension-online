@@ -1,0 +1,95 @@
+# Basic alert rules (decisions 2026-11-07: Prometheus + Grafana + basic alerts). Rules only — no Alertmanager yet:
+# firing alerts show in Prometheus (/alerts) and Grafana. Add an Alertmanager + receiver when on-call exists.
+# Thresholds follow GDD §26 (REST p95 < 200 ms; leaderboard p95 < 300 ms).
+groups:
+  - name: tiendao
+    rules:
+      - alert: TargetDown
+        expr: up{job=~"api|worker"} == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} metrics endpoint is down"
+
+      - alert: ApiHigh5xxRate
+        expr: |
+          sum(rate(tiendao_http_requests_total{code="5xx"}[5m]))
+            / clamp_min(sum(rate(tiendao_http_requests_total[5m])), 1e-9) > 0.02
+          and sum(rate(tiendao_http_requests_total[5m])) > 0.1
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "API 5xx ratio {{ $value | humanizePercentage }} over 5m (> 2%)"
+
+      - alert: ApiP95LatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(tiendao_http_request_duration_seconds_bucket{route!~".*leaderboards.*"}[5m]))) > 0.2
+          and sum(rate(tiendao_http_request_duration_seconds_count[5m])) > 0.5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "API p95 {{ $value | humanizeDuration }} (> 200 ms target)"
+
+      - alert: LeaderboardP95LatencyHigh
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(tiendao_http_request_duration_seconds_bucket{route=~".*leaderboards.*"}[5m]))) > 0.3
+          and sum(rate(tiendao_http_request_duration_seconds_count{route=~".*leaderboards.*"}[5m])) > 0.1
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Leaderboard p95 {{ $value | humanizeDuration }} (> 300 ms target)"
+
+      - alert: OutboxLagging
+        expr: tiendao_outbox_oldest_pending_age_seconds > 120
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Oldest unpublished outbox event is {{ $value | humanizeDuration }} old"
+
+      - alert: WorldTickFailing
+        expr: increase(tiendao_worker_job_errors_total{job_name=~"world_tick|faction_effects"}[15m]) > 0
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: "Worker job {{ $labels.job_name }} keeps failing"
+
+      - alert: WorldTickStalled
+        expr: time() - tiendao_worker_job_last_success_timestamp_seconds{job_name="world_tick"} > 600
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: "No successful world tick for {{ $value | humanizeDuration }}"
+
+      - alert: DatabaseDown
+        expr: min(tiendao_db_up) == 0 or absent(tiendao_db_up)
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "PostgreSQL unreachable from api/worker (or no metrics at all)"
+
+      - alert: RedisDown
+        expr: min(tiendao_redis_up) == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Redis unreachable (rate limits fall back per instance; leaderboard/realtime degraded)"
+
+      - alert: RedisErrors
+        expr: sum(rate(tiendao_redis_errors_total[5m])) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Redis errors {{ $value }}/s"
+
+      - alert: OutboxDeadLetters
+        expr: sum(increase(tiendao_outbox_dead_letters_total[1h])) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $value }} outbox events dead-lettered in the last hour (see worker logs)"
+
+      - alert: DbPoolSaturated
+        expr: max by (job) (tiendao_db_pool_acquired_conns / tiendao_db_pool_max_conns) > 0.9
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.job }} DB pool > 90% used"

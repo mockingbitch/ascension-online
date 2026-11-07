@@ -34,7 +34,7 @@ func (q *Queries) DeleteOldChatMessages(ctx context.Context, arg DeleteOldChatMe
 }
 
 const getChatMessage = `-- name: GetChatMessage :one
-SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at FROM chat_messages WHERE id = $1
+SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx FROM chat_messages WHERE id = $1
 `
 
 func (q *Queries) GetChatMessage(ctx context.Context, id int64) (ChatMessage, error) {
@@ -53,12 +53,13 @@ func (q *Queries) GetChatMessage(ctx context.Context, id int64) (ChatMessage, er
 		&i.HiddenAt,
 		&i.HiddenBy,
 		&i.CreatedAt,
+		&i.NameFx,
 	)
 	return i, err
 }
 
 const getChatMessageByKey = `-- name: GetChatMessageByKey :one
-SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at FROM chat_messages WHERE user_id = $1 AND idempotency_key = $2
+SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx FROM chat_messages WHERE user_id = $1 AND idempotency_key = $2
 `
 
 type GetChatMessageByKeyParams struct {
@@ -82,12 +83,13 @@ func (q *Queries) GetChatMessageByKey(ctx context.Context, arg GetChatMessageByK
 		&i.HiddenAt,
 		&i.HiddenBy,
 		&i.CreatedAt,
+		&i.NameFx,
 	)
 	return i, err
 }
 
 const getChatMessageForUpdate = `-- name: GetChatMessageForUpdate :one
-SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at FROM chat_messages WHERE id = $1 FOR UPDATE
+SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx FROM chat_messages WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetChatMessageForUpdate(ctx context.Context, id int64) (ChatMessage, error) {
@@ -106,6 +108,7 @@ func (q *Queries) GetChatMessageForUpdate(ctx context.Context, id int64) (ChatMe
 		&i.HiddenAt,
 		&i.HiddenBy,
 		&i.CreatedAt,
+		&i.NameFx,
 	)
 	return i, err
 }
@@ -139,23 +142,35 @@ func (q *Queries) GetChatMuteForUpdate(ctx context.Context, userID uuid.UUID) (C
 }
 
 const getChatSender = `-- name: GetChatSender :one
-SELECT c.id AS character_id, c.name, p.stage_id
+SELECT c.id AS character_id, c.name, p.stage_id, a.chat_aura_id AS name_fx, COALESCE(v.points, 0)::BIGINT AS vip_points
 FROM characters c JOIN character_progressions p ON p.character_id = c.id
+LEFT JOIN character_appearance a ON a.character_id = c.id
+LEFT JOIN vip_accounts v ON v.user_id = c.user_id
 WHERE c.user_id = $1
 `
 
 type GetChatSenderRow struct {
-	CharacterID uuid.UUID `json:"character_id"`
-	Name        string    `json:"name"`
-	StageID     string    `json:"stage_id"`
+	CharacterID uuid.UUID   `json:"character_id"`
+	Name        string      `json:"name"`
+	StageID     string      `json:"stage_id"`
+	NameFx      pgtype.Text `json:"name_fx"`
+	VipPoints   int64       `json:"vip_points"`
 }
 
 // Sender snapshot + posting gate input (caller holds LockUser, so sends serialise per player without
 // touching the hot progression row's lock).
+// name_fx = the chat aura equipped right now (snapshot into the message).
+// vip_points: the Tiên Duyên level gates perk auras (a level drop hides them; cosmetic.Visible).
 func (q *Queries) GetChatSender(ctx context.Context, userID uuid.UUID) (GetChatSenderRow, error) {
 	row := q.db.QueryRow(ctx, getChatSender, userID)
 	var i GetChatSenderRow
-	err := row.Scan(&i.CharacterID, &i.Name, &i.StageID)
+	err := row.Scan(
+		&i.CharacterID,
+		&i.Name,
+		&i.StageID,
+		&i.NameFx,
+		&i.VipPoints,
+	)
 	return i, err
 }
 
@@ -175,9 +190,9 @@ func (q *Queries) HideChatMessage(ctx context.Context, arg HideChatMessageParams
 }
 
 const insertChatMessage = `-- name: InsertChatMessage :one
-INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at
+INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at, name_fx)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx
 `
 
 type InsertChatMessageParams struct {
@@ -190,6 +205,7 @@ type InsertChatMessageParams struct {
 	RawBody        pgtype.Text `json:"raw_body"`
 	IdempotencyKey string      `json:"idempotency_key"`
 	Now            time.Time   `json:"now"`
+	NameFx         pgtype.Text `json:"name_fx"`
 }
 
 func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessageParams) (ChatMessage, error) {
@@ -203,6 +219,7 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 		arg.RawBody,
 		arg.IdempotencyKey,
 		arg.Now,
+		arg.NameFx,
 	)
 	var i ChatMessage
 	err := row.Scan(
@@ -218,12 +235,13 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 		&i.HiddenAt,
 		&i.HiddenBy,
 		&i.CreatedAt,
+		&i.NameFx,
 	)
 	return i, err
 }
 
 const listChatMessages = `-- name: ListChatMessages :many
-SELECT id, channel, character_id, character_name, stage_id, body, created_at
+SELECT id, channel, character_id, character_name, stage_id, body, created_at, name_fx
 FROM chat_messages
 WHERE channel = $1 AND hidden_at IS NULL AND ($2::bigint = 0 OR id < $2::bigint)
 ORDER BY id DESC
@@ -237,13 +255,14 @@ type ListChatMessagesParams struct {
 }
 
 type ListChatMessagesRow struct {
-	ID            int64     `json:"id"`
-	Channel       string    `json:"channel"`
-	CharacterID   uuid.UUID `json:"character_id"`
-	CharacterName string    `json:"character_name"`
-	StageID       string    `json:"stage_id"`
-	Body          string    `json:"body"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            int64       `json:"id"`
+	Channel       string      `json:"channel"`
+	CharacterID   uuid.UUID   `json:"character_id"`
+	CharacterName string      `json:"character_name"`
+	StageID       string      `json:"stage_id"`
+	Body          string      `json:"body"`
+	CreatedAt     time.Time   `json:"created_at"`
+	NameFx        pgtype.Text `json:"name_fx"`
 }
 
 // Newest first; @before_id = 0 means "from the newest".
@@ -264,6 +283,7 @@ func (q *Queries) ListChatMessages(ctx context.Context, arg ListChatMessagesPara
 			&i.StageID,
 			&i.Body,
 			&i.CreatedAt,
+			&i.NameFx,
 		); err != nil {
 			return nil, err
 		}

@@ -25,6 +25,7 @@ import (
 const (
 	ReasonOffensiveName = "offensive_name"
 	ReasonHarassment    = "harassment"
+	ReasonTradeAbuse    = "trade_abuse" // about a trade offer (Phase 5.2): only via SubmitTrade, by one party about the other
 
 	StatusOpen      = "open"
 	StatusDismissed = "dismissed"
@@ -45,14 +46,15 @@ var (
 
 // Report is what the reporter sees.
 type Report struct {
-	ID                uuid.UUID `json:"id"`
-	TargetCharacterID uuid.UUID `json:"targetCharacterId"`
-	TargetName        string    `json:"targetName"`
-	Reason            string    `json:"reason"`
-	Note              string    `json:"note"`
-	Status            string    `json:"status"`
-	CreatedAt         time.Time `json:"createdAt"`
-	ChatMessageID     *int64    `json:"chatMessageId"`
+	ID                uuid.UUID  `json:"id"`
+	TargetCharacterID uuid.UUID  `json:"targetCharacterId"`
+	TargetName        string     `json:"targetName"`
+	Reason            string     `json:"reason"`
+	Note              string     `json:"note"`
+	Status            string     `json:"status"`
+	CreatedAt         time.Time  `json:"createdAt"`
+	ChatMessageID     *int64     `json:"chatMessageId"`
+	TradeOfferID      *uuid.UUID `json:"tradeOfferId"`
 }
 
 // AdminReport is a queue entry for moderators.
@@ -86,7 +88,15 @@ type Service struct {
 
 func toReport(r db.Report) Report {
 	return Report{ID: r.ID, TargetCharacterID: r.TargetCharacterID, TargetName: r.TargetName, Reason: r.Reason,
-		Note: r.Note, Status: r.Status, CreatedAt: r.CreatedAt, ChatMessageID: int8Ptr(r.ChatMessageID)}
+		Note: r.Note, Status: r.Status, CreatedAt: r.CreatedAt, ChatMessageID: int8Ptr(r.ChatMessageID), TradeOfferID: uuidPtr(r.TradeOfferID)}
+}
+
+func uuidPtr(v pgtype.UUID) *uuid.UUID {
+	if !v.Valid {
+		return nil
+	}
+	id := uuid.UUID(v.Bytes)
+	return &id
 }
 
 func int8Ptr(v pgtype.Int8) *int64 {
@@ -96,13 +106,43 @@ func int8Ptr(v pgtype.Int8) *int64 {
 	return &v.Int64
 }
 
-func validReason(r string) bool { return r == ReasonOffensiveName || r == ReasonHarassment }
+func validReason(r string) bool {
+	return r == ReasonOffensiveName || r == ReasonHarassment || r == ReasonTradeAbuse
+}
 
 // Submit files a report. Idempotent per (reporter, key); a second OPEN report on the same target+reason returns
 // the existing one without counting toward the daily limit. chatMessageID (0 = none) must be a message sent by
 // the target; its original text is snapshotted as evidence.
 func (s *Service) Submit(ctx context.Context, reporter, target uuid.UUID, reason, note, key string, chatMessageID int64) (Report, error) {
+	return s.submit(ctx, reporter, target, reason, note, key, chatMessageID, uuid.Nil)
+}
+
+// SubmitTrade reports the other party of a trade offer the reporter took part in (reason trade_abuse; the offer is
+// attached as evidence). Same idempotency, dedupe and daily limit as Submit.
+func (s *Service) SubmitTrade(ctx context.Context, reporter, offerID uuid.UUID, note, key string) (Report, error) {
+	o, err := db.New(s.Pool).GetTradeOfferBrief(ctx, offerID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Report{}, ErrInvalidReport
+	} else if err != nil {
+		return Report{}, err
+	}
+	var target uuid.UUID
+	switch reporter {
+	case o.SenderUserID:
+		target = o.ReceiverCharacterID
+	case o.ReceiverUserID:
+		target = o.SenderCharacterID
+	default:
+		return Report{}, ErrInvalidReport // not a party: looks like a missing offer
+	}
+	return s.submit(ctx, reporter, target, ReasonTradeAbuse, note, key, 0, offerID)
+}
+
+func (s *Service) submit(ctx context.Context, reporter, target uuid.UUID, reason, note, key string, chatMessageID int64, tradeOfferID uuid.UUID) (Report, error) {
 	note = strings.TrimSpace(note)
+	if (tradeOfferID == uuid.Nil) == (reason == ReasonTradeAbuse) {
+		return Report{}, ErrInvalidReport
+	}
 	if !validReason(reason) || utf8.RuneCountInString(note) > s.Cat.Reports.NoteMaxChars || !utf8.ValidString(note) {
 		return Report{}, ErrInvalidReport
 	}
@@ -148,6 +188,11 @@ func (s *Service) Submit(ctx context.Context, reporter, target uuid.UUID, reason
 				evidence = m.RawBody.String
 			}
 		}
+		var offer pgtype.UUID
+		if tradeOfferID != uuid.Nil {
+			offer = pgtype.UUID{Bytes: tradeOfferID, Valid: true}
+			evidence = "trade offer " + tradeOfferID.String()
+		}
 		if open, err := q.GetOpenReport(ctx, db.GetOpenReportParams{ReporterUserID: reporter, TargetCharacterID: target, Reason: reason}); err == nil {
 			out = toReport(open)
 			return nil
@@ -162,7 +207,8 @@ func (s *Service) Submit(ctx context.Context, reporter, target uuid.UUID, reason
 			return ErrDailyLimit
 		}
 		r, err := q.InsertReport(ctx, db.InsertReportParams{ReporterUserID: reporter, TargetCharacterID: target,
-			TargetName: ch.Name, Reason: reason, Note: note, IdempotencyKey: key, Now: now, ChatMessageID: msgID, Evidence: evidence})
+			TargetName: ch.Name, Reason: reason, Note: note, IdempotencyKey: key, Now: now, ChatMessageID: msgID, Evidence: evidence,
+			TradeOfferID: offer})
 		if err != nil {
 			return err
 		}
@@ -185,7 +231,7 @@ func (s *Service) List(ctx context.Context, status string, limit, offset int32) 
 	for _, r := range rows {
 		out = append(out, AdminReport{
 			Report: Report{ID: r.ID, TargetCharacterID: r.TargetCharacterID, TargetName: r.TargetName, Reason: r.Reason,
-				Note: r.Note, Status: r.Status, CreatedAt: r.CreatedAt, ChatMessageID: int8Ptr(r.ChatMessageID)},
+				Note: r.Note, Status: r.Status, CreatedAt: r.CreatedAt, ChatMessageID: int8Ptr(r.ChatMessageID), TradeOfferID: uuidPtr(r.TradeOfferID)},
 			ReporterUserID: r.ReporterUserID, ReporterName: r.ReporterName, TargetUserID: r.TargetUserID,
 			TargetCurrentName: r.TargetCurrentName, OpenAgainstTarget: r.OpenAgainstTarget,
 			ResolutionNote: r.ResolutionNote, ResolvedAt: r.ResolvedAt, Evidence: r.Evidence,

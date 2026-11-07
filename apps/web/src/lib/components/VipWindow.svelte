@@ -2,13 +2,18 @@
 <script lang="ts">
 	import { api } from '$lib/api/client';
 	import { game } from '$lib/game/store.svelte';
-	import type { VipTier } from '$lib/game/types';
+	import type { VipTiersResponse } from '$lib/game/types';
 	import Icon from './Icon.svelte';
+	import TopupPanel from './TopupPanel.svelte';
 	import VipBoard from './VipBoard.svelte';
 
-	let tiers = $state<VipTier[] | null>(null);
+	let info = $state<VipTiersResponse | null>(null);
+	let failed = $state(false);
 	$effect(() => {
-		api.vipTiers().then((t) => (tiers = t.tiers), () => (tiers = []));
+		api.vipTiers().then(
+			(t) => (info = t),
+			() => (failed = true)
+		);
 	});
 	const vip = $derived(game.vip);
 </script>
@@ -26,8 +31,14 @@
 	</div>
 {/if}
 
-{#if tiers === null}
-	<p class="text-mist-500">Đang tải…</p>
+{#if info}
+	<VipBoard {info} status={vip} compact>
+		{#snippet topup()}
+			<TopupPanel signedIn hardMaxOfflineHours={info?.tiers.at(-1)?.benefits.offlineCapHours ?? null} onvip={(v) => (game.vip = v)} />
+		{/snippet}
+	</VipBoard>
+{:else if failed}
+	<p class="text-mist-500">Không tải được bảng Tiên Duyên.</p>
 {:else}
-	<VipBoard {tiers} status={vip} compact />
+	<p class="text-mist-500">Đang tải…</p>
 {/if}

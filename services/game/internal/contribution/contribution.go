@@ -74,6 +74,7 @@ type Config struct {
 	DailyCeilingMilli    int64
 	Buckets              map[Bucket]BucketCfg
 	IdleRateMilliPerHour int64
+	MaxBuffBonusBP       int64 // cap on timed idle-rate buffs (gieo quẻ, §9.4); the idle bucket cap still bounds the result
 	SpeedItemDailyMilli  int64
 	CatchUp              CatchUp
 	Grant                LateJoinGrant
@@ -177,6 +178,7 @@ type file struct {
 	Buckets            map[Bucket]fileBucket `yaml:"buckets"`
 	Idle               struct {
 		RateMilliPerHour int64 `yaml:"rate_milli_per_hour"`
+		MaxBuffBonusBP   int64 `yaml:"max_buff_bonus_bp"`
 	} `yaml:"idle"`
 	SpeedItems struct {
 		DailyCapPoints int64 `yaml:"daily_cap_points"`
@@ -225,6 +227,7 @@ func Load(r io.Reader) (*Config, error) {
 		DailyCeilingMilli:    raw.DailyCeilingPoints * pm,
 		Buckets:              map[Bucket]BucketCfg{},
 		IdleRateMilliPerHour: raw.Idle.RateMilliPerHour,
+		MaxBuffBonusBP:       raw.Idle.MaxBuffBonusBP,
 		SpeedItemDailyMilli:  raw.SpeedItems.DailyCapPoints * pm,
 		CatchUp:              CatchUp{MultiplierBP: raw.CatchUp.MultiplierBP, MinServerDay: raw.CatchUp.MinServerDay, AppliesTo: raw.CatchUp.AppliesTo},
 		Grant:                LateJoinGrant{AfterServerDay: raw.LateJoinGrant.AfterServerDay, MedianShareBP: raw.LateJoinGrant.MedianShareBP},
@@ -255,6 +258,9 @@ func Load(r io.Reader) (*Config, error) {
 	}
 	if raw.Idle.RateMilliPerHour <= 0 || raw.Idle.RateMilliPerHour*24 > raw.Buckets[Idle].DailyCapPoints*pm {
 		fail("idle.rate_milli_per_hour must be > 0 and ×24 ≤ idle daily cap")
+	}
+	if raw.Idle.MaxBuffBonusBP < 0 || raw.Idle.MaxBuffBonusBP > 5000 {
+		fail("idle.max_buff_bonus_bp must be within 0..5000")
 	}
 	if raw.SpeedItems.DailyCapPoints < 0 || raw.SpeedItems.DailyCapPoints > raw.Buckets[Activity].DailyCapPoints {
 		fail("speed_items.daily_cap_points must be within 0..activity cap")

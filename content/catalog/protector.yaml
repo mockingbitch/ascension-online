@@ -1,0 +1,27 @@
+# Hộ pháp (protectors) — fellow faction members guarding a tribulation (cot-truyen §5.2, plan §3.2, decision F,
+# checklist §3.4). Loaded by services/game/internal/protector; cross-checked in content.LoadAll.
+# Decision: docs/decisions.md 2026-11-07 "Bí cảnh thử luyện + pháp bảo" (hộ pháp section).
+#
+# Flow: the breakthrough-er (on a tribulation realm's last stage, in a faction) opens an invite → online fellow members
+# tap "Hộ pháp" within invite_window_seconds (each tap spends one of the protector's daily_assists) → the next
+# tribulation attempt counts the accepted protectors who are STILL online and in the faction, uses the invite and
+# credits each counted protector the vip.yaml `protector_assist` điểm duyên (outbox → worker, capped there).
+# The odds bonus itself (+1% per counted member, max +3%, total bonus ≤ 12%, final ≤ 90%) lives in realms.yaml
+# tribulation (decision F) — nothing here changes odds.
+#
+# Online = a presence ping within presence_ttl_seconds that was backed by real play: a ping only refreshes presence when
+# the same user made a REAL game action within activity_window_seconds — an explicit allowlist in httpapi (markActive:
+# settle that credited, paid ngộ đạo, judged trial/bí cảnh, breakthrough, buy, task claim, incense, fortune, chat, faction
+# join/switch); never the ping, lecture/song tu heartbeats or replays (anti-cheat M2, đạo lữ review H1). Redis keys with TTLs; no server ticker, no DB write per ping.
+# Protectors must be at least min_tier (any path) and their character at least min_character_age_days old (alts, M2).
+#
+# ⚠ Numbers are beta-tuning placeholders.
+version: 1
+invite_window_seconds: 1800      # 30 min for fellow members to answer
+daily_assists: 2                 # accepts per protector per game day (= vip.yaml protector_assist daily_max_times)
+presence_ttl_seconds: 120        # "online" = pinged within the last 2 min
+ping_every_seconds: 45
+list_limit: 20                   # open invites / online members shown
+activity_window_seconds: 600     # a ping counts only after a real game action in the last 10 min
+min_tier: 2                      # protector at least Trúc Cơ (tier 2, any path)
+min_character_age_days: 7        # protector's character at least 7 days old

@@ -1,0 +1,51 @@
+# Công trình thế lực (decisions 2026-11-07 "Linh thạch sinks", sink 3 — cúng góp thế lực). Loaded by
+# internal/factionwork; checked in content.LoadAll.
+#
+# Members donate spirit stones (POST /factions/donate) into their faction's shared pool. Every faction builds the
+# same works IN ORDER; a work's stage completes when the pool reaches the stage's `at` (stones, counted from the start
+# of that work), and each stage unlocks one PURELY VISUAL faction decoration (sơn môn ornaments, banners) shown on
+# the faction screen. A work is done at its last stage.
+#
+# NO GAMEPLAY EFFECT. Donating never adds faction merit, faction/global ranking points, điểm duyên or tu vi; the
+# công đức bảng (donor list) is display only. The loader rejects any effect-like field (`*_bp`, `*_milli`, …).
+#
+# settings.daily_cap_per_character: most stones one character may donate per game day (UTC+7), across factions.
+# settings.min_amount: smallest donation. donor_board_size: rows on the công đức bảng.
+# Decoration slugs are unique across this file and cosmetics.yaml (web art slot `cosmetics/<slug>`).
+#
+# ⚠️ GOALS AND CAP ARE PLACEHOLDERS awaiting owner sign-off (docs/decisions.md 2026-11-07 "Linh thạch sinks").
+version: 1
+settings:
+  currency: spirit_stone
+  daily_cap_per_character: 500
+  min_amount: 10
+  donor_board_size: 10
+works:
+  - id: bai_phuong
+    name: Bài Phường Sơn Môn
+    description: Dựng cổng đá trước sơn môn, khắc tên thế lực cho khách bốn phương nhìn thấy.
+    stages:
+      - { at: 100000, decoration: { slug: cot_da_son_mon,  name: Cột Đá Khắc Danh } }
+      - { at: 250000, decoration: { slug: su_tu_da,        name: Đôi Sư Tử Đá } }
+      - { at: 500000, decoration: { slug: bai_phuong,      name: Bài Phường Sơn Môn } }
+  - id: co_hieu
+    name: Cờ Hiệu Thế Lực
+    description: Dệt cờ hiệu bằng tơ tằm linh, treo dọc đường lên núi.
+    stages:
+      - { at: 500000,  decoration: { slug: co_duong_nui,  name: Cờ Dọc Đường Núi } }
+      - { at: 1500000, decoration: { slug: co_dai_dien,   name: Đại Kỳ Trước Điện } }
+      - { at: 3000000, decoration: { slug: co_hieu_van,   name: Vạn Kỳ Tung Bay } }
+  - id: den_truong_minh
+    name: Đèn Trường Minh
+    description: Thắp chuỗi đèn trường minh quanh sơn môn, đêm nào cũng sáng.
+    stages:
+      - { at: 2000000,  decoration: { slug: den_hanh_lang, name: Đèn Hành Lang } }
+      - { at: 5000000,  decoration: { slug: den_thap,      name: Tháp Đèn Đá } }
+      - { at: 10000000, decoration: { slug: den_truong_minh, name: Vạn Đăng Trường Minh } }
+  - id: vong_nguyet_lau
+    name: Vọng Nguyệt Lâu
+    description: Xây lầu cao ngắm trăng trên đỉnh núi, nơi đệ tử ngồi luận đạo.
+    stages:
+      - { at: 5000000,  decoration: { slug: nen_lau,        name: Nền Lầu Bạch Thạch } }
+      - { at: 15000000, decoration: { slug: lau_hai_tang,   name: Lầu Hai Tầng } }
+      - { at: 30000000, decoration: { slug: vong_nguyet_lau, name: Vọng Nguyệt Lâu } }

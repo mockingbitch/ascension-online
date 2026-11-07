@@ -1,17 +1,23 @@
-<!-- Chọn thế lực (after creating a character): full-screen in front of Tử Tiêu Cung. Preview flow — see factionChoice. -->
+<!-- Chọn thế lực for players who already have a character but no faction (created before onboarding §9.6 joined in
+     the same intent). The game guard sends them here until they join (POST /factions/join), then to Tử Tiêu Cung. -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import FactionPicker from '$lib/components/FactionPicker.svelte';
-	import { factionChoice, loadFactionChoice, saveFactionChoice } from '$lib/mock/factionChoice.svelte';
-	import type { Faction } from '$lib/mock/factions';
+	import { changeFaction, factions } from '$lib/game/faction.svelte';
+	import type { FactionView, PathId } from '$lib/game/types';
 
 	let { data } = $props();
 	const ch = $derived(data.character!);
-	$effect(() => loadFactionChoice(ch.id));
+	const path = $derived(data.catalogue.stages.get(ch.stageId)?.path ?? 'tien');
+	const pathName = (p: PathId) => data.catalogue.paths.get(p)?.name ?? p;
+	const open = $derived(data.list.factions.filter((f) => f.open));
+	let error = $state<string | null>(null);
 
-	async function join(f: Faction) {
-		saveFactionChoice(ch.id, f.id);
-		await goto('/play');
+	const cooldownDays = $derived(Math.round((factions.list?.switchCooldownSeconds ?? 0) / 86_400));
+
+	async function join(f: FactionView) {
+		error = await changeFaction('join', f.id);
+		if (!error) await goto('/play/tu-tieu-cung', { invalidateAll: true });
 	}
 </script>
 
@@ -23,12 +29,12 @@
 			<p class="eyebrow">Tử Tiêu Cung · buổi giảng đạo đầu tiên</p>
 			<h1 class="mt-2 text-4xl font-bold text-gold-300 sm:text-6xl">Chọn con đường của {ch.name}</h1>
 			<p class="mx-auto mt-3 max-w-2xl text-mist-300">
-				Lời giảng của Hồng Quân vừa dứt, năm thế lực mở cửa thu nhận đệ tử. Nơi bạn gia nhập định cách bạn kết giao, giảng đạo và
+				Lời giảng của Hồng Quân vừa dứt, các thế lực mở cửa thu nhận đệ tử. Nơi bạn gia nhập định cách bạn kết giao, giảng đạo và
 				đi qua các đại kiếp của Thiên Nguyên Giới.
 			</p>
-			<p class="mt-2 text-xs text-gold-500">Bản xem trước — hệ thống thế lực chưa nối máy chủ.</p>
 		</header>
-		<FactionPicker current={factionChoice.id} onjoin={join} />
-		<p class="mt-6 text-center"><a href="/play" class="text-sm text-mist-500 hover:text-mist-300">Để sau — vào thế giới trước</a></p>
+		{#if error}<p role="alert" class="mb-4 text-center text-cinnabar-300">{error}</p>{/if}
+		<FactionPicker factions={open} {path} {pathName} busy={factions.busy} onjoin={join}
+			note={cooldownDays ? `Gia nhập xong phải chờ ${cooldownDays} ngày mới đổi phe được.` : undefined} />
 	</main>
 </div>

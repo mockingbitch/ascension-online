@@ -1,0 +1,32 @@
+# Gieo quẻ — one draw per character per game day (UTC+7), data-model §9.3/§9.4. Loaded by internal/fortune.
+# (Distinct from the lecture "ngộ đạo" moment in Tử Tiêu Cung.)
+#
+# weight_bp: chance in basis points, Σ = 10000 — shown to players exactly as written (disclosed odds).
+# rate_bonus_bp: idle cultivation rate bonus from the draw until the end of that game day (≤ 2000 and
+#   ≤ contribution.yaml idle.max_buff_bonus_bp). It only touches idle settlement, so the idle bucket cap (75) and
+#   the 150/day ceiling still bound it. No outcome is negative: the draw is a small gift, never a penalty.
+# Expected bonus = 0.05×5% + 0.20×2.5% + 0.45×1% = 1.2% of buffed idle time (< 0.5 point/day; `make balance`).
+# Tuned 2026-11-07 (with the incense streak) to keep S3 → Chuẩn Thánh ≈ day 330 (docs/decisions.md).
+version: 1
+name: Gieo quẻ
+outcomes:
+  - id: dai_cat
+    name: Đại Cát
+    weight_bp: 500
+    rate_bonus_bp: 500
+    verse: Gió thuận mây lành, linh khí tụ về như suối đổ xuống khe.
+  - id: cat
+    name: Cát
+    weight_bp: 2000
+    rate_bonus_bp: 250
+    verse: Trăng sáng giữa trời, tâm tĩnh thì đạo tự sinh.
+  - id: tieu_cat
+    name: Tiểu Cát
+    weight_bp: 4500
+    rate_bonus_bp: 100
+    verse: Mầm non đội đất, chậm mà chắc, chớ vội.
+  - id: binh
+    name: Bình
+    weight_bp: 3000
+    rate_bonus_bp: 0
+    verse: Mặt hồ phẳng lặng, ngày thường cũng là ngày tu.
