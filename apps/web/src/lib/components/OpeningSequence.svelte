@@ -278,7 +278,7 @@
 		}
 	}
 
-	/* 3 · Thân hóa vạn vật: the map with a sun and a moon */
+	/* 3 · Bàn Cổ vẫn lạc: the map with a sun and a moon */
 	.world img {
 		filter: saturate(0.8) brightness(0.8);
 	}
@@ -300,7 +300,7 @@
 		opacity: 0.8;
 	}
 
-	/* 5 · Ba tộc tranh bá: three auras that dim into ash */
+	/* 5 · Long Hán Sơ Kiếp: three auras that dim into ash */
 	.beasts {
 		background: radial-gradient(ellipse at 50% 45%, var(--color-ink-700), var(--color-ink-950) 75%);
 	}
@@ -338,7 +338,7 @@
 		}
 	}
 
-	/* 6 · Đại năng hiện thế: faction emblems appear one by one */
+	/* 6 · Các đại năng xuất hiện: faction emblems appear one by one */
 	.powers {
 		background:
 			var(--grain),

@@ -49,7 +49,7 @@ export const mapLocations: MapLocation[] = [
 	{ screen: 'faction', landmark: 'the-luc', title: 'Thế Lực', subtitle: 'Sơn môn của bạn', x: 76, y: 59 },
 	{ screen: 'companion', landmark: 'dao-hoa-dinh', title: 'Đào Hoa Đình', subtitle: 'Đạo lữ song tu', x: 40, y: 66 },
 	{ screen: 'trial', landmark: 'bi-canh', title: 'Bí Cảnh', subtitle: 'Thử luyện kiếm tài nguyên', x: 87, y: 69 },
-	{ screen: 'war', landmark: 'chien-truong', title: 'Chiến Trường', subtitle: 'Đại chiến — sắp khai mở', x: 62, y: 76 }
+	{ screen: 'war', landmark: 'chien-truong', title: 'Chiến Trường', subtitle: 'Đại chiến Vu Yêu — sắp khai mở', x: 62, y: 76 }
 ];
 
 /** Screen of each trial kind (trials.yaml id → route). Kinds without a screen yet are absent. */

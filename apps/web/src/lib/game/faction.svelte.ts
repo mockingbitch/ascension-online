@@ -12,7 +12,7 @@ export const factions = $state<{ list: FactionList | null; me: FactionMembership
 /** Vietnamese text for faction API errors. */
 const messages: Record<string, string> = {
 	switch_cooldown: 'Chưa hết thời gian chờ đổi phe.',
-	faction_locked: 'Thế lực của đạo hữu đang bị khóa, chưa thể đổi phe hay tự chọn viện.',
+	faction_locked: 'Thế lực của đạo hữu đang bị khóa, chưa thể đổi phe hay tự chọn nhánh.',
 	idempotency_key_reused: 'Yêu cầu bị trùng với một thao tác khác, hãy thử lại.',
 	faction_closed: 'Thế lực này chưa mở hoặc đã đóng cửa trong thời kỳ hiện tại.',
 	path_not_allowed: 'Thế lực này không nhận đạo đồ đã chọn.',
@@ -21,7 +21,7 @@ const messages: Record<string, string> = {
 	same_faction: 'Đạo hữu đã ở thế lực này.',
 	no_pending_split: 'Không có lựa chọn phân nhánh nào đang chờ.',
 	not_a_branch: 'Đây không phải một nhánh của lần phân chia.',
-	choice_closed: 'Đã hết hạn chọn nhánh — đạo hữu sẽ được xếp vào viện còn ít người nhất.',
+	choice_closed: 'Đã hết hạn chọn nhánh — đạo hữu sẽ được xếp vào nhánh còn ít người nhất.',
 	unknown_faction: 'Thế lực không tồn tại.',
 	ranking_unavailable: 'Bảng thế lực tạm thời chưa mở, thử lại sau.'
 };

@@ -697,8 +697,8 @@ func (f *fixture) reachLuanHoi() int64 {
 	return id
 }
 
-// Decision 2026-11-07: Thương Lan Tiên Đình closes at luan_hoi and its members are split into the tiên factions
-// still open (computed: huyen_khung_mon, kim_sa_mon, tinh_ha_yeu_dinh — not vu_toc (path), not nhan_toc (opens at
+// Decision 2026-11-07: Tiên Đình (slug thuong_lan_dinh) closes at luan_hoi and its members are split into the tiên
+// factions still open (computed: huyen_khung_mon, kim_sa_mon, tinh_ha_yeu_dinh — not vu_toc (path), not nhan_toc (opens at
 // tao_nhan)) with decision 9's rules: 3-day notice (late notice keeps its full period, H1), 7-day choice, a locked
 // member can't choose, defaults to the branch with the fewest split-placed members (H2), ties in YAML order.
 func TestCloseSplitThuongLan(t *testing.T) {

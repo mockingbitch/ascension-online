@@ -1,5 +1,5 @@
 <!--
-	Thiên Nguyên Giới world map: one layered SVG (sky, moon, far peaks, drifting cloud sea, floating palace with light
+	Hồng Hoang world map: one layered SVG (sky, moon, far peaks, drifting cloud sea, floating palace with light
 	rays, cave peak, sect hall, peach pavilion, moon-gate portal, battlefield) + clickable location plaques.
 	Only transform/opacity animate (clouds, rays, motes). Locations come from lib/game/nav (status-aware).
 -->

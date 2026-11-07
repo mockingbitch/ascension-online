@@ -3,6 +3,70 @@
 Product/architecture decisions that refine or deviate from the GDD
 ([design/tien-dao-online-gdd-architecture.md](design/tien-dao-online-gdd-architecture.md)). Newest first.
 
+## 2026-11-07 — Chủ dự án: tăng tốc đầu game bằng cách dồn điểm về sau
+- **What.** `realms.yaml`: Luyện Khí 300 → **100** points, split by new `stage_weights: [1…9]` (tầng 1–9 =
+  2/4/6/8/11/14/16/18/21); Trúc Cơ 650 → **550** (entry 100); Kim Đan 1,100 → **1,400** (entry 650). Nguyên Anh
+  entry (2,050) and every later tier unchanged → the ~330-day arc is untouched. Realm lengths still strictly grow
+  (100 < 550 < 1,400 < 1,450).
+- **Why.** At ~2 points/hour idle, the old 33-point tầng 1 meant a new player saw 1–2 stages in the first session;
+  now the first hour already passes tầng 1 and the first day passes most of Luyện Khí.
+- **Mechanism.** Optional `stage_weights` on a tier (one per stage, ≥ 1, non-decreasing; every stage ≥ 1 point);
+  absent = the old even split. Validated in `realm.Load`.
+- **`make balance` (300 runs/profile), median day to Trúc Cơ / Kim Đan / Nguyên Anh, before → after:** S3 3/10/21 →
+  **1/7/21**; A3 4/12/26 → **1/8/26**; I1 13/40/84 → **5/28/84**; G 2/8/17 → **16 h/6/17**. Chuẩn Thánh unchanged
+  (S3 326, A3 406, I1 1313). Fairness checks OK; retry-gap accepted exception leads 1.0/2.3 → **1.0/2.0** days (≤ 3).
+- **Chat gates.** "Luận Đạo" (`tu_tieu_cung`) posting lowered to `luyen_khi.tang_1` (every character); world chat
+  keeps `luyen_khi.tang_3` — which now takes 6 points (~3 h idle) instead of 66, a weaker anti-spam gate.
+- Not launched yet: stage IDs are unchanged, no migration. Existing dev/test characters in Luyện Khí–Kim Đan may
+  hold cultivation above the new requirements — reset those databases rather than rely on auto-advance.
+
+## 2026-11-07 — Chủ dự án đảo ngược D2: dùng tên theo cot-truyen.md
+Supersedes the "World & name (D2)" bullet of "Cốt truyện thế giới chung" (2026-11-06), the "original faction names"
+note of "Game UI round 1" and every later entry that names the old stand-ins (kept below as history).
+- **Rule.** Every in-game world/canon name — figures, factions, places, eras, milestones — is used exactly as in
+  [design/cot-truyen.md](design/cot-truyen.md). World = **Hồng Hoang** ("Hồng Hoang giới" only where grammar needs it).
+  Where the doc is silent, only classic mythology / public-domain classics, flagged for owner review (list below).
+- **Product name kept: "Tiên Đạo Online"** (page titles, logo text, splash, login, domain, `CLAUDE.md`). Only in-game
+  names changed.
+- **Slugs kept** (permanent IDs; no migration, no data change): `huyen_khung_mon`, `kim_sa_mon`, `thuong_lan_dinh`,
+  `tinh_ha_yeu_dinh`, `vu_toc`, `nhan_toc`, `thu_nhat_vien`, `lap_cuc_vien`, `van_luu_vien`, `kim_sa_giao`, every era /
+  milestone / realm id. Only `name`, `motto`, `pitch` and lore text changed. The slug → name table is the header of
+  `content/catalog/factions.yaml`. All `name_placeholder` flags on factions and Vu realms are removed (the Vu path
+  name "Vu Đạo" keeps its flag: the doc does not name the path).
+
+| Slug | Was | Now (cot-truyen) | Head (NPC) |
+|---|---|---|---|
+| `huyen_khung_mon` | Huyền Khung Môn | **Tam Thanh** | Thái Thanh Lão Tử, Nguyên Thủy Thiên Tôn, Thông Thiên Giáo Chủ |
+| `kim_sa_mon` | Kim Sa Môn | **Tây Phương** (phe Chuẩn Đề) | Chuẩn Đề, Tiếp Dẫn |
+| `thuong_lan_dinh` | Thương Lan Tiên Đình | **Tiên Đình** | Đông Vương Công |
+| `tinh_ha_yeu_dinh` | Tinh Hà Yêu Đình | **Thiên Đình Yêu Tộc** | Đế Tuấn, Thái Nhất |
+| `vu_toc` | Vu Tộc | Vu Tộc (unchanged) | Tổ Vu |
+| `nhan_toc` | Nhân Tộc | Nhân Tộc (unchanged) | Tam Hoàng Ngũ Đế |
+| `thu_nhat_vien` | Thủ Nhất Viện (tĩnh tu) | **Nhân Giáo** | Thái Thanh Lão Tử |
+| `lap_cuc_vien` | Lập Cực Viện (quy củ, thứ bậc) | **Xiển Giáo** | Nguyên Thủy Thiên Tôn |
+| `van_luu_vien` | Vạn Lưu Viện (mở cho mọi người) | **Tiệt Giáo** (doc spelling; "Triệt Giáo" also blocked as a name) | Thông Thiên Giáo Chủ |
+| `kim_sa_giao` | Kim Sa Giáo | **Tây Phương Giáo** | Chuẩn Đề, Tiếp Dẫn |
+
+  Branch mapping follows each branch's identity: quiet/long seclusion → Nhân Giáo (Thái Thanh, thanh tĩnh vô vi);
+  rules/teaching by rank → Xiển Giáo; open to all → Tiệt Giáo ("hữu giáo vô loại").
+- **Eras / milestones.** `dai_chien` Đại chiến Huyết Tinh → **Đại chiến Vu Yêu** (era + milestone); `luan_hoi` Luân hồi
+  sơ chuyển → **Hậu Thổ hóa luân hồi** (Địa Phủ khai mở in text); `thanh_nhan` Thánh vị định tọa → **Thánh nhân xuất
+  thế**; `nhan_toc` Nhân tộc hưng khởi → **Tam Hoàng Ngũ Đế**; `phong_than` → **Phong Thần Lượng Kiếp**. Realm `vu_15`
+  Vu Cực → **Tổ Vu**. Opening scenes renamed to §10 (Bàn Cổ vẫn lạc, Long Hán Sơ Kiếp, Các đại năng xuất hiện, Tử Tiêu
+  Cung mở) and scene 6 names the đại năng. Faction split UI copy says "nhánh" instead of "viện".
+- **Moderation.** `moderation.yaml` (category `story`) now also blocks Thái Thanh Lão Tử, Thái Thượng, Lão Quân,
+  Nguyên Thủy, Thông Thiên, Tiếp Dẫn Đạo Nhân, Đông Hoa Đế Quân, Côn Bằng, the classic Tổ Vu roster, Tam Hoàng Ngũ Đế
+  names, Hạo Thiên, Dao Trì, Khương Tử Nha, Nhiên Đăng and the faction names (Tiên Đình, Thiên Đình, Địa Phủ, Nhân
+  Giáo, Xiển/Tiệt/Triệt Giáo, Tây Phương Giáo), on top of the existing Hồng Quân / Tam Thanh / Chuẩn Đề / Nữ Oa… rules.
+- **Chosen where the doc is silent (⚠ owner review):** display name "Tây Phương" for the Chuẩn Đề faction (doc calls it
+  "Chuẩn Đề (phe Tây phương)"); "Thiên Đình Yêu Tộc" for "Thiên Đình của Yêu tộc"; Đế Tuấn + Thái Nhất as its heads;
+  Côn Lôn as Tam Thanh's seat; biển Đông / đảo tiên for Tiên Đình; Bất Chu Sơn in lore for Vu Tộc; era name "Hậu Thổ
+  hóa luân hồi"; no individual Tổ Vu named in content (only blocked as player names); Tiên Đình's fate after the war
+  ("cầu sương đứt") is project prose.
+- **Risk.** Worshipped figures (Tam Thanh / Lão Tử, Chuẩn Đề, Tiếp Dẫn) are now playable factions and faction heads.
+  Content keeps a respectful tone (no jokes, no fighting them, no prayers or scripture; emblems use generic motifs),
+  but **legal and religious review is still recommended before public launch** (`cot-truyen.md` §8).
+
 ## 2026-11-07 — Trao đổi vật phẩm (Phase 5.2)
 Implements the owner's "Luật trao đổi" (entry "Chủ dự án chốt trước Phase 4–5" below), plan §3.12, checklist §5.2.
 Migration `000018_trades`; catalogue `content/catalog/trade.yaml`; `internal/trade` (loader + pure rules + service).

@@ -41,10 +41,11 @@ Ràng buộc:
 2. **Giọng.** Một bậc thầy cổ xưa, trang nghiêm mà ấm áp. Hồng Quân xưng "ta", gọi người nghe là "ngươi" hoặc
    "các ngươi". Câu ngắn, đọc vừa một popup. Tiếng Việt có dấu đầy đủ, dùng thuật ngữ trong glossary của
    `.claude/rules/story-writing.md`.
-3. **D2.** Hồng Quân là nhân vật thần thoại nên được dùng tên. Hồng Quân là người thầy chứ không phải đối tượng
-   thờ phụng. Không lạy, không cầu, không khấn, không xin ban phước. Hồng Quân nói rằng đạo không thuộc về mình.
-   Không nhắc tên hay trích lời các nhân vật đang được thờ phụng (Tam Thanh/Lão Tử, Phật, Quan Âm…). Không chép
-   nguyên văn kinh điển. Văn phải tự viết, có thể gợi ý tưởng cổ nhưng không mượn câu chữ.
+3. **Tên và tín ngưỡng.** Tên nhân vật, thế lực, nơi chốn theo `docs/design/cot-truyen.md` (chủ dự án đảo ngược D2
+   ngày 2026-11-07). Hồng Quân là người thầy chứ không phải đối tượng thờ phụng: không lạy, không cầu, không khấn,
+   không xin ban phước; Hồng Quân nói rằng đạo không thuộc về mình. Được nhắc tên Tam Thanh, Chuẩn Đề, Tiếp Dẫn, Nữ
+   Oa… như học trò ngồi nghe, nhưng không trích hay chép nguyên văn kinh điển (Đạo Đức Kinh, kinh Phật…), không
+   biến họ thành trò đùa, không đặt lời cầu khấn. Văn phải tự viết, có thể gợi ý tưởng cổ nhưng không mượn câu chữ.
 4. **Không hứa cơ chế chưa có.** Chỉ nhắc cơ chế đã chốt trong `docs/decisions.md`, và không đưa con số. Lôi kiếp
    làm hao tu vi ở cảnh giới cao. Thất bại không làm rớt cảnh giới. Sau vài lần thất bại thì lần sau chắc thành.
    Bài giảng lặp lại nên bỏ lỡ không sao.

@@ -738,11 +738,11 @@ settings:
 
 eras:
   - { id: khai_giang, name: Tử Tiêu khai giảng }
-  - { id: dai_chien,  name: Đại chiến, name_placeholder: true }   # G2 framing renamed per D2
-  - { id: luan_hoi,   name: Luân hồi khai mở, name_placeholder: true }
+  - { id: dai_chien,  name: Đại chiến Vu Yêu }       # canon names since D2 was reversed (2026-11-07)
+  - { id: luan_hoi,   name: Hậu Thổ hóa luân hồi }
   - { id: tao_nhan,   name: Nữ Oa tạo người }
-  - { id: thanh_nhan, name: Thánh nhân xuất thế, name_placeholder: true }
-  - { id: phong_than, name: Phong Thần lượng kiếp }
+  - { id: thanh_nhan, name: Thánh nhân xuất thế }
+  - { id: phong_than, name: Phong Thần Lượng Kiếp }
   # …
 
 milestones:          # strictly ordered, no minimum gap (decision H); thresholds written explicitly (decision B)
@@ -988,16 +988,15 @@ settings:
   first_join_free: true
 
 factions:
-  - id: huyen_mon                     # stand-in for the Tam Thanh lineage (D2)
-    name: Huyền Môn
-    name_placeholder: true
+  - id: huyen_mon                     # sketch id; shipped as huyen_khung_mon (Tam Thanh, D2 reversed 2026-11-07)
+    name: Tam Thanh
     allowed_paths: [tien]
     open_from_era: khai_giang
     close_from_era: thanh_nhan        # split at the Thánh nhân milestone
     visual: { badge: faction-huyen-mon, color: jade }
-  - { id: tay_phuong_mon, name: Tây Vực Môn,  name_placeholder: true, allowed_paths: [tien], open_from_era: khai_giang, close_from_era: thanh_nhan }
-  - { id: dong_tien_dinh, name: Đông Hoa Đình, name_placeholder: true, allowed_paths: [tien], open_from_era: khai_giang, close_from_era: luan_hoi }
-  - { id: yeu_dinh,       name: Yêu Đình,     name_placeholder: true, allowed_paths: [tien], open_from_era: khai_giang }
+  - { id: tay_phuong_mon, name: Tây Phương, allowed_paths: [tien], open_from_era: khai_giang, close_from_era: thanh_nhan }
+  - { id: dong_tien_dinh, name: Tiên Đình, allowed_paths: [tien], open_from_era: khai_giang, close_from_era: luan_hoi }
+  - { id: yeu_dinh,       name: Thiên Đình Yêu Tộc, allowed_paths: [tien], open_from_era: khai_giang }
   - { id: vu_toc,         name: Vu Tộc,       allowed_paths: [vu],   open_from_era: khai_giang }
   - { id: nhan_toc,       name: Nhân Tộc,     allowed_paths: [tien], open_from_era: tao_nhan }
 ```

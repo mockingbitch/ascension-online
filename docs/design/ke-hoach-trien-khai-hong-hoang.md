@@ -44,7 +44,7 @@ Cốt truyện mới mâu thuẫn trực tiếp với một số quyết định
 | # | Vấn đề | Hiện tại | Cốt truyện mới | Đề xuất |
 |---|---|---|---|---|
 | D1 | **Thu phí / VIP** | VIP 0–12 theo điểm nạp | "Không thu bất kỳ phí nào" | ✅ **Đã chốt:** giữ kênh nạp, VIP đổi tên **Tiên Duyên**, điểm duyên kiếm từ hoạt động + nạp (**1.000đ = 10 điểm**). Quà ngày linh thạch giữ nguyên, cấp cao nhận nhiều hơn. Chặn: trần 150/ngày, vật phẩm tăng tỉ lệ kiếp không bán. |
-| D2 | **Tên & thế giới** | "Tiên Đạo Online", Thiên Nguyên Giới | "Tu Tiên Hồng Hoang Online", thần thoại Hồng Hoang | ✅ **Đã chốt:** tên **Tiên Đạo Online**, thế giới **Thiên Nguyên Giới**, giữ mạch cốt truyện. Nhân vật **kết hợp**: giữ nhân vật thần thoại/cổ điển đã hết bản quyền, đổi những gì tiểu thuyết mạng tự tạo, không dùng nhân vật tôn giáo đang được thờ phụng làm thế lực hoặc đối tượng chơi. |
+| D2 | **Tên & thế giới** | "Tiên Đạo Online", thế giới tự đặt (bản cũ) | "Tu Tiên Hồng Hoang Online", thần thoại Hồng Hoang | ✅ **Đã chốt (sửa 2026-11-07):** tên sản phẩm **Tiên Đạo Online**; thế giới **Hồng Hoang**, dùng đúng tên nhân vật/thế lực/nơi chốn của `cot-truyen.md` (chủ dự án đảo ngược luật "kết hợp" ban đầu, xem `docs/decisions.md`). Slug thế lực giữ nguyên. Vẫn cần rà pháp lý/tín ngưỡng trước khi mở công khai. |
 | D3 | **Thất bại đột phá** | Giữ nguyên tu vi | Từ Hóa Thần: mất 25%, chờ 24h, thua 3 lần thì lần sau chắc chắn qua | ✅ **Đã chốt** theo cốt truyện. Không tụt cảnh giới/tầng, hiện số tu vi sẽ mất trước khi bấm. |
 | D4 | **Thang cảnh giới** | 11 cảnh giới | 15 cảnh giới + chuỗi Vu tộc | ✅ **Đã chốt**, giữ tầng trong mỗi cảnh giới. |
 | D5 | **Thang điểm & nhịp** | Mốc 180 ngày | 100 điểm/ngày, trần 150, 330 ngày | ✅ **Đã chốt.** |
@@ -152,7 +152,7 @@ Mỗi hệ thống: phạm vi · phụ thuộc · rủi ro · ước lượng.
 - Viết lại `realms.yaml` (15 cảnh giới đạo đồ tiên + 15 đạo đồ Vu, có tầng), loader validate bậc tương đương.
 - Đổi thang điểm sang 100/ngày (`*_milli`), cập nhật `cultivation` settle, `cmd/balancesim` mục tiêu 330 ngày.
 - Đổi VIP thành Tiên Duyên theo D1: giữ đường nạp (1.000đ = 10 điểm duyên), thêm nguồn điểm duyên trong game, kiểm tra lại công bằng (VIP cao nhất đăng nhập 1 lần/ngày không hơn người miễn phí đăng nhập 3 lần/ngày, không vượt trần 150).
-- Cập nhật `story-writing.md` theo canon mới (thế giới Thiên Nguyên Giới, luật nhân vật kết hợp theo D2) và viết bảng đối chiếu từng nhân vật trong `content/story/lore/`.
+- Cập nhật `story-writing.md` theo canon mới (thế giới Hồng Hoang, tên theo `cot-truyen.md` từ khi D2 bị đảo ngược 2026-11-07).
 - Reset DB dev (chưa ra mắt).
 - **Ước lượng: 2–3 tuần-người.** Rủi ro: chạm nhiều file, cần test kỹ settle/breakthrough.
 

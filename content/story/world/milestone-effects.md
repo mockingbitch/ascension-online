@@ -16,20 +16,22 @@ Trang này là nguồn tên chính thức cho `eras` và các hiệu ứng thế
 
 ## 1. Thời kỳ (`eras`)
 
-| Thứ tự | `id` | Tên hiển thị | Bắt đầu khi | Ghi chú D2 |
-|---|---|---|---|---|
-| 1 | `khai_giang` | Tử Tiêu khai giảng | mốc `khai_giang` | Hồng Quân, Tử Tiêu Cung: thần thoại, giữ tên |
-| 2 | `dai_chien` | Đại chiến Huyết Tinh | mốc `dai_chien` | thay khung "Vu Yêu đại chiến" |
-| 3 | `luan_hoi` | Luân hồi sơ chuyển | hết sự kiện `dai_chien` (đề xuất) | không gắn người lập luân hồi |
-| 4 | `tao_nhan` | Nữ Oa tạo người | mốc `nu_oa` | Nữ Oa: thần thoại, giữ tên |
-| 5 | `thanh_nhan` | Thánh vị định tọa | mốc `thanh_nhan` | thay "Tam Thanh xuất thế" |
-| 6 | `nhan_toc` | Nhân tộc hưng khởi | mốc `nhan_toc` (đề xuất) | Tam Hoàng Ngũ Đế: cổ sử, giữ tên |
-| 7 | `phong_than` | Phong Thần lượng kiếp | mốc `phong_than` | Phong Thần Diễn Nghĩa: hết bản quyền |
-| 8 | `thien_dinh` | Thiên Đình tái lập | mốc `thien_dinh` (đề xuất) | Thiên Đình mới, không phải Tinh Hà Yêu Đình |
-| 9 | `tay_du` | Tây Du | mốc `tay_du` (đề xuất) | chỉ là tên thời kỳ, chưa có nội dung (G7) |
+Tên theo `docs/design/cot-truyen.md` §6–7 (chủ dự án đảo ngược D2 ngày 2026-11-07).
 
-"Thánh vị định tọa" nghĩa là các bậc Thánh Nhân ngồi vào ghế của mình. Trong truyện, những người thành thánh là NPC
-gốc (Tam Tọa Khung Chủ, Kim Sa Song Chủ) cùng Nữ Oa, không ai là nhân vật được thờ phụng.
+| Thứ tự | `id` | Tên hiển thị | Bắt đầu khi | Nguồn tên |
+|---|---|---|---|---|
+| 1 | `khai_giang` | Tử Tiêu khai giảng | mốc `khai_giang` | §4, §6.2: Hồng Quân giảng đạo ở Tử Tiêu Cung |
+| 2 | `dai_chien` | Đại chiến Vu Yêu | mốc `dai_chien` | §6.2, §7.1 |
+| 3 | `luan_hoi` | Hậu Thổ hóa luân hồi | hết sự kiện `dai_chien` | §7.1: Hậu Thổ kiến lập Lục Đạo Luân Hồi và Địa Phủ |
+| 4 | `tao_nhan` | Nữ Oa tạo người | mốc `nu_oa` | §6.2 |
+| 5 | `thanh_nhan` | Thánh nhân xuất thế | mốc `thanh_nhan` | §6.2, §7.2 |
+| 6 | `nhan_toc` | Tam Hoàng Ngũ Đế | mốc `nhan_toc` | §6.2: phe Nhân tộc, Tam Hoàng Ngũ Đế |
+| 7 | `phong_than` | Phong Thần Lượng Kiếp | mốc `phong_than` | §6.2, §7.3 |
+| 8 | `thien_dinh` | Thiên Đình tái lập | mốc `thien_dinh` | §6.2: Thiên Đình mới, không phải Thiên Đình Yêu Tộc |
+| 9 | `tay_du` | Tây Du | mốc `tay_du` | chỉ là tên thời kỳ, chưa có nội dung (G7) |
+
+Những người thành thánh ở mốc `thanh_nhan` là các NPC Tam Thanh, Chuẩn Đề, Tiếp Dẫn và Nữ Oa (§7.2). Giữ tông tôn
+trọng: họ là bậc thầy trong truyện, không phải đối tượng để cầu khấn hay chế giễu.
 
 ## 2. Vòng giảng ở Tử Tiêu Cung
 
@@ -47,48 +49,52 @@ Không có "lần giảng cuối". Hồng Quân không rời Tử Tiêu Cung; t�
 
 ## 3. Thế lực ở mốc `thanh_nhan`
 
-### 3.1 Đổi ID giữ chỗ sang ID thật
+### 3.1 Slug giữ nguyên, tên theo cot-truyen
 
-| Giữ chỗ trong data model | ID thật | Tên hiển thị |
+Slug là ID vĩnh viễn, đặt từ bản tên gốc trước khi D2 bị đảo ngược. Không đổi slug, chỉ đổi tên hiển thị.
+
+| Giữ chỗ trong data model | Slug (giữ nguyên) | Tên hiển thị |
 |---|---|---|
-| `huyen_mon` | `huyen_khung_mon` | Huyền Khung Môn |
-| `huyen_mon_a` / `_b` / `_c` | `thu_nhat_vien` / `lap_cuc_vien` / `van_luu_vien` | xem 3.2 |
-| `tay_phuong_mon` | `kim_sa_mon` | Kim Sa Môn |
-| `tay_phuong_giao` | `kim_sa_giao` | Kim Sa Giáo |
-| `dong_tien_dinh` | `thuong_lan_dinh` | Thương Lan Tiên Đình |
-| `yeu_dinh` | `tinh_ha_yeu_dinh` | Tinh Hà Yêu Đình |
+| `huyen_mon` | `huyen_khung_mon` | Tam Thanh |
+| `huyen_mon_a` / `_b` / `_c` | `thu_nhat_vien` / `lap_cuc_vien` / `van_luu_vien` | Nhân Giáo / Xiển Giáo / Tiệt Giáo |
+| `tay_phuong_mon` | `kim_sa_mon` | Tây Phương (phe Chuẩn Đề) |
+| `tay_phuong_giao` | `kim_sa_giao` | Tây Phương Giáo |
+| `dong_tien_dinh` | `thuong_lan_dinh` | Tiên Đình (Đông Vương Công) |
+| `yeu_dinh` | `tinh_ha_yeu_dinh` | Thiên Đình Yêu Tộc |
 | `vu_toc` | `vu_toc` | Vu Tộc |
 
-### 3.2 Huyền Khung Môn chia ba viện (`split_faction`)
+### 3.2 Tam Thanh tách ba giáo (`split_faction`)
 
-Ba tòa đạo đài vốn chung một sơn môn. Khi các Khung Chủ thành thánh, vòm trời rạn thành ba cung, mỗi tòa thành
-một viện độc lập. Không viện nào "đúng" hơn viện nào; mỗi viện giữ một cách hiểu về cùng một nguồn đạo.
+Có Nhân tộc, các Thánh nhân mới có cớ lập giáo (§7.2). Tam Thanh tách thành ba giáo; người chơi chọn một trong ba,
+giữ nguyên tu vi. Không giáo nào "đúng" hơn giáo nào. Cách gán slug theo bản sắc cũ của từng nhánh:
 
-| `id` | Tên | Một dòng bản sắc | Màu huy hiệu |
-|---|---|---|---|
-| `thu_nhat_vien` | Thủ Nhất Viện | Giữ một điều cho trọn: tĩnh tu, ít lời, bế quan dài ngày. | `jade-300` |
-| `lap_cuc_vien` | Lập Cực Viện | Đạo cần cột mốc: giới luật rõ, truyền thụ có thứ bậc. | `jade-500` |
-| `van_luu_vien` | Vạn Lưu Viện | Trăm dòng cùng về biển: mở cửa cho mọi người, mọi xuất thân. | `jade-700` |
+| Slug | Tên | Vị đứng đầu | Một dòng bản sắc | Màu huy hiệu |
+|---|---|---|---|---|
+| `thu_nhat_vien` | Nhân Giáo | Thái Thanh Lão Tử | Thanh tĩnh vô vi: ít lời, bế quan dài ngày. | `jade-300` |
+| `lap_cuc_vien` | Xiển Giáo | Nguyên Thủy Thiên Tôn | Đạo cần cột mốc: giới luật rõ, truyền thụ có thứ bậc. | `jade-500` |
+| `van_luu_vien` | Tiệt Giáo | Thông Thiên Giáo Chủ | Hữu giáo vô loại: mở cửa cho mọi người, mọi xuất thân. | `jade-700` |
 
-Huy hiệu mỗi viện giữ khung tròn `gold-500` của Huyền Khung Môn nhưng chỉ còn một cung tròn tương ứng.
+Huy hiệu mỗi giáo giữ khung tròn `gold-500` của Tam Thanh nhưng chỉ còn một cung tròn tương ứng.
 
-### 3.3 Kim Sa Môn thành Kim Sa Giáo (`migrate_faction`)
+### 3.3 Tây Phương thành Tây Phương Giáo (`migrate_faction`)
 
-Hai vị Song Chủ thành thánh, lời nguyện nơi Tây Mạc được ghi thành giáo điều riêng. Môn đổi tên thành
-**Kim Sa Giáo** (`kim_sa_giao`): cùng đệ tử, cùng tâm ngôn, cùng huy hiệu, chỉ đổi tên. Không dùng tên, biểu tượng
-hay giáo lý của tôn giáo có thật nào.
+Chuẩn Đề và Tiếp Dẫn thành thánh, lời nguyện nơi đất tây được lập thành giáo. Phe đổi tên thành **Tây Phương
+Giáo** (`kim_sa_giao`): cùng đệ tử, cùng tâm ngôn, cùng huy hiệu, chỉ đổi tên (§7.2). Không chép kinh văn, không
+dùng biểu tượng thờ cúng.
 
 ### 3.4 Các thế lực khác
 
-- **Tinh Hà Yêu Đình**, **Vu Tộc**: không đổi ở mốc này. Số phận sau Đại chiến chờ G2/G4.
-- **Thương Lan Tiên Đình**: đóng từ `luan_hoi` (cầu sương đứt sau Đại chiến). Thành viên chia vào các thế lực tiên
-  còn mở lúc đó, cùng luật báo trước/chọn (quyết định 2026-11-07).
+- **Thiên Đình Yêu Tộc**, **Vu Tộc**: không đổi ở mốc này. Số phận sau Đại chiến Vu Yêu (Địa Phủ hoặc luân hồi,
+  §7.1) chờ G2/G4.
+- **Tiên Đình**: đóng từ `luan_hoi` (cầu sương đứt sau Đại chiến). Thành viên chia vào các thế lực tiên còn mở lúc
+  đó, cùng luật báo trước/chọn (quyết định 2026-11-07).
+- **Oa Hoàng Cung** (phe Nữ Oa, §7.2) và **Địa Phủ** (§4, §7.1) chưa có thế lực trong catalogue.
 
 ## Ghi chú thiết kế
 
 - `status: draft`. Mọi hiệu ứng ghi "(đề xuất)" cần `data-architect` thêm vào `world_milestones.yaml`:
   `set_era` cho `nhan_toc`, `thien_dinh`, `tay_du`; và một cách đặt `luan_hoi` (hiện không mốc nào đặt thời kỳ này,
-  mà `thuong_lan_dinh` lại đóng từ `luan_hoi`).
+  mà Tiên Đình `thuong_lan_dinh` lại đóng từ `luan_hoi`).
 - `split_faction`: `from: huyen_khung_mon`, `into: [thu_nhat_vien, lap_cuc_vien, van_luu_vien]` (thứ tự này là thứ
   tự hòa khi chia mặc định), `notice_days: 3`, `choose_days: 7` (quyết định 9). Tu vi giữ nguyên.
 - `migrate_faction`: `from: kim_sa_mon`, `to: kim_sa_giao`, `notice_days: 3`.
@@ -97,5 +103,5 @@ hay giáo lý của tôn giáo có thật nào.
 - Vòng giảng 2/3: chưa có effect kind cho việc mở vòng giảng. Đề xuất `lectures.yaml` khai báo
   `cycles: [{ id, unlock_milestone }]` để không phải thêm effect kind. Sau khi mở, các vòng nối nhau thành một
   vòng dài; trong ngày sự kiện (`duration_days: 1`) có thể phát riêng vòng mới. Thưởng ngộ đạo không đổi.
-- Thương Lan (đã chốt 2026-11-07): `factions.yaml` `on_close: split` — chia khi thời kỳ chạm `luan_hoi`, nhánh tính
+- Tiên Đình `thuong_lan_dinh` (đã chốt 2026-11-07): `factions.yaml` `on_close: split` — chia khi thời kỳ chạm `luan_hoi`, nhánh tính
   từ catalogue (mở ở `luan_hoi`, cho đường `tien`, không đóng ở đó), `notice_days: 3`, `choose_days: 7`.

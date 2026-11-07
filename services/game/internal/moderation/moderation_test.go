@@ -43,9 +43,21 @@ func TestCheckNameShipped(t *testing.T) {
 		"Hồng Quân Lão Tổ":     CategoryStory,
 		"Nữ Oa Nương Nương":    CategoryStory,
 		"Thông Thiên Giáo Chủ": CategoryStory,
-		"Quan Âm Bồ Tát":       CategoryReligion,
-		"Quán Thế Âm":          CategoryReligion,
-		"Hồ Chí Minh":          CategoryPolitical,
+		// Canon names used in game since the owner reversed D2 (2026-11-07).
+		"Thái Thanh Lão Tử":   CategoryStory,
+		"Nguyên Thủy":         CategoryStory,
+		"Chuẩn Đề Đạo Nhân":   CategoryStory,
+		"Tiếp Dẫn":            CategoryStory,
+		"Đông Vương Công":     CategoryStory,
+		"Đế Tuấn Đại Đế":      CategoryStory,
+		"Hậu Thổ Nương Nương": CategoryStory,
+		"Đế Giang":            CategoryStory,
+		"Tam Hoàng Ngũ Đế":    CategoryStory,
+		"Tiệt Giáo Đệ Tử":     CategoryStory,
+		"Thiên Đình":          CategoryStory,
+		"Quan Âm Bồ Tát":      CategoryReligion,
+		"Quán Thế Âm":         CategoryReligion,
+		"Hồ Chí Minh":         CategoryPolitical,
 	}
 	for name, cat := range blocked {
 		err := c.CheckName(name)
@@ -59,6 +71,7 @@ func TestCheckNameShipped(t *testing.T) {
 		"Long Ngạo Thiên", "Côn Lôn Kiếm Khách", "Lôn Ba", "Lý Di", "Di Sơn", "Ngũ Hành Tử", "Nguyễn Hồng Quân",
 		"Lâm Thanh Vân", "Mê Mây", "Đỗ Đạt", "Mộ Dung Tuyết", "Thái Nhất Phàm", "Hậu Duệ", "Tiến Đạo",
 		"Cao Đề", "Bạch Cổ Lan", "Hàn Lập", "Đông Phương Bất Bại", "Dương Tiễn Phong", "Bắc Ai Long",
+		"Thông Minh", "Nguyên Thủy Kiếm", "Lý Huyền Minh", "Tây Phương Khách",
 	} {
 		if err := c.CheckName(ok); err != nil {
 			t.Errorf("CheckName(%q) blocked: %+v", ok, err)

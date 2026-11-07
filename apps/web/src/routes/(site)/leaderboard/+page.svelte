@@ -42,7 +42,7 @@
 <svelte:head><title>Thiên Bảng · Tiên Đạo</title></svelte:head>
 
 <header class="mb-8 text-center">
-	<p class="eyebrow">Toàn cõi Thiên Nguyên Giới</p>
+	<p class="eyebrow">Toàn cõi Hồng Hoang</p>
 	<h1 class="mt-2 text-5xl font-bold text-gold-300">Thiên Bảng</h1>
 	<p class="mx-auto mt-3 max-w-xl text-sm text-mist-300">
 		Xếp theo cảnh giới, tầng, rồi tiến độ trong tầng. Cùng thứ hạng: ai đạt trước đứng trước.

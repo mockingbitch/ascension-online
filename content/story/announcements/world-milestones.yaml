@@ -6,7 +6,7 @@
 #                {target} (new faction / default branch display name)
 # {era} is only used in milestones whose effects include `set_era`, so it always names the NEW era.
 # Length: every world.* line is ≤ 90 chars after substitution (day up to 3 digits, longest era name 21 chars).
-# faction.split_* lines are ≤ 110 chars with the real values (Huyền Khung Môn → 3 viện, {branches} = 42 chars);
+# faction.split_* lines are ≤ 110 chars with the real values (Tam Thanh → 3 giáo, {branches} = 31 chars);
 # see the note in world/milestone-effects.md if the 90-char UI rule must apply to them too.
 # Server picks one variant at random. status: draft (names follow content/story/world/milestone-effects.md).
 version: 1
@@ -15,7 +15,7 @@ templates:
   world.khai_giang:
     - "Ngày {day}: Tử Tiêu Cung mở cửa. Hồng Quân bắt đầu giảng đạo cho chúng sinh."
     - "Chuông Tử Tiêu ngân vang: {era}. Năm thế lực mở cửa thu nhận đệ tử."
-    - "Hồng Quân ngồi giảng, đạo âm vang khắp Thiên Nguyên Giới. Ai muốn nghe đều có chỗ."
+    - "Hồng Quân ngồi giảng, đạo âm vang khắp Hồng Hoang. Ai muốn nghe đều có chỗ."
   world.giang_dao_2:
     - "Ngày {day}: Hồng Quân mở vòng giảng thứ hai. Tử Tiêu Cung nay có thêm bài mới."
     - "Vòng giảng thứ hai khai mở. Ai đã vững căn cơ sẽ nghe ra tầng đạo lý sâu hơn."
@@ -24,15 +24,15 @@ templates:
     - "Ngày {day}: Hồng Quân mở vòng giảng thứ ba. Đạo lý càng sâu, người nghe càng tĩnh."
     - "Vòng giảng thứ ba khai mở. Ba vòng lời Hồng Quân nay cùng xoay trong Tử Tiêu Cung."
   world.dai_chien:
-    - "Ngày {day}: Vu Tộc và Tinh Hà Yêu Đình khai chiến. Đại chiến Huyết Tinh bắt đầu!"
+    - "Ngày {day}: Vu Tộc và Thiên Đình Yêu Tộc khai chiến. Đại chiến Vu Yêu bắt đầu!"
     - "Trời đất rung chuyển, {era} mở màn. Mười lăm ngày chiến hỏa bắt đầu."
-    - "Huyết khí dưới đất, tinh quang trên trời va nhau. Thiên Nguyên Giới chao đảo."
+    - "Huyết khí dưới đất, tinh quang trên trời va nhau. Hồng Hoang chao đảo."
   world.nu_oa:
     - "Ngày {day}: Nữ Oa nặn đất bên bờ sông, thổi linh khí thành người. Nhân tộc ra đời."
     - "Thời kỳ {era} mở ra. Nhân tộc chào đời, yếu ớt mà mang mọi khả năng."
   world.thanh_nhan:
-    - "Ngày {day}: Thánh nhân xuất thế, Thiên Nguyên Giới bước vào {era}."
-    - "Thánh nhân định tọa. Huyền Khung Môn sắp chia ba viện, Kim Sa Môn sắp thành Kim Sa Giáo."
+    - "Ngày {day}: Thánh nhân lần lượt xuất thế. Hồng Hoang bước vào thời {era}."
+    - "Tam Thanh sắp tách thành ba giáo, phe Chuẩn Đề sắp lập Tây Phương Giáo."
   world.nhan_toc:
     - "Ngày {day}: Tam Hoàng Ngũ Đế dạy Nhân tộc cày cấy, làm thuốc, định lịch."
     - "Nhân tộc thôi yếu ớt. Tam Hoàng Ngũ Đế dẫn dắt, một thế lực mới đang thành hình."
@@ -54,11 +54,11 @@ templates:
     - "Ngày khai giảng vòng ba đã qua. Lời giảng ấy vẫn xoay vòng ở Tử Tiêu Cung."
     - "Ngày {day}: Vòng giảng thứ ba đã hòa vào vòng chung. Nghe lúc nào cũng được."
   world.event_end.dai_chien:
-    - "Ngày {day}: Đại chiến Huyết Tinh kết thúc. Từ đổ nát, vòng luân hồi bắt đầu chuyển."
-    - "Khói lửa tan dần. Kẻ ngã xuống không mất hẳn, vòng luân hồi đã mở ra."
+    - "Ngày {day}: Đại chiến Vu Yêu kết thúc. Hậu Thổ hóa luân hồi, Địa Phủ khai mở."
+    - "Khói lửa tan dần. Kẻ ngã xuống không mất hẳn, Lục Đạo Luân Hồi đã mở ra."
   world.event_end.thanh_nhan:
-    - "Ngày {day}: Thánh vị đã định. Các thế lực mới của Thiên Nguyên Giới đã đứng vững."
-    - "Ba viện Huyền Khung và Kim Sa Giáo đã an vị. Thời thánh nhân xuất thế khép lại."
+    - "Ngày {day}: Thánh nhân đã xuất thế. Các giáo phái mới của Hồng Hoang đã đứng vững."
+    - "Nhân Giáo, Xiển Giáo, Tiệt Giáo và Tây Phương Giáo đã an vị. Thời thánh nhân khép lại."
   world.event_end.tam_hoang:
     - "Ngày {day}: Tam Hoàng Ngũ Đế lui về. Nhân tộc đã tự đứng vững giữa trời đất."
     - "Cày cấy, thuốc men, lịch pháp đã truyền xong. Nhân tộc tự bước con đường mình."
@@ -73,9 +73,9 @@ templates:
   faction.split_done:
     - "{faction} đã chia thành {branches}. Hạn chọn: {days} ngày."
     - "{faction} đã tách nhánh. Sau {days} ngày, ai chưa chọn sẽ vào nhánh ít người nhất."
-  # At the choice deadline (Phase 2.2): {branches} = viện that received undecided members (spread to the smallest).
+  # At the choice deadline (Phase 2.2): {branches} = branches that received undecided members (spread to the smallest).
   faction.split_final:
-    - "Hạn chọn viện đã hết. Ai chưa chọn được chia đều vào {branches}."
+    - "Hạn chọn nhánh đã hết. Ai chưa chọn được chia đều vào {branches}."
   # migrate_faction: notice at the milestone, done when the members have moved. {target} = new display name.
   faction.migrate_notice:
     - "{days} ngày nữa {faction} đổi thành {target}. Thành viên được chuyển tự động."

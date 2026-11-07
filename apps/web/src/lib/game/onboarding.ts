@@ -26,34 +26,34 @@ export const openingScenes: OpeningScene[] = [
 		visual: 'split'
 	},
 	{
-		title: 'Thân hóa vạn vật',
-		caption: 'Bàn Cổ ngã xuống. Thân hóa núi sông, mắt hóa nhật nguyệt, tinh huyết thấm vào đất. Thiên Nguyên Giới thành hình.',
+		title: 'Bàn Cổ vẫn lạc',
+		caption: 'Bàn Cổ ngã xuống. Thân hóa núi sông, mắt hóa nhật nguyệt, nguyên thần hóa Tam Thanh, tinh huyết hóa Tổ Vu.',
 		visual: 'world'
 	},
 	{
 		title: 'Thiên địa sơ khai',
-		caption: 'Linh khí tràn khắp đại lục, chảy thành sông ngầm dưới núi. Cỏ cây mọc lên, muông thú sinh sôi.',
+		caption: 'Linh khí tràn khắp Hồng Hoang, chảy thành sông ngầm dưới núi. Cỏ cây mọc lên, muông thú sinh sôi.',
 		visual: 'dawn'
 	},
 	{
-		title: 'Ba tộc tranh bá',
+		title: 'Long Hán Sơ Kiếp',
 		caption: 'Long, Phượng, Kỳ Lân tranh nhau làm chủ đất trời. Chiến hỏa kéo dài, rồi cả ba cùng suy tàn.',
 		visual: 'beasts'
 	},
 	{
-		title: 'Đại năng hiện thế',
+		title: 'Các đại năng xuất hiện',
 		caption:
-			'Từ đổ nát, các đại năng lần lượt hiện thân: dưới núi Tử Tiêu, giữa cát vàng Tây Mạc, trên biển Đông, giữa ngân hà, trong máu Bàn Cổ.',
+			'Tam Thanh, Nữ Oa, Chuẩn Đề, Tiếp Dẫn, Đông Vương Công, Đế Tuấn, Thái Nhất, Hậu Thổ lần lượt hiện thế giữa trời đất.',
 		visual: 'powers'
 	},
 	{
 		title: 'Hồng Quân hiện thế',
 		caption:
-			'Hồng Quân bước ra từ nơi sâu nhất của hỗn độn còn sót lại, gửi lời mời khắp Thiên Nguyên Giới: ai muốn nghe đạo, hãy đến.',
+			'Hồng Quân Đạo Tổ bước ra từ nơi sâu nhất của hỗn độn, ban lệnh mời các đại năng khắp Hồng Hoang: ai muốn nghe đạo, hãy đến.',
 		visual: 'sage'
 	},
 	{
-		title: 'Tử Tiêu Cung mở cửa',
+		title: 'Tử Tiêu Cung mở',
 		caption: 'Cửa Tử Tiêu Cung mở. Hồng Quân ngồi lên đạo đài. Giữa những người nghe đầu tiên, có ngươi.',
 		visual: 'hall'
 	}
@@ -61,7 +61,7 @@ export const openingScenes: OpeningScene[] = [
 
 /** Hồng Quân's opening words in Tử Tiêu Cung (one line per tap). */
 export const openingWords: string[] = [
-	'Các ngươi đến từ khắp Thiên Nguyên Giới. Đường xa rồi, hãy ngồi xuống, thở chậm lại.',
+	'Các ngươi đến từ khắp Hồng Hoang. Đường xa rồi, hãy ngồi xuống, thở chậm lại.',
 	'Ta là Hồng Quân. Ta không ban đạo cho ai, vì đạo chưa từng thuộc về ta.',
 	'Ta chỉ giảng những gì ta đã thấy. Nghe hay không, đi hay ở, là việc của các ngươi.',
 	'Lời giảng ở đây không dứt. Hôm nay lỡ một câu, ngày mai câu ấy sẽ lại vòng về.',

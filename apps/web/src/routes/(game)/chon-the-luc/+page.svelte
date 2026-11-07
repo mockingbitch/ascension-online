@@ -30,7 +30,7 @@
 			<h1 class="mt-2 text-4xl font-bold text-gold-300 sm:text-6xl">Chọn con đường của {ch.name}</h1>
 			<p class="mx-auto mt-3 max-w-2xl text-mist-300">
 				Lời giảng của Hồng Quân vừa dứt, các thế lực mở cửa thu nhận đệ tử. Nơi bạn gia nhập định cách bạn kết giao, giảng đạo và
-				đi qua các đại kiếp của Thiên Nguyên Giới.
+				đi qua các đại kiếp của Hồng Hoang.
 			</p>
 		</header>
 		{#if error}<p role="alert" class="mb-4 text-center text-cinnabar-300">{error}</p>{/if}

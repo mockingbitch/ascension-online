@@ -35,9 +35,9 @@ chỉ là danh sách việc).
 - [ ] Ghi tất cả vào `docs/decisions.md`.
 
 ### Nội dung & pháp lý
-- [ ] `story-creator`: canon Thiên Nguyên Giới mới trong `content/story/lore/`. Bảng đối chiếu **từng nhân vật/thế
-      lực** của `cot-truyen.md`: giữ tên, đổi tên nguyên bản, hoặc thay bằng nhân vật nguyên bản (luật D2).
-- [ ] Đặt tên nguyên bản cho 5 thế lực ban đầu, chuỗi cảnh giới Vu tộc và các kiếp.
+- [x] Tên theo `cot-truyen.md` (chủ dự án đảo ngược D2, 2026-11-07): thế giới Hồng Hoang, 5 thế lực ban đầu, ba giáo,
+      Tây Phương Giáo, chuỗi cảnh giới Vu (bậc cuối Tổ Vu), Huyết kiếp. Slug thế lực giữ nguyên.
+- [ ] Chủ dự án duyệt các tên `cot-truyen.md` không nêu (xem `docs/decisions.md` mục 2026-11-07 đảo ngược D2).
 - [ ] Rà bảng đối chiếu với người am hiểu tín ngưỡng.
 - [ ] Gửi luật sư: yêu cầu cấp phép game online, định danh tài khoản, giới hạn người dưới 18 (Nghị định 147/2024),
       quy định thanh toán trong game.
@@ -155,7 +155,7 @@ Ghi chú: hiệu ứng `split_faction`/`migrate_faction` được lưu chờ tro
 
 ### 2.2. Thế lực
 - [x] `content/catalog/factions.yaml`: 5 thế lực ban đầu (tên nguyên bản theo Phase 0), đạo đồ cho phép, kỷ nguyên
-      mở/đóng. + 3 viện Huyền Khung, Kim Sa Giáo, Nhân Tộc (đóng cho đến khi chốt canon). Loader + cross-check
+      mở/đóng. + ba giáo Nhân/Xiển/Tiệt, Tây Phương Giáo, Nhân Tộc (mở theo mốc). Loader + cross-check
       (đạo đồ, kỷ nguyên, hiệu ứng chia/đổi tên trong `world_milestones.yaml`).
 - [x] Bảng `character_faction` + `faction_history` (migration `000011`). Đổi phe có thời gian chờ (YAML, 7 ngày).
 - [x] Khóa đổi phe (dùng cho Phong Thần sau này): `POST /admin/factions/lock|unlock`, có audit.

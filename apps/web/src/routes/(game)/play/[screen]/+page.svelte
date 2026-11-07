@@ -15,7 +15,7 @@
 		</div>
 		<h2 class="mt-6 font-display text-3xl font-bold text-gold-300">Cấm chế chưa giải</h2>
 		<p class="mt-2 max-w-md text-mist-300">
-			{s ? `${s.label} sẽ khai mở khi thiên đạo vận chuyển tới.` : 'Nơi này không tồn tại trong Thiên Nguyên Giới.'}
+			{s ? `${s.label} sẽ khai mở khi thiên đạo vận chuyển tới.` : 'Nơi này không tồn tại trong Hồng Hoang.'}
 			Theo dõi Thiên Đạo Sử để biết khi nào cấm chế được phá.
 		</p>
 		<a href="/play" class="btn btn-ghost mt-6"><Icon name="map" size={16} /> Về bản đồ thế giới</a>

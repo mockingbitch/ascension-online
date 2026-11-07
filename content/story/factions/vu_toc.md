@@ -13,11 +13,11 @@ refs: [path.vu, milestone.khai_giang, milestone.dai_chien]
 
 ## Giới thiệu
 
-Tương truyền Bàn Cổ khai thiên lập địa rồi ngã xuống. Thân Ngài hóa thành núi sông, máu Ngài thấm vào lòng đất.
-Vu Tộc tin rằng chính dòng máu ấy chảy trong huyết quản của họ. Họ không ngồi thiền để thu nạp linh khí như tu
+Tương truyền Bàn Cổ khai thiên lập địa rồi ngã xuống. Thân Ngài hóa thành núi sông, tinh huyết hóa thành các Tổ
+Vu. Vu Tộc tin rằng chính dòng máu ấy chảy trong huyết quản của họ. Họ không ngồi thiền để thu nạp linh khí như tu
 sĩ tiên đạo. Họ rèn thân thể, đập đá, tắm trong suối nóng và tế lễ tổ tiên bên đống lửa. Thân thể được tôi
 luyện đủ lâu sẽ cứng như núi, và khí huyết được nuôi đủ dày sẽ cuồn cuộn như sông. Vu Tộc sống trên mặt đất,
-gần núi và gần máu, nên coi bầu trời là chốn xa lạ, còn Tinh Hà Yêu Đình là kẻ lấn đất. Người Vu ít lời, giữ
+gần núi và gần máu, nên coi bầu trời là chốn xa lạ, còn Thiên Đình Yêu Tộc là kẻ lấn đất. Người Vu ít lời, giữ
 lời, và không bao giờ bỏ lại đồng tộc trên đường.
 
 ## Lối tu luyện
@@ -39,12 +39,14 @@ bàn tay cách điệu màu `gold-700`. Viền khiên dày, góc cạnh, thô h�
 
 ## Người đứng đầu
 
-**Thủ Tế Vu Chủ**: người chủ trì lễ tế Bàn Cổ và giữ lửa của toàn tộc. Đây là NPC gốc, không thuộc danh sách
-"Tổ Vu" của tiểu thuyết mạng nào, chưa đặt tên riêng.
+**Tổ Vu** (NPC, `cot-truyen.md` §10 cảnh 3: "tinh huyết hóa Tổ Vu"): các vị chủ trì lễ tế Bàn Cổ và giữ lửa của
+toàn tộc. Trong số đó có **Hậu Thổ**, người về sau kiến lập Lục Đạo Luân Hồi và Địa Phủ (`cot-truyen.md` §7.1).
+`cot-truyen.md` không liệt kê tên từng Tổ Vu; chưa dùng danh sách mười hai Tổ Vu cho tới khi chủ dự án duyệt.
 
 ## Ghi chú thiết kế
 
-- Chỉ nhận `allowed_paths: [vu]`. Tên các bậc Vu trong `realms.yaml` vẫn là `name_placeholder`.
+- Chỉ nhận `allowed_paths: [vu]`. Tên các bậc Vu trong `realms.yaml` lấy đúng `cot-truyen.md` §5.3, bậc cuối là
+  Tổ Vu.
 - Tên "Huyết kiếp" lấy từ cot-truyen §5.3. Về cơ chế, nó **giống hệt** lôi kiếp (D3). Nếu dùng trong UI cần thêm
   chuỗi hiển thị riêng.
 - Mini game "đấm đá" (cot-truyen §5.3) chưa có trong phạm vi D6, nên văn bản không hứa hẹn nó.

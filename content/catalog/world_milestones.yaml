@@ -33,12 +33,12 @@ settings:
 # Ordered; set_era effects must follow this order (an era never moves backwards at runtime either).
 eras:
   - { id: khai_giang, name: Tử Tiêu khai giảng }
-  - { id: dai_chien,  name: Đại chiến Huyết Tinh }
-  - { id: luan_hoi,   name: Luân hồi sơ chuyển }      # set when the dai_chien event ends
+  - { id: dai_chien,  name: Đại chiến Vu Yêu }
+  - { id: luan_hoi,   name: Hậu Thổ hóa luân hồi }    # set when the dai_chien event ends (Địa Phủ khai mở)
   - { id: tao_nhan,   name: Nữ Oa tạo người }
-  - { id: thanh_nhan, name: Thánh vị định tọa }
-  - { id: nhan_toc,   name: Nhân tộc hưng khởi }
-  - { id: phong_than, name: Phong Thần lượng kiếp }
+  - { id: thanh_nhan, name: Thánh nhân xuất thế }
+  - { id: nhan_toc,   name: Tam Hoàng Ngũ Đế }
+  - { id: phong_than, name: Phong Thần Lượng Kiếp }
   - { id: thien_dinh, name: Thiên Đình tái lập }
   - { id: tay_du,     name: Tây Du }
 
@@ -69,7 +69,7 @@ milestones:          # strictly ordered, no minimum gap (decision H). APPEND-ONL
       - { kind: start_event, event_id: giang_dao_3, duration_days: 1 }
 
   - id: dai_chien                         # story window day 100–115
-    name: Đại chiến Huyết Tinh
+    name: Đại chiến Vu Yêu
     target_day: 100
     threshold_points_per_active: 6700
     announce: world.dai_chien
@@ -98,11 +98,11 @@ milestones:          # strictly ordered, no minimum gap (decision H). APPEND-ONL
       - { kind: set_era, era_id: thanh_nhan }
       - { kind: start_event, event_id: thanh_nhan, duration_days: 30 }
       - kind: split_faction               # decision 9: 3-day notice, 7-day choice, default = fewest members
-        from: huyen_khung_mon
+        from: huyen_khung_mon             # Tam Thanh → Nhân Giáo, Xiển Giáo, Tiệt Giáo
         into: [thu_nhat_vien, lap_cuc_vien, van_luu_vien]   # order = tie-break order for the default branch
         notice_days: 3
         choose_days: 7
-      - { kind: migrate_faction, from: kim_sa_mon, to: kim_sa_giao, notice_days: 3 }
+      - { kind: migrate_faction, from: kim_sa_mon, to: kim_sa_giao, notice_days: 3 }   # Tây Phương → Tây Phương Giáo
 
   - id: nhan_toc                          # story window day 150–210
     name: Tam Hoàng Ngũ Đế

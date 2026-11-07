@@ -2,9 +2,20 @@
 # realms.yaml paths, world_milestones.yaml eras and every split_faction / migrate_faction effect.
 #
 # Source: content/story/factions/README.md (roster, paths, pitches, colours) and
-# content/story/world/milestone-effects.md (Huyền Khung Môn → 3 viện, Kim Sa Môn → Kim Sa Giáo).
-# Roster status: draft (decision 12) — every name keeps `name_placeholder: true` until the owner approves.
-# IDs are permanent once deployed (character_faction.faction_id / faction_history reference them).
+# content/story/world/milestone-effects.md (Tam Thanh → Nhân Giáo / Xiển Giáo / Tiệt Giáo, Tây Phương → Tây Phương
+# Giáo). Names follow docs/design/cot-truyen.md (owner reversed D2 on 2026-11-07, see docs/decisions.md).
+# IDs are permanent once deployed (character_faction.faction_id / faction_history reference them), so the slugs
+# below are the legacy stand-in slugs and do NOT spell the display name. Legacy slug → canon name:
+#   huyen_khung_mon  → Tam Thanh (Thái Thanh Lão Tử, Nguyên Thủy Thiên Tôn, Thông Thiên Giáo Chủ)
+#   kim_sa_mon       → Tây Phương (phe Chuẩn Đề, Tiếp Dẫn)
+#   thuong_lan_dinh  → Tiên Đình (Đông Vương Công)
+#   tinh_ha_yeu_dinh → Thiên Đình Yêu Tộc (Thiên Đình của Yêu tộc: Đế Tuấn, Thái Nhất)
+#   vu_toc           → Vu Tộc (Tổ Vu, máu Bàn Cổ)
+#   thu_nhat_vien    → Nhân Giáo (Thái Thanh Lão Tử)
+#   lap_cuc_vien     → Xiển Giáo (Nguyên Thủy Thiên Tôn)
+#   van_luu_vien     → Tiệt Giáo (Thông Thiên Giáo Chủ)
+#   kim_sa_giao      → Tây Phương Giáo (Chuẩn Đề, Tiếp Dẫn)
+#   nhan_toc         → Nhân Tộc (Tam Hoàng Ngũ Đế)
 #
 # Fields
 #   allowed_paths   realm path ids; joining converts the character to an allowed path (same tier/stage, F3)
@@ -34,98 +45,90 @@ settings:
 
 factions:
   # ── Five starting factions (open_from_era: khai_giang) ───────────────────
-  - id: huyen_khung_mon
-    name: Huyền Khung Môn
-    name_placeholder: true
+  - id: huyen_khung_mon               # = Tam Thanh (legacy slug, see header)
+    name: Tam Thanh
     allowed_paths: [tien]
     open_from_era: khai_giang
-    close_from_era: thanh_nhan        # split into the three viện (milestone thanh_nhan)
+    close_from_era: thanh_nhan        # Tam Thanh splits into the three giáo (milestone thanh_nhan)
     on_close: effect
     color: aura-jade
-    motto: Một vòm trời, ba nhánh đạo, cùng về một nguồn.
-    pitch: Tông môn dưới núi Tử Tiêu, ba tòa đạo đài chờ ngày phân nhánh.
+    motto: Một khí hóa ba thanh, ba nhánh đạo cùng về một nguồn.
+    pitch: Môn hạ Tam Thanh nơi Côn Lôn, nghe đạo Tử Tiêu, chờ ngày phân giáo.
 
-  - id: kim_sa_mon
-    name: Kim Sa Môn
-    name_placeholder: true
+  - id: kim_sa_mon                    # = Tây Phương (legacy slug)
+    name: Tây Phương
     allowed_paths: [tien]
     open_from_era: khai_giang
-    close_from_era: thanh_nhan        # renamed Kim Sa Giáo (milestone thanh_nhan)
+    close_from_era: thanh_nhan        # becomes Tây Phương Giáo (milestone thanh_nhan)
     on_close: effect
     color: aura-golden
-    motto: Hạt cát tuy nhỏ, nguyện lực rất dài.
-    pitch: Tông môn giữa cát vàng Tây Mạc, tu chậm mà bền, không hỏi xuất thân.
+    motto: Đất tây tuy cằn, nguyện lực rất dài.
+    pitch: Phe Chuẩn Đề nơi Tây phương cằn cỗi, tu chậm mà bền, không hỏi xuất thân.
 
-  - id: thuong_lan_dinh
-    name: Thương Lan Tiên Đình
-    name_placeholder: true
+  - id: thuong_lan_dinh               # = Tiên Đình (legacy slug)
+    name: Tiên Đình
     allowed_paths: [tien]
     open_from_era: khai_giang
-    close_from_era: luan_hoi          # cầu sương đứt sau Đại chiến (set by the dai_chien event's on_end)
+    close_from_era: luan_hoi          # Tiên Đình tan sau Đại chiến Vu Yêu (set by the dai_chien event's on_end)
     on_close: split                   # decisions 2026-11-07: split into the tiên factions still open at luan_hoi
-    split: { notice_days: 3, choose_days: 7 }   # decision 9 rules (same as the Huyền Khung split)
+    split: { notice_days: 3, choose_days: 7 }   # decision 9 rules (same as the Tam Thanh split)
     color: spirit-cyan
     motto: Bốn biển một sổ tiên, không ai bị bỏ sót.
-    pitch: Triều đình tu sĩ trên đảo nổi biển Đông, giữ Tiên Tịch và lễ nghi.
+    pitch: Tiên Đình của Đông Vương Công trên biển Đông, giữ sổ tiên và trọng lễ nghi.
 
-  - id: tinh_ha_yeu_dinh
-    name: Tinh Hà Yêu Đình
-    name_placeholder: true
+  - id: tinh_ha_yeu_dinh              # = Thiên Đình Yêu Tộc (legacy slug)
+    name: Thiên Đình Yêu Tộc
     allowed_paths: [tien]             # ⚠ Yêu path (G3) not decided; tiên for now
     open_from_era: khai_giang
     color: spirit-violet
     motto: Sao trời không hỏi xuất thân.
-    pitch: Triều đình Yêu tộc giữa ngân hà, muôn loài tu thành hình đều có sao.
+    pitch: Thiên Đình của Yêu tộc trên chín tầng trời, Đế Tuấn và Thái Nhất cầm đầu.
 
   - id: vu_toc
     name: Vu Tộc
-    name_placeholder: true
     allowed_paths: [vu]
     open_from_era: khai_giang
     color: aura-blood
     motto: Máu Bàn Cổ chưa nguội, thân ta tức là pháp bảo.
-    pitch: Tộc luyện thể mang máu Bàn Cổ, rèn thân như núi, giữ lời như đá.
+    pitch: Tộc luyện thể do tinh huyết Bàn Cổ hóa thành, Tổ Vu cầm đầu, rèn thân như núi.
 
   # ── Opened by milestones ──────────────────────────────────────────────────
-  # Split of huyen_khung_mon (world_milestones.yaml thanh_nhan). Order here = tie-break order of the default branch.
-  - id: thu_nhat_vien
-    name: Thủ Nhất Viện
-    name_placeholder: true
+  # Split of huyen_khung_mon / Tam Thanh (world_milestones.yaml thanh_nhan). Order here = tie-break order of the
+  # default branch.
+  - id: thu_nhat_vien                 # = Nhân Giáo (legacy slug)
+    name: Nhân Giáo
     allowed_paths: [tien]
     open_from_era: thanh_nhan
     color: jade-300
-    pitch: "Giữ một điều cho trọn: tĩnh tu, ít lời, bế quan dài ngày."
+    pitch: "Giáo của Thái Thanh Lão Tử: thanh tĩnh vô vi, ít lời, bế quan dài ngày."
 
-  - id: lap_cuc_vien
-    name: Lập Cực Viện
-    name_placeholder: true
+  - id: lap_cuc_vien                  # = Xiển Giáo (legacy slug)
+    name: Xiển Giáo
     allowed_paths: [tien]
     open_from_era: thanh_nhan
     color: jade-500
-    pitch: "Đạo cần cột mốc: giới luật rõ, truyền thụ có thứ bậc."
+    pitch: "Giáo của Nguyên Thủy Thiên Tôn: giới luật rõ, truyền thụ có thứ bậc."
 
-  - id: van_luu_vien
-    name: Vạn Lưu Viện
-    name_placeholder: true
+  - id: van_luu_vien                  # = Tiệt Giáo (legacy slug)
+    name: Tiệt Giáo
     allowed_paths: [tien]
     open_from_era: thanh_nhan
     color: jade-700
-    pitch: "Trăm dòng cùng về biển: mở cửa cho mọi người, mọi xuất thân."
+    pitch: "Giáo của Thông Thiên Giáo Chủ: hữu giáo vô loại, mở cửa cho mọi xuất thân."
 
   # Rename of kim_sa_mon (migrate_faction): same disciples, motto and badge, new name.
-  - id: kim_sa_giao
-    name: Kim Sa Giáo
-    name_placeholder: true
+  - id: kim_sa_giao                   # = Tây Phương Giáo (legacy slug)
+    name: Tây Phương Giáo
     allowed_paths: [tien]
     open_from_era: thanh_nhan
     color: aura-golden
-    motto: Hạt cát tuy nhỏ, nguyện lực rất dài.
-    pitch: Kim Sa Môn sau khi Song Chủ thành thánh, lời nguyện thành giáo điều.
+    motto: Đất tây tuy cằn, nguyện lực rất dài.
+    pitch: Phe Chuẩn Đề sau khi Chuẩn Đề và Tiếp Dẫn thành thánh, lập giáo ở Tây phương.
 
-  # Nhân Tộc opens with Nữ Oa tạo người (era tao_nhan, milestone nu_oa) — decisions 2026-11-07. Still no story page.
+  # Nhân Tộc opens with Nữ Oa tạo người (era tao_nhan, milestone nu_oa) — decisions 2026-11-07.
   - id: nhan_toc
     name: Nhân Tộc
-    name_placeholder: true
     allowed_paths: [tien]
     open_from_era: tao_nhan
     color: aura-earth
+    pitch: Nhân tộc do Nữ Oa nặn từ đất, Tam Hoàng Ngũ Đế dẫn dắt.

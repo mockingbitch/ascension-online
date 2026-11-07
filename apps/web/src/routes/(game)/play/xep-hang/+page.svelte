@@ -41,7 +41,7 @@
 
 <svelte:head><title>Xếp Hạng · Tiên Đạo</title></svelte:head>
 
-<ScreenFrame title="Thiên Bảng" subtitle="Toàn cõi Thiên Nguyên Giới" icon="rank" >
+<ScreenFrame title="Thiên Bảng" subtitle="Toàn cõi Hồng Hoang" icon="rank" >
 	<div class="mb-4 flex gap-1" role="tablist">
 		<button role="tab" aria-selected={tab === 'personal'} class="tab" class:is-on={tab === 'personal'} onclick={() => (tab = 'personal')}>Tu sĩ</button>
 		<button role="tab" aria-selected={tab === 'faction'} class="tab" class:is-on={tab === 'faction'} onclick={() => (tab = 'faction')}>Thế lực</button>

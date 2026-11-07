@@ -42,7 +42,7 @@ tribulation:
   protector_bonus_max_bp: 300
   max_total_bonus_bp: 1200        # surplus + items + protector together
   max_success_bp: 9000            # final odds cap; only the guaranteed attempt reaches 10000
-  names: { tien: Lôi Kiếp, vu: Huyết Kiếp }   # vu name is a placeholder (D2)
+  names: { tien: Lôi Kiếp, vu: Huyết Kiếp }   # vu name from cot-truyen.md §5.3 ("Huyết kiếp")
   # Quote guard: the preview discloses the exact loss now plus `maxLossMilli` = the loss after this much more idle
   # accrual (×catch-up, capped by bình cảnh). The client sends that bound as acceptLossMilli; the attempt is refused
   # (409 quote_changed) only if the applied loss exceeds it.
@@ -79,18 +79,23 @@ phase_sets:
 minor_breakthrough: { auto: true }   # minor stages: 100%, applied automatically when credited (bổ sung A)
 
 # entry_points = cumulative points to ENTER the tier (decision #3). Requirements per stage are split evenly,
-# remainder one point each on the LAST stages (balance §11.1).
+# remainder one point each on the LAST stages (balance §11.1). Optional `stage_weights` (one per stage, ≥ 1,
+# non-decreasing) splits the span proportionally instead — used to make the first stages quick.
+#
+# Early game front-loaded (2026-11-07): Luyện Khí 300 → 100 (tầng 1 ≈ 2 points ≈ the first session), Trúc Cơ
+# 650 → 550, Kim Đan 1100 → 1400; Nguyên Anh entry (2050) and everything after unchanged, so the 330-day arc holds.
 tiers:
   - tier: 1                       # Luyện Khí
     entry_points: 0
     stages: { set: chin_tang }
+    stage_weights: [1, 2, 3, 4, 5, 6, 7, 8, 9]
     major_breakthrough:
       success_bp: 7000
       pity_step_bp: 1000
       cooldown_seconds: 1800
       requirements: [{ item_id: truc_co_dan, quantity: 1 }]
   - tier: 2                       # Trúc Cơ
-    entry_points: 300
+    entry_points: 100
     stages: { phases: bon_ky, layers: 1 }
     major_breakthrough:
       success_bp: 6000
@@ -98,7 +103,7 @@ tiers:
       cooldown_seconds: 3600
       requirements: [{ item_id: ket_dan_qua, quantity: 1 }]
   - tier: 3                       # Kim Đan — leaving it needs a Tâm Ma pass (trials.yaml gate.tier: 3)
-    entry_points: 950
+    entry_points: 650
     stages: { phases: bon_ky, layers: 1 }
     major_breakthrough: { success_bp: 5000, pity_step_bp: 700, cooldown_seconds: 7200 }
   - tier: 4                       # Nguyên Anh — leaving it needs a Hóa Phàm pass (trials.yaml gate.tier: 4)
@@ -145,19 +150,19 @@ realms:
   - { id: dai_la_kim_tien,  path: tien, tier: 14, name: Đại La Kim Tiên,  title: Đại La Kim Tiên,    visual: { badge: realm-dai-la-kim-tien, aura: chaos } }
   - { id: chuan_thanh,      path: tien, tier: 15, name: Chuẩn Thánh,      title: Chuẩn Thánh,        visual: { badge: realm-chuan-thanh, aura: saint } }
   - { id: thanh_nhan,       path: tien, tier: 16, name: Thánh Nhân,       title: Thánh Nhân,         visual: { badge: realm-thanh-nhan, aura: saint } }
-  # ── Vu path: IDs permanent and neutral; names are placeholders until the D2 lore table ──
-  - { id: vu_1,  path: vu, tier: 1,  name: Khai Huyết, name_placeholder: true, title: Khai Huyết Vu Sĩ, visual: { badge: realm-vu-1, aura: blood } }
-  - { id: vu_2,  path: vu, tier: 2,  name: Luyện Cốt,  name_placeholder: true, title: Luyện Cốt Vu Sĩ,  visual: { badge: realm-vu-2, aura: blood } }
-  - { id: vu_3,  path: vu, tier: 3,  name: Tẩy Tủy,    name_placeholder: true, title: Tẩy Tủy Vu Sĩ,    visual: { badge: realm-vu-3, aura: blood } }
-  - { id: vu_4,  path: vu, tier: 4,  name: Huyết Hải,  name_placeholder: true, title: Huyết Hải Vu Sĩ,  visual: { badge: realm-vu-4, aura: blood } }
-  - { id: vu_5,  path: vu, tier: 5,  name: Vu Hồn,     name_placeholder: true, title: Vu Hồn Sứ,        visual: { badge: realm-vu-5, aura: blood } }
-  - { id: vu_6,  path: vu, tier: 6,  name: Tiểu Vu,    name_placeholder: true, title: Tiểu Vu,          visual: { badge: realm-vu-6, aura: blood } }
-  - { id: vu_7,  path: vu, tier: 7,  name: Trung Vu,   name_placeholder: true, title: Trung Vu,         visual: { badge: realm-vu-7, aura: blood } }
-  - { id: vu_8,  path: vu, tier: 8,  name: Thượng Vu,  name_placeholder: true, title: Thượng Vu,        visual: { badge: realm-vu-8, aura: blood } }
-  - { id: vu_9,  path: vu, tier: 9,  name: Chân Vu,    name_placeholder: true, title: Chân Vu,          visual: { badge: realm-vu-9, aura: blood } }
-  - { id: vu_10, path: vu, tier: 10, name: Vu Tướng,   name_placeholder: true, title: Vu Tướng,         visual: { badge: realm-vu-10, aura: blood } }
-  - { id: vu_11, path: vu, tier: 11, name: Vu Vương,   name_placeholder: true, title: Vu Vương,         visual: { badge: realm-vu-11, aura: blood } }
-  - { id: vu_12, path: vu, tier: 12, name: Vu Tôn,     name_placeholder: true, title: Vu Tôn,           visual: { badge: realm-vu-12, aura: blood } }
-  - { id: vu_13, path: vu, tier: 13, name: Vu Hoàng,   name_placeholder: true, title: Vu Hoàng,         visual: { badge: realm-vu-13, aura: blood } }
-  - { id: vu_14, path: vu, tier: 14, name: Đại Vu,     name_placeholder: true, title: Đại Vu,           visual: { badge: realm-vu-14, aura: blood } }
-  - { id: vu_15, path: vu, tier: 15, name: Vu Cực,     name_placeholder: true, title: Vu Cực,           visual: { badge: realm-vu-15, aura: blood } }   # stand-in for "Tổ Vu" — needs an original name (D2)
+  # ── Vu path: IDs permanent and neutral; names from cot-truyen.md §5.3 (D2 reversed 2026-11-07) ──
+  - { id: vu_1,  path: vu, tier: 1,  name: Khai Huyết, title: Khai Huyết Vu Sĩ, visual: { badge: realm-vu-1, aura: blood } }
+  - { id: vu_2,  path: vu, tier: 2,  name: Luyện Cốt,  title: Luyện Cốt Vu Sĩ,  visual: { badge: realm-vu-2, aura: blood } }
+  - { id: vu_3,  path: vu, tier: 3,  name: Tẩy Tủy,    title: Tẩy Tủy Vu Sĩ,    visual: { badge: realm-vu-3, aura: blood } }
+  - { id: vu_4,  path: vu, tier: 4,  name: Huyết Hải,  title: Huyết Hải Vu Sĩ,  visual: { badge: realm-vu-4, aura: blood } }
+  - { id: vu_5,  path: vu, tier: 5,  name: Vu Hồn,     title: Vu Hồn Sứ,        visual: { badge: realm-vu-5, aura: blood } }
+  - { id: vu_6,  path: vu, tier: 6,  name: Tiểu Vu,    title: Tiểu Vu,          visual: { badge: realm-vu-6, aura: blood } }
+  - { id: vu_7,  path: vu, tier: 7,  name: Trung Vu,   title: Trung Vu,         visual: { badge: realm-vu-7, aura: blood } }
+  - { id: vu_8,  path: vu, tier: 8,  name: Thượng Vu,  title: Thượng Vu,        visual: { badge: realm-vu-8, aura: blood } }
+  - { id: vu_9,  path: vu, tier: 9,  name: Chân Vu,    title: Chân Vu,          visual: { badge: realm-vu-9, aura: blood } }
+  - { id: vu_10, path: vu, tier: 10, name: Vu Tướng,   title: Vu Tướng,         visual: { badge: realm-vu-10, aura: blood } }
+  - { id: vu_11, path: vu, tier: 11, name: Vu Vương,   title: Vu Vương,         visual: { badge: realm-vu-11, aura: blood } }
+  - { id: vu_12, path: vu, tier: 12, name: Vu Tôn,     title: Vu Tôn,           visual: { badge: realm-vu-12, aura: blood } }
+  - { id: vu_13, path: vu, tier: 13, name: Vu Hoàng,   title: Vu Hoàng,         visual: { badge: realm-vu-13, aura: blood } }
+  - { id: vu_14, path: vu, tier: 14, name: Đại Vu,     title: Đại Vu,           visual: { badge: realm-vu-14, aura: blood } }
+  - { id: vu_15, path: vu, tier: 15, name: Tổ Vu,      title: Tổ Vu,            visual: { badge: realm-vu-15, aura: blood } }

@@ -11,8 +11,8 @@ channels:
     name: Thế Giới
     min_stage: luyen_khi.tang_3  # posting needs this stage (or its equivalent tier on another path); reading is open
   - id: tu_tieu_cung             # Tử Tiêu Cung hall (lectures.yaml hall.chat_channel): speech bubbles over seats
-    name: Tử Tiêu Cung
-    min_stage: luyen_khi.tang_3
+    name: Tử Tiêu Cung           # UI tab "Luận Đạo"
+    min_stage: luyen_khi.tang_1  # open to every character (owner 2026-11-07); world chat keeps tầng 3
 
 max_chars: 200                   # per message, after trimming
 history_size: 50                 # messages returned per history page

@@ -13,7 +13,7 @@ and only place what passes.
   §7 how assets map to the game and what to skip.
 - `apps/web/src/lib/assets/art/README.md` — every slot name, size, alpha need and where it shows.
 - `.claude/rules/graphic-design.md` (palette "Mực tàu & Ngọc bích": ink surfaces, jade, antique gold, cinnabar only
-  for danger) and `.claude/rules/story-writing.md` (canon, D2).
+  for danger) and `.claude/rules/story-writing.md` (canon names, respect rules).
 - For factions: the "Huy hiệu" section of `content/story/factions/<id>.md`. For realms: `content/catalog/realms.yaml`
   (ids, `visual.aura`). For items: `content/catalog/items.yaml` (ids, rarity, description).
 
@@ -66,8 +66,10 @@ uv run tools/artgen/artgen.py place --slot <slot> --src art-work/raw/<file>.png 
 
 ## Hard rules
 - Original only: never put real artists, studios, games, films or brands in a prompt; no imitation of a named game.
-- D2: no worshipped religious symbols or figures (no Buddha, Bodhisattva, Taoist deity iconography, swastika,
-  crosses…) — faction badges follow the emblem brief, generic Chinese motifs (clouds, waves, stars, mountains) only.
+- Religious imagery: factions now carry canon names from `cot-truyen.md` (Tam Thanh, Chuẩn Đề's Tây Phương…; D2
+  reversed 2026-11-07), but art still never depicts worship iconography (no Buddha/Bodhisattva or Taoist deity
+  statues, taiji/bagua, dharma wheel, swastika, crosses…). Faction badges follow the emblem brief, generic Chinese
+  motifs (clouds, waves, stars, mountains) only. NPC portraits of canon figures need an explicit owner request.
 - Do not create bottom-nav icons, buttons or progress bars as images (§7.2: they stay SVG/CSS).
 - The game has one shared look for all players today (no gender/appearance choice). Produce the set the user asked
   for; if they want both male and female, say a character-appearance field is a product + migration change.

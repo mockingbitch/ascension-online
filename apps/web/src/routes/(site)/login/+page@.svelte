@@ -1,4 +1,4 @@
-<!-- Nhập Đạo: full-screen intro over Thiên Nguyên Giới. Google is the only sign-in (decided); one shared world,
+<!-- Nhập Đạo: full-screen intro over Hồng Hoang. Google is the only sign-in (decided); one shared world,
      so instead of a server picker we show the world's name and state. -->
 <script lang="ts">
 	import { page } from '$app/state';
@@ -32,7 +32,7 @@
 
 	<main class="relative flex h-full flex-col items-center justify-end px-4 pb-10 sm:justify-center sm:pb-0">
 		<div class="intro panel w-full max-w-sm p-6 text-center sm:mt-40">
-			<p class="eyebrow">Thiên Nguyên Giới</p>
+			<p class="eyebrow">Hồng Hoang</p>
 			<h1 class="logo mt-1 text-5xl font-bold text-gold-300">Tiên Đạo</h1>
 			<p class="mt-1 text-sm text-mist-300">Tử Tiêu Cung đã mở — chúng sinh cùng tu, cùng viết lại lịch sử.</p>
 
@@ -41,7 +41,7 @@
 			{/if}
 
 			<div class="world mt-5 flex items-center justify-between gap-3 px-3 py-2 text-left text-sm">
-				<span><span class="block text-xs text-mist-500">Thế giới</span><span class="font-semibold text-mist-100">Thiên Nguyên Giới · một cõi chung</span></span>
+				<span><span class="block text-xs text-mist-500">Thế giới</span><span class="font-semibold text-mist-100">Hồng Hoang · một cõi chung</span></span>
 				<span class="dot" aria-label="Đang mở"></span>
 			</div>
 

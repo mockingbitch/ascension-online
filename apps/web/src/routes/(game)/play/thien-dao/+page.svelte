@@ -17,7 +17,7 @@
 
 <svelte:head><title>Thiên Đạo Sử · Tiên Đạo</title></svelte:head>
 
-<ScreenFrame title="Thiên Đạo Sử" subtitle="Cả cõi cùng tu — lịch sử Thiên Nguyên Giới đổi theo tu vi của chúng sinh" icon="scroll">
+<ScreenFrame title="Thiên Đạo Sử" subtitle="Cả cõi cùng tu — lịch sử Hồng Hoang đổi theo tu vi của chúng sinh" icon="scroll">
 	{#if !v}
 		<p class="py-10 text-center text-mist-300">
 			{#if world.error}

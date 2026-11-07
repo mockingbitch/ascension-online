@@ -8,48 +8,58 @@ export interface FactionLore {
 	description: string;
 }
 
+// Keys are the permanent legacy slugs; display names follow docs/design/cot-truyen.md (see content/catalog/factions.yaml
+// header for the slug → canon name table).
 export const factionLore: Record<string, FactionLore> = {
 	huyen_khung_mon: {
-		leaderTitle: 'Tam Tọa Khung Chủ',
-		traits: ['Chép đạo ngữ', 'Ba tòa đạo đài', 'Thẻ ngọc trống'],
-		description: 'Tông môn dưới chân núi Tử Tiêu, ba tòa đạo đài chung một sơn môn, chờ ngày đạo tâm tự phân nhánh.'
+		leaderTitle: 'Thái Thanh Lão Tử · Nguyên Thủy Thiên Tôn · Thông Thiên Giáo Chủ',
+		traits: ['Chép đạo ngữ', 'Ba nhánh một nguồn', 'Thẻ ngọc trống'],
+		description: 'Môn hạ Tam Thanh nơi Côn Lôn: một khí hóa ba thanh, chung một gốc, chờ ngày đạo tâm tự phân giáo.'
 	},
 	kim_sa_mon: {
-		leaderTitle: 'Kim Sa Song Chủ',
+		leaderTitle: 'Chuẩn Đề · Tiếp Dẫn',
 		traits: ['Túi cát nhập môn', 'Đi xa thu người', 'Lời nguyện trước bế quan'],
-		description: 'Tông môn nơi Tây Mạc nghèo linh khí, tu chậm mà bền và không hỏi xuất thân ai.'
+		description: 'Phe Chuẩn Đề nơi Tây phương nghèo linh khí, tu chậm mà bền và không hỏi xuất thân ai.'
 	},
 	thuong_lan_dinh: {
-		leaderTitle: 'Thương Lan Tiên Chủ',
-		traits: ['Ghi danh Tiên Tịch', 'Triều trên đảo nổi', 'Phẩm phục theo màu biển'],
-		description: 'Triều đình tu sĩ đầu tiên trên đảo nổi biển Đông, giữ Tiên Tịch và trọng lễ nghi, phẩm trật.'
+		leaderTitle: 'Đông Vương Công',
+		traits: ['Ghi danh sổ tiên', 'Triều trên đảo tiên', 'Phẩm phục theo màu biển'],
+		description: 'Tiên Đình của Đông Vương Công trên đảo tiên biển Đông, giữ sổ tiên và trọng lễ nghi, phẩm trật.'
 	},
 	tinh_ha_yeu_dinh: {
-		leaderTitle: 'Tinh Hà Yêu Hoàng',
-		traits: ['Sao bản mệnh', 'Bản tướng', 'Hội dưới trăng'],
-		description: 'Triều đình Yêu tộc giữa ngân hà, nơi mọi loài tu thành hình đều được một vì sao.'
+		leaderTitle: 'Đế Tuấn · Thái Nhất',
+		traits: ['Sao bản mệnh', 'Bản tướng', 'Chu Thiên Tinh Đấu'],
+		description: 'Thiên Đình của Yêu tộc trên chín tầng trời, nơi mọi loài tu thành hình đều được một vì sao.'
 	},
 	vu_toc: {
-		leaderTitle: 'Thủ Tế Vu Chủ',
+		leaderTitle: 'Tổ Vu',
 		traits: ['Tế Bàn Cổ lúc bình minh', 'Thân là binh khí', 'Huyết kiếp'],
-		description: 'Tộc luyện thể mang máu Bàn Cổ, rèn thân như núi và coi bầu trời là đất lạ.'
+		description: 'Tộc luyện thể do tinh huyết Bàn Cổ hóa thành, rèn thân như núi và coi bầu trời là đất lạ.'
 	},
 	thu_nhat_vien: {
-		traits: ['Tĩnh tu', 'Ít lời', 'Bế quan dài ngày'],
-		description: 'Một trong ba viện tách từ Huyền Khung Môn: giữ một điều cho trọn.'
+		leaderTitle: 'Thái Thanh Lão Tử',
+		traits: ['Thanh tĩnh vô vi', 'Ít lời', 'Bế quan dài ngày'],
+		description: 'Một trong ba giáo tách từ Tam Thanh: giáo của Thái Thanh Lão Tử, giữ một điều cho trọn.'
 	},
 	lap_cuc_vien: {
+		leaderTitle: 'Nguyên Thủy Thiên Tôn',
 		traits: ['Giới luật rõ', 'Truyền thụ có thứ bậc'],
-		description: 'Một trong ba viện tách từ Huyền Khung Môn: đạo cần cột mốc.'
+		description: 'Một trong ba giáo tách từ Tam Thanh: giáo của Nguyên Thủy Thiên Tôn, đạo cần cột mốc.'
 	},
 	van_luu_vien: {
-		traits: ['Mở cửa cho mọi người', 'Mọi xuất thân'],
-		description: 'Một trong ba viện tách từ Huyền Khung Môn: trăm dòng cùng về biển.'
+		leaderTitle: 'Thông Thiên Giáo Chủ',
+		traits: ['Hữu giáo vô loại', 'Mọi xuất thân'],
+		description: 'Một trong ba giáo tách từ Tam Thanh: giáo của Thông Thiên Giáo Chủ, trăm dòng cùng về biển.'
 	},
 	kim_sa_giao: {
-		leaderTitle: 'Kim Sa Song Chủ',
+		leaderTitle: 'Chuẩn Đề · Tiếp Dẫn',
 		traits: ['Túi cát nhập môn', 'Đi xa thu người', 'Lời nguyện trước bế quan'],
-		description: 'Kim Sa Môn sau khi hai vị Song Chủ thành thánh: cùng đệ tử, cùng tâm ngôn, cùng huy hiệu, chỉ đổi tên.'
+		description: 'Phe Chuẩn Đề sau khi Chuẩn Đề và Tiếp Dẫn thành thánh: cùng đệ tử, cùng tâm ngôn, cùng huy hiệu, nay thành giáo.'
+	},
+	nhan_toc: {
+		leaderTitle: 'Tam Hoàng Ngũ Đế',
+		traits: ['Nữ Oa nặn từ đất', 'Cày cấy, làm thuốc, định lịch'],
+		description: 'Nhân tộc do Nữ Oa tạo ra, được Tam Hoàng Ngũ Đế dẫn dắt.'
 	}
 };
 

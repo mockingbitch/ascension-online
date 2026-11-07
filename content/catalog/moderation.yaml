@@ -16,7 +16,8 @@
 #               for strings that cannot appear inside a decent name.
 # category: profanity | impersonation | story | religion | political — picks the error message shown to the player.
 #
-# Story names follow cot-truyen.md; when Phase 0 renames characters (D2), update this list in the same PR.
+# Story names follow cot-truyen.md (canon names are used in game since the owner reversed D2 on 2026-11-07); any new
+# canon figure or faction that appears in content gets a rule here in the same PR.
 # The political/religion lists must be reviewed by legal + the faith reviewer (plan Phase 0) before open beta.
 version: 1
 
@@ -114,8 +115,54 @@ names:
     - { term: "thái thượng lão quân",  match: word_exact, category: story }
     - { term: "nguyên thủy thiên tôn", match: word_exact, category: story }
     - { term: "thông thiên giáo chủ",  match: word_exact, category: story }
+    - { term: "thái thanh lão tử",     match: word_exact, category: story }
+    - { term: "thái thượng",           match: name_exact, category: story }
+    - { term: "lão quân",              match: name_exact, category: story }
+    - { term: "nguyên thủy",           match: name_exact, category: story }
+    - { term: "thông thiên",           match: name_exact, category: story }
+    - { term: "tiếp dẫn đạo nhân",     match: word_exact, category: story }
+    - { term: "đông hoa đế quân",      match: word_exact, category: story }
+    - { term: "côn bằng",              match: word_exact, category: story }
+    # Tổ Vu (classic Hồng Hoang roster; cot-truyen.md names only Hậu Thổ)
+    - { term: "đế giang",              match: word_exact, category: story }
+    - { term: "chúc dung",             match: word_exact, category: story }
+    - { term: "cộng công",             match: word_exact, category: story }
+    - { term: "câu mang",              match: word_exact, category: story }
+    - { term: "nhục thu",              match: word_exact, category: story }
+    - { term: "xa bỉ thi",             match: word_exact, category: story }
+    - { term: "chúc cửu âm",           match: word_exact, category: story }
+    - { term: "huyền minh",            match: name_exact, category: story }
+    - { term: "thiên ngô",             match: name_exact, category: story }
+    - { term: "hấp tư",                match: name_exact, category: story }
+    - { term: "cường lương",           match: name_exact, category: story }
+    # Tam Hoàng Ngũ Đế (Phục Hy, Thần Nông, Hiên Viên above)
+    - { term: "tam hoàng ngũ đế",      match: word_exact, category: story }
+    - { term: "toại nhân",             match: name_exact, category: story }
+    - { term: "hữu sào",               match: name_exact, category: story }
+    - { term: "thiếu hạo",             match: word_exact, category: story }
+    - { term: "chuyên húc",            match: word_exact, category: story }
+    - { term: "đế khốc",               match: word_exact, category: story }
+    - { term: "đế nghiêu",             match: word_exact, category: story }
+    - { term: "đường nghiêu",          match: word_exact, category: story }
+    - { term: "đế thuấn",              match: word_exact, category: story }
+    - { term: "ngu thuấn",             match: word_exact, category: story }
+    - { term: "nghiêu thuấn",          match: word_exact, category: story }
+    # Phong Thần / Thiên Đình figures
+    - { term: "hạo thiên",             match: name_exact, category: story }
+    - { term: "dao trì",               match: name_exact, category: story }
+    - { term: "khương tử nha",         match: word_exact, category: story }
+    - { term: "nhiên đăng",            match: word_exact, category: story }
+    # Faction / institution names (a đạo hiệu must not pose as a faction)
+    - { term: "tiên đình",             match: name_exact, category: story }
+    - { term: "thiên đình",            match: name_exact, category: story }
+    - { term: "địa phủ",               match: name_exact, category: story }
+    - { term: "nhân giáo",             match: name_exact, category: story }
+    - { term: "xiển giáo",             match: word_exact, category: story }
+    - { term: "tiệt giáo",             match: word_exact, category: story }
+    - { term: "triệt giáo",            match: word_exact, category: story }
+    - { term: "tây phương giáo",       match: word_exact, category: story }
 
-    # ── worshipped religious figures (D2: never playable / never a player name) ──
+    # ── worshipped religious figures outside the story (never a player name) ──
     - { term: "phật tổ",       match: word_exact, category: religion }
     - { term: "như lai",       match: word_exact, category: religion }
     - { term: "thích ca",      match: word_exact, category: religion }

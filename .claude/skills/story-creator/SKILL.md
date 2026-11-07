@@ -46,7 +46,7 @@ game), success text, failure text (encouraging, mentions retry).
 Placeholders `{name} {realm} {stage} {rank}`; ≤ 90 chars after substitution; 3+ variants per key.
 
 ## Quality checklist
-- [ ] Original names/plots (no borrowing from existing novels/games); genre tropes OK.
+- [ ] Canon names exactly as in `docs/design/cot-truyen.md` (D2 reversed 2026-11-07); anything else original (no borrowing from modern novels/games); genre tropes OK; worshipped figures treated with respect (no jokes, enemies, prayers, scripture quotes).
 - [ ] Realm/item names match catalogue exactly; glossary terms used consistently.
 - [ ] Lengths within limits; reads well on a phone.
 - [ ] No pay-to-win framing; failure text kind.

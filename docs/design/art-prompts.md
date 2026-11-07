@@ -291,7 +291,10 @@ cung cấp. Tài liệu ảnh của Meta không nói rõ hai điểm này.
 3. **Huy hiệu thế lực** chưa có prompt. Dùng mẫu sau, phần mô tả lấy từ mục "Huy hiệu" trong
    `content/story/factions/<id>.md`:
    `[STYLE], circular sect emblem medallion, gold relief on dark jade, [mô tả huy hiệu], flat front view, isolated on plain flat green background --ar 1:1`.
-   Không dùng biểu tượng tôn giáo có thật (D2).
+   Thế lực mang tên theo `cot-truyen.md` (Tam Thanh, Tây Phương, Tiên Đình, Thiên Đình Yêu Tộc, Vu Tộc…; đảo ngược D2
+   2026-11-07), nhưng huy hiệu vẫn chỉ dùng họa tiết chung (mây, sóng, sao, núi): không dùng biểu tượng hay hình
+   tượng thờ cúng có thật (thái cực, bát quái, hoa sen, pháp luân, chữ vạn, tượng thần/Phật). File đặt theo slug
+   vĩnh viễn trong `factions.yaml` (vd. `factions/huyen_khung_mon` là Tam Thanh).
 4. **Pháp bảo (§3)** chưa có vật phẩm tương ứng trong catalogue. Đặt tên file theo ID khi catalogue thêm.
 5. **Bản quyền.** Kiểm tra điều khoản thương mại của công cụ tạo ảnh. Lưu lại prompt và seed của từng ảnh đã
    dùng. Không đưa tên họa sĩ hay tên game có thật vào prompt (quy tắc nguyên bản của dự án).

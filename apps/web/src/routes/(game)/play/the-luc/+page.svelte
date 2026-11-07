@@ -96,7 +96,7 @@
 
 <svelte:head><title>Thế Lực · Tiên Đạo</title></svelte:head>
 
-<ScreenFrame title={f ? f.name : 'Chọn thế lực'} subtitle={f?.motto ? `“${f.motto}”` : 'Các thế lực của Thiên Nguyên Giới'} icon="sect">
+<ScreenFrame title={f ? f.name : 'Chọn thế lực'} subtitle={f?.motto ? `“${f.motto}”` : 'Các thế lực của Hồng Hoang'} icon="sect">
 	{#if !list || !me}
 		<p class="text-mist-500">Đang mở sơn môn…</p>
 	{:else if !f}
@@ -107,14 +107,14 @@
 	{:else}
 		{#if branches.length}
 			<section class="choose mb-5 px-4 py-4" aria-labelledby="split-title">
-				<h2 id="split-title" class="panel-title">{name(me.upcoming?.from ?? me.factionId)} đã phân nhánh — chọn viện của bạn</h2>
+				<h2 id="split-title" class="panel-title">{name(me.upcoming?.from ?? me.factionId)} đã phân nhánh — chọn nhánh của bạn</h2>
 				<p class="mt-1 text-sm text-mist-300">
 					Hạn chọn: <strong class="text-gold-300">{when(me.chooseDeadline)}</strong> (còn {left(me.chooseDeadline)}). Ai chưa chọn sẽ
-					được chia đều vào các viện, viện nào ít người từ lần phân chia này thì nhận trước. Tu vi giữ nguyên, không tính là đổi phe.
+					được chia đều vào các nhánh, nhánh nào ít người từ lần phân chia này thì nhận trước. Tu vi giữ nguyên, không tính là đổi phe.
 				</p>
 				{#if me.locked}
 					<p class="mt-2 text-sm text-cinnabar-300">
-						Thế lực của đạo hữu đang bị khóa nên không tự chọn được viện; hết hạn sẽ được xếp như người chưa chọn.
+						Thế lực của đạo hữu đang bị khóa nên không tự chọn được nhánh; hết hạn sẽ được xếp như người chưa chọn.
 					</p>
 				{/if}
 				<ul class="mt-3 grid gap-2 sm:grid-cols-3">
@@ -137,7 +137,7 @@
 				<Icon name="bell" size={16} class="mt-0.5 shrink-0" />
 				{#if me.upcoming.kind === 'split_faction'}
 					{name(me.upcoming.from)} sẽ chia thành {(me.upcoming.into ?? []).map(name).join(', ')} vào {when(me.upcoming.dueAt)} (còn
-					{left(me.upcoming.dueAt)}). Sau đó đạo hữu có tới {when(me.upcoming.deadlineAt)} để chọn viện.
+					{left(me.upcoming.dueAt)}). Sau đó đạo hữu có tới {when(me.upcoming.deadlineAt)} để chọn nhánh.
 				{:else}
 					{name(me.upcoming.from)} sẽ đổi thành {name(me.upcoming.to)} vào {when(me.upcoming.dueAt)} (còn {left(me.upcoming.dueAt)}).
 					Thành viên được chuyển tự động, tu vi giữ nguyên.

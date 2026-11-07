@@ -28,7 +28,7 @@ Anything missing falls back to the original SVG art. Prompts and art direction a
 | `characters/body-<realm_id>` | 1024×1536 | Nhân Vật | e.g. `body-luyen_khi`; falls back to the closest lower realm, then to the portrait |
 | `items/<item_id>` | 128×128 | Túi Đồ | e.g. `items/tu_linh_phu`, `items/truc_co_dan` |
 | `items/linh_thach` | 128×128 | Túi Đồ | Spirit-stone currency |
-| `factions/<faction_id>` | 512×512 | faction cards, Thế Lực | e.g. `factions/vu_toc`; replaces the SVG emblem |
+| `factions/<faction_id>` | 512×512 | faction cards, Thế Lực | e.g. `factions/vu_toc`; replaces the SVG emblem. IDs are the permanent legacy slugs: `huyen_khung_mon` = Tam Thanh, `kim_sa_mon` = Tây Phương, `thuong_lan_dinh` = Tiên Đình, `tinh_ha_yeu_dinh` = Thiên Đình Yêu Tộc, `thu_nhat_vien`/`lap_cuc_vien`/`van_luu_vien` = Nhân/Xiển/Tiệt Giáo, `kim_sa_giao` = Tây Phương Giáo (full table in `factions.yaml`). Generic motifs only, no worship iconography |
 | `ui/splash` | 1080×1920 | login on portrait screens | 9:16 key art; landscape screens keep the map |
 | `scenes/tu-tieu-cung` | 1920×1080 | Tử Tiêu Cung hall | Interior; dais top-centre for Hồng Quân, open floor below for the seat grid. No cushions painted in (seats are drawn by the game) |
 | `characters/hong-quan` | 768×768 | Tử Tiêu Cung hall | Alpha. Hồng Quân seated cross-legged, front view, sits on the dais |
