@@ -1,0 +1,94 @@
+# Host Nginx (on the server, OUTSIDE Docker) → the Tiên Đạo container stack.
+#
+#   Internet ─▶ (Cloudflare, optional) ─▶ THIS nginx :443 ─▶ 127.0.0.1:2000 (container nginx) ─▶ web / api
+#
+# Install:
+#   sudo cp deployments/host-nginx/tiendao.conf.example /etc/nginx/sites-available/tiendao.conf
+#   # edit: server_name, certificate paths, and pick variant A (Cloudflare) or B (DNS straight to this server)
+#   sudo ln -s /etc/nginx/sites-available/tiendao.conf /etc/nginx/sites-enabled/
+#   sudo nginx -t && sudo systemctl reload nginx
+#
+# Required on the container side (see deployments/README.md → "Trỏ domain về container"):
+#   - .env: STACK_BASE_URL=https://test-site-xyz.online    (Google OAuth callback + SvelteKit ORIGIN use it)
+#           HTTP_BIND=127.0.0.1                        (container port 2000 reachable only from this host)
+#   - deployments/upstream-proxies.conf: uncomment the Docker-bridge line so the container nginx trusts THIS proxy's
+#     CF-Connecting-IP header (otherwise every player shows up as the Docker gateway IP: rate limits + netsig break).
+#   - Google Cloud Console: add https://test-site-xyz.online/api/v1/auth/google/callback as an authorized redirect URI.
+
+map $http_upgrade $connection_upgrade { default upgrade; '' close; }
+
+upstream tiendao {
+    server 127.0.0.1:2000;
+    keepalive 32;
+}
+
+# ── HTTP: ACME challenge (variant B) + redirect everything else to HTTPS ──
+server {
+    listen 80;
+    listen [::]:80;
+    server_name test-site-xyz.online;
+
+    location /.well-known/acme-challenge/ { root /var/www/certbot; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    # `listen … http2` works on every nginx version; `http2 on;` needs nginx ≥ 1.25.1 (on those, the form below only
+    # logs a deprecation warning).
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name test-site-xyz.online;
+
+    # ── Certificates ──
+    # Variant A (Cloudflare proxied, SSL mode "Full (strict)"): a Cloudflare Origin Certificate.
+    #   ssl_certificate     /etc/ssl/cloudflare/test-site-xyz.online.pem;
+    #   ssl_certificate_key /etc/ssl/cloudflare/test-site-xyz.online.key;
+    # Variant B (DNS A/AAAA record straight to this server): Let's Encrypt via certbot.
+    #   sudo certbot certonly --webroot -w /var/www/certbot -d test-site-xyz.online
+    ssl_certificate     /etc/letsencrypt/live/test-site-xyz.online/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/test-site-xyz.online/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:tiendao_ssl:10m;
+    ssl_session_timeout 1d;
+
+    # ── Real client IP ──
+    # Variant A only: behind Cloudflare the TCP peer is a CF edge. Trust CF-Connecting-IP ONLY from Cloudflare ranges
+    # (reuse the list the container nginx uses; keep both copies refreshed) and firewall :443 to Cloudflare.
+    #   include /opt/tiendao/deployments/cloudflare-ips.conf;
+    #   real_ip_header CF-Connecting-IP;
+    #   real_ip_recursive on;
+    # Variant B: $remote_addr already is the client; nothing to add.
+
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    client_max_body_size 1m;          # the container nginx enforces the same limit
+
+    # Never expose metrics (they are internal ports anyway; belt and braces).
+    location = /metrics { return 404; }
+
+    # WebSocket (announcements, chat, Tử Tiêu Cung hall events).
+    location /ws {
+        proxy_pass http://tiendao;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header CF-Connecting-IP $remote_addr;   # overwrite: the container nginx reads the client from here
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 75s;
+        proxy_send_timeout 75s;
+    }
+
+    location / {
+        proxy_pass http://tiendao;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_set_header Host $host;
+        proxy_set_header CF-Connecting-IP $remote_addr;   # overwrite any client-supplied value
+        proxy_set_header X-Forwarded-Proto https;
+        # SvelteKit sends large `Link` preload headers (see deployments/nginx.conf).
+        proxy_buffer_size 32k;
+        proxy_buffers 8 32k;
+        proxy_busy_buffers_size 64k;
+        proxy_read_timeout 30s;
+    }
+}

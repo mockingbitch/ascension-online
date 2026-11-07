@@ -20,3 +20,6 @@ __pycache__/
 /services/game/worker
 /services/game/balancesim
 /services/game/opsctl
+
+# filled server env files (secrets) — only *.env.example templates are tracked
+/deployments/env/*.env

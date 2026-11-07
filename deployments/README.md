@@ -144,3 +144,24 @@ make opsctl ARGS="start-world --admin admin@example.com"
 
 Open-launch sequence: announce → `stop api worker` → `make backup` → `reset-beta` → `start api worker` →
 `start-world` at the announced time.
+
+## Trỏ domain về container (nginx trên máy chủ)
+
+Mẫu: [`host-nginx/tiendao.conf.example`](host-nginx/tiendao.conf.example). Luồng:
+`Internet → (Cloudflare, tùy chọn) → nginx máy chủ :443 → 127.0.0.1:2000 (nginx container) → web / api`.
+
+1. DNS: bản ghi `A`/`AAAA` của domain trỏ về IP máy chủ (bật proxy Cloudflare = biến thể A, tắt = biến thể B).
+2. `.env` (repo root, dùng bởi `docker compose --env-file .env`):
+   - `STACK_BASE_URL=https://game.example.com` (biến riêng của stack Docker; `PUBLIC_BASE_URL` trong `.env` vẫn dành cho `make api`/`make web`) — callback Google OAuth và `ORIGIN` của SvelteKit dùng giá trị này.
+   - `HTTP_BIND=127.0.0.1` — cổng 2000 chỉ nhận kết nối từ chính máy chủ.
+   - `TRUSTED_PROXY_CIDRS` (ngoài dev): dải mạng Docker của stack, ví dụ `172.16.0.0/12`, để API tin `X-Forwarded-For`
+     do nginx container gửi.
+3. Bỏ comment dòng `set_real_ip_from` trong `upstream-proxies.conf` để nginx container nhận IP thật mà nginx máy chủ
+   gửi qua `CF-Connecting-IP` (nếu không, mọi người chơi đều mang IP gateway Docker: rate limit theo IP và netsig hỏng).
+4. Chứng chỉ: biến thể A dùng Cloudflare Origin Certificate (SSL "Full (strict)"); biến thể B dùng certbot (lệnh trong file
+   mẫu). Với biến thể A, bật khối real-IP Cloudflare trong file mẫu và chỉ mở :443 cho dải IP Cloudflare.
+5. Google Cloud Console: thêm redirect URI `https://game.example.com/api/v1/auth/google/callback`.
+6. `make up` (tạo lại container) rồi `sudo nginx -t && sudo systemctl reload nginx`.
+
+Lưu ý: `docker-compose.yml` vẫn là stack dev (`APP_ENV: dev`, `AUTH_DEV_HEADER: "true"`). Trước khi mở cho người chơi
+thật phải tắt dev header và chuyển `APP_ENV` sang môi trường production.
