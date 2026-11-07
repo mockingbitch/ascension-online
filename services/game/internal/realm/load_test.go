@@ -29,9 +29,10 @@ var shippedTable = []struct {
 	stages int
 	runs   []reqRun
 }{
-	{1, "luyen_khi", 0, 9, []reqRun{{33, 6}, {34, 3}}},
-	{2, "truc_co", 300, 4, []reqRun{{162, 2}, {163, 2}}},
-	{3, "kim_dan", 950, 4, []reqRun{{275, 4}}},
+	// Luyện Khí: stage_weights 1…9 over 100 points (early game front-loaded, decisions 2026-11-07).
+	{1, "luyen_khi", 0, 9, []reqRun{{2, 1}, {4, 1}, {6, 1}, {8, 1}, {11, 1}, {14, 1}, {16, 1}, {18, 1}, {21, 1}}},
+	{2, "truc_co", 100, 4, []reqRun{{137, 2}, {138, 2}}},
+	{3, "kim_dan", 650, 4, []reqRun{{350, 4}}},
 	{4, "nguyen_anh", 2050, 8, []reqRun{{181, 6}, {182, 2}}},
 	{5, "hoa_than", 3500, 8, []reqRun{{237, 4}, {238, 4}}},
 	{6, "luyen_hu", 5400, 8, []reqRun{{262, 4}, {263, 4}}},
@@ -162,15 +163,15 @@ func TestConvertRoundTrip(t *testing.T) {
 func TestBottleneckAndAdvance(t *testing.T) {
 	c := loadShipped(t)
 	first, _ := c.Stage("luyen_khi.tang_1")
-	// Whole Luyện Khí: 300 points + 20% of the last stage (34 → 6.8).
-	if got := c.BottleneckRoomMilli(first, 0); got != 300_000+6_800 {
+	// Whole Luyện Khí: 100 points + 20% of the last stage (21 → 4.2).
+	if got := c.BottleneckRoomMilli(first, 0); got != 100_000+4_200 {
 		t.Fatalf("room from tang_1 = %d", got)
 	}
 	last, _ := c.Stage("luyen_khi.tang_9")
 	if got := c.BottleneckRoomMilli(last, last.CapMilli+5); got != 0 {
 		t.Fatalf("room beyond cap = %d", got)
 	}
-	s, stored, passed := c.Advance(first, 100_000) // 33+33+33 = 99 → tang_4 with 1 point
+	s, stored, passed := c.Advance(first, 13_000) // 2+4+6 = 12 → tang_4 with 1 point
 	if s.ID != "luyen_khi.tang_4" || stored != 1_000 || len(passed) != 3 || passed[0] != first {
 		t.Fatalf("advance → %s %d %d", s.ID, stored, len(passed))
 	}
@@ -275,5 +276,53 @@ func TestExtraStagesAppend(t *testing.T) {
 func TestUnknownFieldRejected(t *testing.T) {
 	if err := mutate(t, "version: 2", "version: 2\ntypo: 1"); err == nil {
 		t.Fatal("expected unknown field error")
+	}
+}
+
+func TestSplitSpan(t *testing.T) {
+	cases := []struct {
+		span    int64
+		weights []int64
+		want    []int64
+	}{
+		{300, []int64{1, 1, 1, 1, 1, 1, 1, 1, 1}, []int64{33, 33, 33, 33, 33, 33, 34, 34, 34}}, // even split, old behaviour
+		{100, []int64{1, 2, 3, 4, 5, 6, 7, 8, 9}, []int64{2, 4, 6, 8, 11, 14, 16, 18, 21}},
+		{10, []int64{1, 1, 8}, []int64{1, 1, 8}},
+		{3, []int64{1, 1, 1000}, []int64{0, 0, 3}}, // caller rejects stages below 1 point
+	}
+	for _, tc := range cases {
+		got := splitSpan(tc.span, tc.weights)
+		var sum int64
+		for i := range got {
+			sum += got[i]
+			if got[i] != tc.want[i] {
+				t.Errorf("splitSpan(%d, %v) = %v want %v", tc.span, tc.weights, got, tc.want)
+				break
+			}
+		}
+		if sum != tc.span {
+			t.Errorf("splitSpan(%d, %v) sums to %d", tc.span, tc.weights, sum)
+		}
+	}
+}
+
+func TestStageWeightsValidation(t *testing.T) {
+	b, err := os.ReadFile(shippedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, w := range map[string]string{
+		"wrong length":    "[1, 2, 3]",
+		"zero weight":     "[0, 1, 1, 1, 1, 1, 1, 1, 1]",
+		"decreasing":      "[2, 1, 1, 1, 1, 1, 1, 1, 1]",
+		"stage < 1 point": "[1, 1, 1, 1, 1, 1, 1, 1, 1000]",
+	} {
+		s := strings.Replace(string(b), "stage_weights: [1, 2, 3, 4, 5, 6, 7, 8, 9]", "stage_weights: "+w, 1)
+		if s == string(b) {
+			t.Fatal("shipped realms.yaml no longer has the Luyện Khí stage_weights line")
+		}
+		if _, err := Load(strings.NewReader(s)); err == nil {
+			t.Errorf("%s: want a validation error", name)
+		}
 	}
 }

@@ -112,7 +112,11 @@ func TestConcurrentSettlementsNeverDoubleAward(t *testing.T) {
 			t.Fatalf("settle %d: %v", i, errs[i])
 		}
 		total += r.EarnedMilli
-		final = max(final, r.CultivationMilli)
+		st, err := e.cb.Realms.Stage(r.StageID)
+		if err != nil {
+			t.Fatalf("settle %d: %v", i, err)
+		}
+		final = max(final, e.cb.Realms.Position(st, r.CultivationMilli)) // ladder position: 1 h may pass Tầng 1
 	}
 	if total != 2083 || final != 2083 {
 		t.Fatalf("total earned %d, final %d; want 2083/2083", total, final)
@@ -180,7 +184,7 @@ func TestAutoAdvanceAndGrantRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	last, _ := e.cb.Realms.Stage("luyen_khi.tang_9")
-	if st.StageID != last.ID || st.CultivationMilli != last.CapMilli || st.GrantReserveMilli != 1_000_000-(306_800-2083) || len(st.StagesAdvanced) != 8 || !st.HitBottleneck {
+	if st.StageID != last.ID || st.CultivationMilli != last.CapMilli || st.GrantReserveMilli != 1_000_000-(104_200-2083) || len(st.StagesAdvanced) != 8 || !st.HitBottleneck {
 		t.Fatalf("status %+v", st)
 	}
 	if st.Today.PointsMilli != 2083 {
@@ -189,7 +193,7 @@ func TestAutoAdvanceAndGrantRelease(t *testing.T) {
 	if n := e.scalar(t, "SELECT count(*) FROM progression_events WHERE character_id=$1 AND kind='stage_reached'", e.char); n != 8 {
 		t.Fatalf("stage events %d", n)
 	}
-	if g := e.scalar(t, "SELECT credited_milli FROM cultivation_credits WHERE character_id=$1 AND source='late_join_grant'", e.char); g != 306_800-2083 {
+	if g := e.scalar(t, "SELECT credited_milli FROM cultivation_credits WHERE character_id=$1 AND source='late_join_grant'", e.char); g != 104_200-2083 {
 		t.Fatalf("grant release log %d", g)
 	}
 	e.checkC3(t)
@@ -226,7 +230,7 @@ func TestLateJoinGrantOncePerAccount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.GrantReserveMilli != 1_000_000-306_800 { // view projects the release into Luyện Khí's room
+	if v.GrantReserveMilli != 1_000_000-104_200 { // view projects the release into Luyện Khí's room
 		t.Fatalf("grant reserve %d", v.GrantReserveMilli)
 	}
 	// Projection releases into the realm's room without writing anything.
@@ -260,7 +264,7 @@ func TestGrantReleaseBelowMinSettle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.EarnedMilli != 0 || a.GrantReserveMilli != 0 || a.CultivationMilli+33_000 != 50_000 || len(a.StagesAdvanced) != 1 {
+	if a.EarnedMilli != 0 || a.GrantReserveMilli != 0 || a.CultivationMilli+45_000 != 50_000 || len(a.StagesAdvanced) != 6 {
 		t.Fatalf("status %+v", a)
 	}
 	b, err := e.svc.Settle(e.ctx, e.user, "settle-short-0001")

@@ -58,9 +58,9 @@ func TestEvaluateMissing(t *testing.T) {
 // A non-last stage previews the realm's major breakthrough with the realm-wide shortfall.
 func TestEvaluateFromMinorStage(t *testing.T) {
 	cat := loadCat(t)
-	from, _ := cat.Stage("luyen_khi.tang_3") // 66 points behind it in the realm
+	from, _ := cat.Stage("luyen_khi.tang_3") // 6 points (2+4) behind it in the realm
 	p := Evaluate(cat, from, State{CultivationMilli: 10_000, Inventory: map[string]int64{"truc_co_dan": 1}}, time.Now())
-	if p.Ready || len(p.Missing) != 1 || p.Missing[0].Kind != "cultivation" || p.Missing[0].Have != 76_000 || p.Missing[0].Need != 300_000 {
+	if p.Ready || len(p.Missing) != 1 || p.Missing[0].Kind != "cultivation" || p.Missing[0].Have != 16_000 || p.Missing[0].Need != 100_000 {
 		t.Fatalf("got %+v", p.Missing)
 	}
 }

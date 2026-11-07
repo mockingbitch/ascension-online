@@ -50,6 +50,7 @@ type fileTier struct {
 	Tier              int              `yaml:"tier"`
 	EntryPoints       int64            `yaml:"entry_points"`
 	SpanPoints        int64            `yaml:"span_points"`
+	StageWeights      []int64          `yaml:"stage_weights"`
 	Reserved          bool             `yaml:"reserved"`
 	Stages            fileStagesRef    `yaml:"stages"`
 	ExtraStages       []fileExtraStage `yaml:"extra_stages"`
@@ -298,12 +299,15 @@ func build(raw file) (*Catalogue, error) {
 			fail("tier %d: span %d < %d stages (every stage needs ≥ 1 point)", t.Tier, span, n)
 			continue
 		}
-		base, rem := span/n, span%n
+		weights, ok := stageWeights(t.StageWeights, len(names))
+		if !ok {
+			fail("tier %d: stage_weights must have one value ≥ 1 per stage (%d), non-decreasing", t.Tier, n)
+			continue
+		}
 		var sum int64
-		for k := range names {
-			req := base
-			if int64(k) >= n-rem {
-				req++
+		for k, req := range splitSpan(span, weights) {
+			if req < 1 {
+				fail("tier %d: stage %s gets %d points (every stage needs ≥ 1 point)", t.Tier, names[k].id, req)
 			}
 			names[k].requiredMilli = req * PointMilli
 			sum += req
@@ -495,4 +499,45 @@ func build(raw file) (*Catalogue, error) {
 		return nil, errors.Join(errs...)
 	}
 	return c, nil
+}
+
+// stageWeights returns the per-stage weights of a tier: all 1 (even split) when none are given, otherwise exactly
+// one weight ≥ 1 per stage, non-decreasing so a later stage never costs less than an earlier one.
+func stageWeights(w []int64, n int) ([]int64, bool) {
+	if len(w) == 0 {
+		w = make([]int64, n)
+		for i := range w {
+			w[i] = 1
+		}
+		return w, true
+	}
+	if len(w) != n {
+		return nil, false
+	}
+	for i, v := range w {
+		if v < 1 || v > 1_000 || (i > 0 && v < w[i-1]) {
+			return nil, false
+		}
+	}
+	return w, true
+}
+
+// splitSpan divides span whole points across stages proportionally to weights (floored), the remainder one point
+// each on the LAST stages. With equal weights this is the even split of balance §11.1.
+func splitSpan(span int64, weights []int64) []int64 {
+	var total int64
+	for _, w := range weights {
+		total += w
+	}
+	out := make([]int64, len(weights))
+	var used int64
+	for k, w := range weights {
+		out[k] = span * w / total // span ≤ ~1e5 points, w ≤ 1000: no overflow
+		used += out[k]
+	}
+	for k := len(out) - 1; used < span; k-- {
+		out[k]++
+		used++
+	}
+	return out
 }
