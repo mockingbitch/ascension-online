@@ -30,3 +30,12 @@ Anything missing falls back to the original SVG art. Prompts and art direction a
 | `items/linh_thach` | 128×128 | Túi Đồ | Spirit-stone currency |
 | `factions/<faction_id>` | 512×512 | faction cards, Thế Lực | e.g. `factions/vu_toc`; replaces the SVG emblem |
 | `ui/splash` | 1080×1920 | login on portrait screens | 9:16 key art; landscape screens keep the map |
+| `scenes/tu-tieu-cung` | 1920×1080 | Tử Tiêu Cung hall | Interior; dais top-centre for Hồng Quân, open floor below for the seat grid. No cushions painted in (seats are drawn by the game) |
+| `characters/hong-quan` | 768×768 | Tử Tiêu Cung hall | Alpha. Hồng Quân seated cross-legged, front view, sits on the dais |
+| `characters/listener` | 256×256 | Tử Tiêu Cung seats | Alpha. One disciple seen from behind, seated on a cushion; reused for every seat |
+| `cosmetics/<slug>` (avatar frame) | 320×320 | every `Portrait` with an equipped frame, Trang phục tab | Alpha ring only, transparent centre; drawn at 128% of the portrait so it sits around the circle. e.g. `cosmetics/ngoc_bich`. Fallback: CSS ring (`.frame-*` in app.css) |
+| `cosmetics/<slug>` (cave decoration) | 256×256 | Động Phủ scene (4 slots: 2 wall, 2 floor), Trang phục tab | Alpha, object only, front view, soft ground shadow. e.g. `cosmetics/binh_phong_tuyet`. Fallback: `DecorationGlyph` SVG |
+| `cosmetics/<slug>` (faction decoration) | 256×256 | Thế Lực → Công trình | Alpha, e.g. `cosmetics/su_tu_da`, `cosmetics/bai_phuong` (slugs from `faction_works.yaml`). Fallback: `DecorationGlyph` SVG |
+
+Cosmetic slugs come from `content/catalog/cosmetics.yaml` / `faction_works.yaml` (unique across both files, loader-checked).
+Titles and chat name effects are text styles, not images. Placeholders (CSS/SVG) ship today; no raster cosmetics yet.

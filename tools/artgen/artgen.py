@@ -58,6 +58,9 @@ SLOTS: list[tuple[str, tuple[int, int], tuple[int, int], bool, str]] = [
     (r"items/[a-z0-9_]+", (1, 1), (128, 128), True, "1024x1024"),
     (r"factions/[a-z0-9_]+", (1, 1), (512, 512), True, "1024x1024"),
     (r"ui/splash", (9, 16), (1080, 1920), False, "1024x1536"),
+    (r"scenes/[a-z0-9-]+", (16, 9), (1920, 1080), False, "1536x1024"),
+    (r"characters/hong-quan", (1, 1), (768, 768), True, "1024x1024"),
+    (r"characters/listener", (1, 1), (256, 256), True, "1024x1024"),
     # reference images only (gen, never `place`): e.g. refs/character-sheet -> art-work/raw, copy to art-work/refs
     (r"refs/[a-z0-9-]+", (3, 2), (1536, 1024), False, "1536x1024"),
 ]
@@ -67,6 +70,7 @@ KNOWN = [
     "landmarks/chien-truong", "characters/avatar", "characters/meditate", "characters/body-luyen_khi", "items/linh_thach",
     "items/tu_linh_phu", "items/truc_co_dan", "items/ket_dan_qua", "items/linh_thao", "factions/huyen_khung_mon",
     "factions/kim_sa_mon", "factions/thuong_lan_dinh", "factions/tinh_ha_yeu_dinh", "factions/vu_toc", "ui/splash",
+    "scenes/tu-tieu-cung", "characters/hong-quan", "characters/listener",
 ]
 
 
