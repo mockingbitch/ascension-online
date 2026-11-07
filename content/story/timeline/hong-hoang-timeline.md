@@ -33,10 +33,10 @@ model §5.2). Lời giới thiệu dưới đây dùng cho thẻ dòng thời gi
 Hồng Quân mở Tử Tiêu Cung, giảng đạo lần đầu cho chúng sinh Thiên Nguyên Giới. Năm thế lực mở cửa thu nhận đệ tử.
 
 **2. Hồng Quân giảng đạo lần hai** (`giang_dao_2`, ngày 30)
-Tử Tiêu Cung mở cửa lần thứ hai. Ai đã vững căn cơ sẽ nghe được tầng đạo lý sâu hơn, vốn dành cho người kiên trì.
+Hồng Quân mở vòng giảng thứ hai. Ai đã vững căn cơ sẽ nghe được tầng đạo lý sâu hơn, vốn dành cho người kiên trì.
 
 **3. Hồng Quân giảng đạo lần ba** (`giang_dao_3`, ngày 60)
-Lần giảng cuối của Hồng Quân tại Tử Tiêu Cung. Từ đây, đạo pháp được truyền lại qua các thế lực.
+Hồng Quân mở vòng giảng thứ ba. Ba vòng lời giảng cùng xoay trong Tử Tiêu Cung, và đạo pháp bắt đầu lan ra các thế lực.
 
 **4. Đại chiến Huyết Tinh** (`dai_chien`, ngày 100–115)
 Vu Tộc và Tinh Hà Yêu Đình quyết chiến suốt mười lăm ngày. Trời đất nứt vỡ, và từ đổ nát, Địa Phủ cùng vòng luân hồi ra đời.
@@ -48,7 +48,7 @@ Nữ Oa nặn đất bên bờ sông, thổi linh khí thành người. Nhân t�
 Thánh nhân lần lượt xuất thế. Huyền Khung Môn chia ba viện, Kim Sa Môn đổi thành Kim Sa Giáo, Oa Hoàng Cung mở cửa.
 
 **7. Tam Hoàng Ngũ Đế** (`nhan_toc`, ngày 150–210)
-Tam Hoàng Ngũ Đế dẫn dắt Nhân tộc: dạy cày cấy, nếm cỏ làm thuốc, định lịch. Nhân tộc thành một thế lực của Thiên Nguyên Giới.
+Tam Hoàng Ngũ Đế dẫn dắt Nhân tộc: dạy cày cấy, nếm cỏ làm thuốc, định lịch. Thế lực Nhân Tộc, mở cửa từ ngày Nữ Oa tạo người, nay hưng thịnh khắp Thiên Nguyên Giới.
 
 **8. Phong Thần Lượng Kiếp** (`phong_than`, ngày 240–300)
 Phong Thần Bảng mở ra. Ai muốn Ứng Kiếp thì đấu cờ với đạo hữu. Người có tên trên bảng sẽ thành thần của Thiên Đình mới.
@@ -71,6 +71,12 @@ Con đường về phía tây mở ra. Yêu quái ven đường tu luyện hóa 
 ## Ghi chú thiết kế
 
 - Mốc 1 là `target_day: 0`. Ngày mục tiêu chỉ để tham khảo. Ngày thật phụ thuộc tiến độ trung bình (decision B).
-- Mốc 6 kích hoạt `split_faction` (huyen_khung_mon → 3 viện) và `migrate_faction` (kim_sa_mon → kim_sa_giao).
+- Mốc 2 và 3 mở thêm vòng giảng `tu_tieu_cycle_2` / `tu_tieu_cycle_3` chồng lên `tu_tieu_cycle_1` (8 bài hiện
+  có). Lời giảng xoay cả ngày nên không còn "lần giảng cuối". Kịch bản vòng 2, 3 viết sau. Chi tiết:
+  `../world/milestone-effects.md` §2.
+- Mốc 6 kích hoạt `split_faction` (huyen_khung_mon → thu_nhat_vien, lap_cuc_vien, van_luu_vien) và
+  `migrate_faction` (kim_sa_mon → kim_sa_giao). Tên thời kỳ và ID thật: `../world/milestone-effects.md`.
+- Thẻ số 6 nhắc "Oa Hoàng Cung mở cửa", nhưng chưa có thế lực hay hiệu ứng nào tương ứng. Giữ là chi tiết văn,
+  hoặc bỏ nếu không thêm thế lực (câu hỏi mở).
 - Thẻ số 8 không nhắc luật thua/đủ ván. Luật nằm ở màn hình sự kiện, vì Ứng Kiếp là tùy chọn (G1).
 - Thẻ số 10 cố ý viết chung chung. Nội dung Tây Du phải được rà theo mục rủi ro tín ngưỡng trước khi viết thêm.

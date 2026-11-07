@@ -1,0 +1,64 @@
+# Tử Tiêu Cung, bài giảng 1/8 (vòng đầu). Định dạng và quy tắc: README.md cùng thư mục.
+id: dao_tich_tieu_thanh_dai
+order: 1
+title: Tích tiểu thành đại
+theme: Kiên trì tích lũy
+lines:
+  - text: "Các ngươi đã đến. Hãy ngồi yên, để hơi thở chậm lại. Hôm nay ta giảng về một điều rất nhỏ."
+    seconds: 11
+  - text: "Một giọt linh khí đặt trên lòng bàn tay, chẳng ai thấy nặng. Gió thoảng qua là nó tan mất."
+    seconds: 10
+  - text: "Nhưng sông ngầm chảy dưới Thiên Nguyên Giới cũng chỉ là vô số giọt như thế, nối nhau không nghỉ."
+    seconds: 10
+  - text: "Người mới tu thường hỏi ta: bao giờ thì thành tiên? Ta hỏi lại: hôm nay ngươi đã tu chưa?"
+    seconds: 10
+  - text: "Đạo không nằm ở ngày mai. Đạo nằm ở hôm nay, trong việc nhỏ mà ngươi chịu làm cho đến cùng."
+    seconds: 11
+  - text: "Có kẻ thức trắng một đêm luyện công, rồi mười ngày liền không ngó tới động phủ."
+    seconds: 9
+  - text: "Có kẻ ngày nào cũng ngồi xuống một lát, lặng lẽ đến mức chẳng ai để ý."
+    seconds: 9
+  - text: "Một năm sau, kẻ thứ hai đã đi rất xa. Kẻ thứ nhất vẫn đang loay hoay tìm lại hơi thở của mình."
+    seconds: 11
+  - text: "Tu vi không đến từ một lần gắng sức thật lớn. Tu vi đến từ rất nhiều lần trở lại."
+    seconds: 10
+  - text: "Ngươi hỏi vì sao ta không dạy một bí pháp nhanh hơn? Vì con đường tắt nào cũng phải trả lại bằng con đường dài hơn."
+    seconds: 12
+  - text: "Khi ngươi bế quan, linh khí vẫn lặng lẽ chảy vào động phủ, dù ngươi đang ở nơi khác lo việc khác."
+    seconds: 11
+  - text: "Nhưng linh khí không tự thành tu vi. Phải có lúc ngươi quay về, ngồi xuống, thu lấy những gì đã tích."
+    seconds: 11
+  - text: "Như người trồng lúa: gieo xong thì kiên nhẫn chờ, nhưng sáng sáng vẫn ra đồng thăm ruộng."
+    seconds: 9
+  - text: "Ruộng không lớn nhanh hơn vì ngươi đứng nhìn cả ngày. Nhưng ruộng sẽ hoang nếu ngươi không bao giờ tới."
+    seconds: 11
+  - text: "Việc đời cũng vậy. Mỗi ngày đọc một trang sách, mười năm sau trong bụng đã có cả một tủ chữ."
+    seconds: 11
+  - text: "Dành dụm từng đồng, giữ chữ tín từng lần, rèn thân từng buổi. Chẳng điều lớn nào thành trong một sớm một chiều."
+    seconds: 11
+  - text: "Đừng khinh việc nhỏ vì nó nhỏ. Việc nhỏ làm đều tay, chính là việc lớn đang lớn lên."
+    seconds: 10
+  - text: "Cũng đừng sốt ruột vì chưa thấy gì đổi khác. Rễ cây lớn trong đất tối rất lâu trước khi lá vươn ra ánh sáng."
+    seconds: 12
+  - text: "Có những ngày ngươi mệt, chỉ ngồi được một lát. Một lát ấy vẫn đáng giá. Đừng vì nó ngắn mà bỏ hẳn."
+    seconds: 11
+  - text: "Điều quý không phải ngày nào cũng nhiều. Điều quý là ngày nào cũng có."
+    seconds: 8
+  - text: "Giữ được nhịp ấy, một ngày bình thường của ngươi sẽ thành viên gạch. Nhiều viên gạch thành bậc thềm."
+    seconds: 11
+  - text: "Bền bỉ thắng nóng vội. Đều đặn thắng cả thiên tư hơn người mà lười biếng."
+    seconds: 9
+  - text: "Linh căn tốt chỉ là con đường bằng phẳng hơn. Chân bước mỗi ngày mới là thứ đưa người ta tới nơi."
+    seconds: 11
+  - text: "Người có linh căn tầm thường mà không bỏ cuộc, ta đã thấy họ vượt qua những kẻ được trời ưu ái."
+    seconds: 11
+  - text: "Khi rời điện này, đừng hứa với ta điều gì lớn lao. Ta không cần lời thề."
+    seconds: 9
+  - text: "Hãy hứa với chính mình một việc nhỏ thôi, và ngày mai làm đúng việc ấy."
+    seconds: 9
+  - text: "Rồi ngày kia làm lại. Rồi ngày kìa nữa. Đến một hôm ngươi sẽ ngoảnh lại và không nhận ra con đường mình đã đi."
+    seconds: 12
+  - text: "Giọt thứ nhất đã rơi rồi. Ta ngồi đây chờ xem biển của các ngươi."
+    seconds: 8
+question: "Có việc nhỏ nào ngươi có thể làm đều đặn mỗi ngày, bắt đầu từ ngày mai, dù chẳng ai nhìn thấy?"
+takeaway: "Tu vi không đến từ một lần gắng sức lớn mà từ nhiều lần trở lại, nên ngày nào cũng có quý hơn ngày nào cũng nhiều."

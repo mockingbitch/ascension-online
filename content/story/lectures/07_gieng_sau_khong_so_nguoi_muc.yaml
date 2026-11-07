@@ -1,0 +1,60 @@
+# Tử Tiêu Cung, bài giảng 7/8 (vòng đầu). Định dạng và quy tắc: README.md cùng thư mục.
+id: gieng_sau_khong_so_nguoi_muc
+order: 7
+title: Giếng sâu không sợ người múc
+theme: Chia sẻ, tử tế
+lines:
+  - text: "Ở một làng nọ có một cái giếng. Người trong làng ngày ngày đến múc, mà giếng chưa bao giờ cạn."
+    seconds: 11
+  - text: "Có một năm, có kẻ nghĩ: nước này quý, phải giữ cho riêng mình. Hắn đậy nắp giếng lại."
+    seconds: 10
+  - text: "Không ai múc nữa, mạch nước dưới đáy chậm dần. Đến mùa khô, chính hắn cũng không còn gì để uống."
+    seconds: 11
+  - text: "Người làng mở nắp giếng ra, múc lại như xưa. Ít lâu sau, nước lại trong và mát."
+    seconds: 9
+  - text: "Đạo cũng như giếng. Đạo ngươi hiểu được, đem chia cho người khác, không vơi đi mà còn trong hơn."
+    seconds: 10
+  - text: "Vì khi giảng cho người khác, ngươi buộc phải hiểu cho thật rõ. Chỗ nào còn mờ, lúc nói ra ngươi sẽ thấy ngay."
+    seconds: 12
+  - text: "Ta giảng ở đây không phải để các ngươi giữ lời ta trong túi. Ta giảng để các ngươi mang đi, trao lại."
+    seconds: 11
+  - text: "Hôm nay, đại điện này có người mới đến. Họ còn bỡ ngỡ, chưa biết động phủ ở đâu, chưa biết bế quan là gì."
+    seconds: 12
+  - text: "Ngươi từng như họ. Có lẽ cũng từng có ai đó chỉ đường cho ngươi bằng một câu ngắn ngủi."
+    seconds: 10
+  - text: "Giờ đến lượt ngươi. Không cần giảng dài. Chỉ cần trả lời một câu hỏi bằng sự kiên nhẫn."
+    seconds: 10
+  - text: "Câu hỏi mà ngươi thấy ngớ ngẩn, có khi người hỏi đã đắn đo rất lâu mới dám nói ra."
+    seconds: 10
+  - text: "Đừng cười họ. Một tiếng cười chê có thể khiến một người bỏ đạo. Một lời chỉ dẫn có thể giữ họ ở lại cả đời."
+    seconds: 12
+  - text: "Ngoài kia, khi các ngươi trò chuyện giữa thế gian, hãy nhớ: sau mỗi cái tên là một con người thật."
+    seconds: 11
+  - text: "Họ cũng có ngày mệt, ngày buồn, ngày vừa đột phá thất bại. Lời ngươi viết ra sẽ rơi đúng vào ngày ấy của họ."
+    seconds: 12
+  - text: "Người tu đạo nói ít mà tử tế, hơn nói nhiều mà làm người khác đau."
+    seconds: 9
+  - text: "Nếu thấy một lời độc ác, đừng đáp lại bằng một lời độc ác hơn. Lửa không dập được lửa."
+    seconds: 10
+  - text: "Có những lúc đạo hữu bước vào lôi kiếp. Ngươi không gánh sấm thay được, nhưng ngươi có thể ở bên, để họ biết mình không một mình."
+    seconds: 13
+  - text: "Có những lúc ngươi thấy người khác đi trước mình. Hãy mừng cho họ thật lòng. Niềm vui chia ra cũng không vơi."
+    seconds: 11
+  - text: "Ở đời cũng vậy. Người giỏi thật sự là người khiến những người quanh mình cũng giỏi lên."
+    seconds: 10
+  - text: "Một người thầy đáng quý không đo bằng số điều mình biết, mà bằng số người nhờ mình mà bước tiếp được."
+    seconds: 11
+  - text: "Ta cũng vậy. Ta không mong các ngươi nhớ tên ta. Ta mong các ngươi nhớ lời, và mang lời đi xa."
+    seconds: 11
+  - text: "Nhưng chia sẻ cũng cần biết chừng mực. Đừng ép ai đi đường của ngươi. Hãy chỉ đường, rồi để họ tự bước."
+    seconds: 11
+  - text: "Mỗi người một linh căn, một nhịp sống. Cách hợp với ngươi chưa chắc đã hợp với họ."
+    seconds: 9
+  - text: "Tử tế cũng không có nghĩa là im lặng trước điều sai. Có thể nói thẳng, mà vẫn nói bằng lòng tốt."
+    seconds: 11
+  - text: "Hôm nay khi rời điện, hãy giúp một người. Một câu chỉ đường, một lời chúc mừng, một lời hỏi han. Thế là đủ."
+    seconds: 12
+  - text: "Giếng của ngươi sẽ không cạn đi vì thế. Ta hứa với ngươi điều đó."
+    seconds: 8
+question: "Ai từng chỉ đường cho ngươi bằng một câu ngắn ngủi? Hôm nay ngươi có thể trao lại câu ấy cho ai?"
+takeaway: "Đạo chia ra không vơi, như giếng có người múc mới trong, và sau mỗi cái tên là một con người thật."

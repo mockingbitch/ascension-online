@@ -1,0 +1,58 @@
+# Tử Tiêu Cung, bài giảng 3/8 (vòng đầu). Định dạng và quy tắc: README.md cùng thư mục.
+id: ngay_dem_cung_nuoi_dao
+order: 3
+title: Ngày và đêm cùng nuôi đạo
+theme: Cân bằng cần nghỉ
+lines:
+  - text: "Hôm nay ta muốn nói với những ai đang mệt. Và với cả những ai chưa biết mình đang mệt."
+    seconds: 10
+  - text: "Trời đất có ngày thì có đêm. Biển có lúc triều lên thì có lúc triều xuống. Chưa ai thấy trời đất than mệt."
+    seconds: 12
+  - text: "Vì trời đất biết nghỉ đúng lúc. Đêm không phải là ngày bị lãng phí. Đêm là lúc muôn vật hồi lại sức."
+    seconds: 11
+  - text: "Có những người tu nghĩ rằng ngồi càng lâu thì càng mạnh. Họ quên ăn, quên ngủ, quên cả người thân."
+    seconds: 11
+  - text: "Rồi một ngày, kinh mạch rối loạn, tâm sinh phiền muộn. Bao công sức dồn lại, chỉ vài hôm đã tán đi."
+    seconds: 11
+  - text: "Hãy nhìn cách ta dạy các ngươi bế quan. Ngươi rời động phủ, đi lo việc đời, mà linh khí vẫn tụ về."
+    seconds: 11
+  - text: "Đó không phải là phép lười. Đó là đạo lý: có những thứ chỉ lớn lên khi ngươi để yên cho chúng lớn."
+    seconds: 11
+  - text: "Bột ủ cần thời gian mới nở. Rượu cần năm tháng mới thơm. Vết thương cần giấc ngủ mới lành."
+    seconds: 10
+  - text: "Tu vi cũng thế. Ngươi không cần canh giữ nó từng khắc. Ngươi chỉ cần quay về đúng hẹn."
+    seconds: 10
+  - text: "Cho nên ta nói thật lòng: đêm đã khuya thì hãy đi ngủ. Đại điện này sáng mai vẫn còn đây."
+    seconds: 11
+  - text: "Bữa cơm với người nhà, buổi đi dạo dưới nắng, giấc ngủ đủ giờ. Những thứ ấy không làm ngươi chậm lại."
+    seconds: 11
+  - text: "Chúng là đất để đạo của ngươi bám rễ. Đạo không có đất thì chỉ là cây cắm trong chậu nước."
+    seconds: 11
+  - text: "Nhưng nghỉ ngơi khác với buông xuôi. Người nghỉ là để mai đi tiếp. Người buông xuôi là không định đi nữa."
+    seconds: 11
+  - text: "Ruộng cày mãi không nghỉ thì đất bạc màu. Ruộng bỏ hoang mãi thì cỏ dại mọc lên."
+    seconds: 9
+  - text: "Cái khó là biết lúc nào nên cày, lúc nào nên để đất thở. Không ai biết thay ngươi được, kể cả ta."
+    seconds: 11
+  - text: "Hãy lắng nghe thân mình. Mắt cay, vai mỏi, lòng bực bội vô cớ, đó là thân đang lên tiếng."
+    seconds: 10
+  - text: "Khi thân lên tiếng, đừng coi nó là kẻ thù cản đường tu. Nó là người bạn đồng hành lâu nhất của ngươi."
+    seconds: 11
+  - text: "Ở đời cũng vậy. Người làm việc giỏi nhất không phải người không bao giờ nghỉ, mà là người nghỉ đúng lúc rồi quay lại."
+    seconds: 12
+  - text: "Chạy hết sức một ngày thì ai cũng làm được. Đi đều bước suốt một năm mới là chuyện hiếm."
+    seconds: 10
+  - text: "Con đường từ Luyện Khí đến Chuẩn Thánh rất dài. Đừng tiêu hết sức trong mấy dặm đầu."
+    seconds: 9
+  - text: "Ta không mong ai ngồi đây đến kiệt sức. Ta mong ai rời điện cũng còn đủ sức để vui."
+    seconds: 10
+  - text: "Lời giảng của ta còn lặp lại nhiều lần. Bỏ lỡ một buổi, ngươi vẫn có thể nghe lại vào lúc khác."
+    seconds: 11
+  - text: "Nhưng một đêm mất ngủ, một bữa cơm bỏ dở với người thân, thì chẳng có buổi giảng nào trả lại được."
+    seconds: 11
+  - text: "Hãy cần mẫn khi ngồi xuống, và thảnh thơi khi đứng lên. Cả hai đều là tu."
+    seconds: 9
+  - text: "Ngày nuôi đạo bằng công phu. Đêm nuôi đạo bằng giấc ngủ yên. Đi đi, rồi trở lại khi ngươi đã sẵn sàng."
+    seconds: 11
+question: "Thân ngươi đã lên tiếng điều gì gần đây mà ngươi chưa chịu nghe? Hôm nay ngươi sẽ nghỉ thế nào cho đúng?"
+takeaway: "Nghỉ đúng lúc không phải là lười, vì ngày nuôi đạo bằng công phu còn đêm nuôi đạo bằng giấc ngủ yên."

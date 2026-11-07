@@ -1,0 +1,83 @@
+# World milestone announcements (data model §5.2 `announce`, §5.7 worker-start check).
+# Keys: world.<milestone_id>, world.event_end.<event_id>, faction.*.
+# Placeholders:
+#   world.*    → {day} (server day, integer), {era} (current era display name, see world/milestone-effects.md)
+#   faction.*  → {faction} (display name), {branches} (branch display names joined by ", "), {days} (integer),
+#                {target} (new faction / default branch display name)
+# {era} is only used in milestones whose effects include `set_era`, so it always names the NEW era.
+# Length: every world.* line is ≤ 90 chars after substitution (day up to 3 digits, longest era name 21 chars).
+# faction.split_* lines are ≤ 110 chars with the real values (Huyền Khung Môn → 3 viện, {branches} = 42 chars);
+# see the note in world/milestone-effects.md if the 90-char UI rule must apply to them too.
+# Server picks one variant at random. status: draft (names follow content/story/world/milestone-effects.md).
+version: 1
+templates:
+  # ── Milestones ────────────────────────────────────────────────────────────
+  world.khai_giang:
+    - "Ngày {day}: Tử Tiêu Cung mở cửa. Hồng Quân bắt đầu giảng đạo cho chúng sinh."
+    - "Chuông Tử Tiêu ngân vang: {era}. Năm thế lực mở cửa thu nhận đệ tử."
+    - "Hồng Quân ngồi giảng, đạo âm vang khắp Thiên Nguyên Giới. Ai muốn nghe đều có chỗ."
+  world.giang_dao_2:
+    - "Ngày {day}: Hồng Quân mở vòng giảng thứ hai. Tử Tiêu Cung nay có thêm bài mới."
+    - "Vòng giảng thứ hai khai mở. Ai đã vững căn cơ sẽ nghe ra tầng đạo lý sâu hơn."
+    - "Tử Tiêu Cung đón vòng giảng mới. Vòng cũ vẫn xoay, nghe lúc nào cũng kịp."
+  world.giang_dao_3:
+    - "Ngày {day}: Hồng Quân mở vòng giảng thứ ba. Đạo lý càng sâu, người nghe càng tĩnh."
+    - "Vòng giảng thứ ba khai mở. Ba vòng lời Hồng Quân nay cùng xoay trong Tử Tiêu Cung."
+  world.dai_chien:
+    - "Ngày {day}: Vu Tộc và Tinh Hà Yêu Đình khai chiến. Đại chiến Huyết Tinh bắt đầu!"
+    - "Trời đất rung chuyển, {era} mở màn. Mười lăm ngày chiến hỏa bắt đầu."
+    - "Huyết khí dưới đất, tinh quang trên trời va nhau. Thiên Nguyên Giới chao đảo."
+  world.nu_oa:
+    - "Ngày {day}: Nữ Oa nặn đất bên bờ sông, thổi linh khí thành người. Nhân tộc ra đời."
+    - "Thời kỳ {era} mở ra. Nhân tộc chào đời, yếu ớt mà mang mọi khả năng."
+  world.thanh_nhan:
+    - "Ngày {day}: Thánh nhân xuất thế, Thiên Nguyên Giới bước vào {era}."
+    - "Thánh nhân định tọa. Huyền Khung Môn sắp chia ba viện, Kim Sa Môn sắp thành Kim Sa Giáo."
+  world.nhan_toc:
+    - "Ngày {day}: Tam Hoàng Ngũ Đế dạy Nhân tộc cày cấy, làm thuốc, định lịch."
+    - "Nhân tộc thôi yếu ớt. Tam Hoàng Ngũ Đế dẫn dắt, một thế lực mới đang thành hình."
+  world.phong_than:
+    - "Ngày {day}: Phong Thần Bảng mở ra. Ứng Kiếp hay không là do đạo hữu tự chọn."
+    - "{era} đã đến. Phong Thần Bảng mở, ai muốn Ứng Kiếp thì tự ghi danh."
+  world.thien_dinh:
+    - "Ngày {day}: Thiên Đình được dựng lại. Người trên Phong Thần Bảng nhận thần vị."
+    - "Thiên Đình tái lập trên chín tầng mây. Trời đất bước vào một trật tự mới."
+  world.tay_du:
+    - "Ngày {day}: Con đường về phía tây mở ra. Một thời đại mới bắt đầu."
+    - "Lữ khách lên đường về phía tây. Núi xa sông dài, mỗi bước là một lần tu tâm."
+
+  # ── Ranged events ending (start_event … duration_days) ────────────────────
+  world.event_end.giang_dao_2:
+    - "Ngày khai giảng vòng hai đã qua. Lời giảng ấy vẫn xoay vòng ở Tử Tiêu Cung."
+    - "Ngày {day}: Vòng giảng thứ hai đã hòa vào vòng chung. Nghe lúc nào cũng được."
+  world.event_end.giang_dao_3:
+    - "Ngày khai giảng vòng ba đã qua. Lời giảng ấy vẫn xoay vòng ở Tử Tiêu Cung."
+    - "Ngày {day}: Vòng giảng thứ ba đã hòa vào vòng chung. Nghe lúc nào cũng được."
+  world.event_end.dai_chien:
+    - "Ngày {day}: Đại chiến Huyết Tinh kết thúc. Từ đổ nát, vòng luân hồi bắt đầu chuyển."
+    - "Khói lửa tan dần. Kẻ ngã xuống không mất hẳn, vòng luân hồi đã mở ra."
+  world.event_end.thanh_nhan:
+    - "Ngày {day}: Thánh vị đã định. Các thế lực mới của Thiên Nguyên Giới đã đứng vững."
+    - "Ba viện Huyền Khung và Kim Sa Giáo đã an vị. Thời thánh nhân xuất thế khép lại."
+  world.event_end.tam_hoang:
+    - "Ngày {day}: Tam Hoàng Ngũ Đế lui về. Nhân tộc đã tự đứng vững giữa trời đất."
+    - "Cày cấy, thuốc men, lịch pháp đã truyền xong. Nhân tộc tự bước con đường mình."
+  world.event_end.phong_than:
+    - "Ngày {day}: Phong Thần Bảng khép lại. Danh sách chúng thần đã định."
+    - "Lượng kiếp qua đi. Dù có tên trên bảng hay không, đường tu của đạo hữu vẫn còn dài."
+
+  # ── Faction split / migrate (split_faction, migrate_faction effects) ──────
+  faction.split_notice:
+    - "{faction} sắp chia thành {branches}. Còn {days} ngày để chuẩn bị."
+    - "{days} ngày nữa {faction} chia thành {branches}. Tu vi giữ nguyên."
+  faction.split_done:
+    - "{faction} đã chia thành {branches}. Hạn chọn: {days} ngày."
+    - "{faction} đã tách nhánh. Sau {days} ngày, ai chưa chọn sẽ vào nhánh ít người nhất."
+  # At the choice deadline (Phase 2.2): {branches} = viện that received undecided members (spread to the smallest).
+  faction.split_final:
+    - "Hạn chọn viện đã hết. Ai chưa chọn được chia đều vào {branches}."
+  # migrate_faction: notice at the milestone, done when the members have moved. {target} = new display name.
+  faction.migrate_notice:
+    - "{days} ngày nữa {faction} đổi thành {target}. Thành viên được chuyển tự động."
+  faction.migrate_done:
+    - "{faction} nay là {target}. Tu vi và đồng môn của đạo hữu đều giữ nguyên."

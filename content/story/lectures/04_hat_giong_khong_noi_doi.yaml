@@ -1,0 +1,56 @@
+# Tử Tiêu Cung, bài giảng 4/8 (vòng đầu). Định dạng và quy tắc: README.md cùng thư mục.
+id: hat_giong_khong_noi_doi
+order: 4
+title: Hạt giống không biết nói dối
+theme: Nhân quả
+lines:
+  - text: "Hôm nay ta kể về một người làm vườn. Hắn gieo hạt bí, rồi ngày ngày cầu cho ra dưa hấu."
+    seconds: 11
+  - text: "Đến mùa, đất trả cho hắn đúng những quả bí. Đất không giận hắn, cũng không thương hại hắn. Đất chỉ trả đúng."
+    seconds: 11
+  - text: "Trời đất vận hành như thế. Việc ngươi làm hôm nay là hạt giống. Điều ngươi gặp ngày sau là mùa gặt."
+    seconds: 11
+  - text: "Có người hỏi ta: vậy sao có kẻ làm điều xấu mà vẫn sống yên? Ta đáp: mùa gặt chưa tới, không có nghĩa là không tới."
+    seconds: 13
+  - text: "Và có những hạt giống nảy mầm ngay trong lòng người gieo. Kẻ hay lừa dối, trước tiên mất đi giấc ngủ yên của chính mình."
+    seconds: 12
+  - text: "Đừng hiểu nhân quả như một cuốn sổ trời ghi để phạt ngươi. Hãy hiểu nó như con đường: ngươi đi hướng nào, ngươi tới nơi ấy."
+    seconds: 13
+  - text: "Tu luyện cũng thế. Tu vi trong động phủ của ngươi không phải là may mắn. Đó là quả của những lần ngươi chịu ngồi xuống."
+    seconds: 12
+  - text: "Căn cơ vững là quả của những ngày không ai khen. Một lần đột phá suôn sẻ là quả của cả trăm ngày chuẩn bị."
+    seconds: 12
+  - text: "Nhưng ta cũng nói thật: không phải quả nào cũng đến đúng lúc ngươi muốn. Có hạt nảy sau một đêm, có hạt chờ cả mùa."
+    seconds: 13
+  - text: "Đột phá thất bại cũng có nhân của nó. Có khi là thiếu chuẩn bị, có khi chỉ là trời chưa thuận. Đừng vội trách mình."
+    seconds: 12
+  - text: "Quan trọng là mỗi lần thử đều gieo thêm một hạt. Không lần cố gắng nào mất đi hẳn."
+    seconds: 10
+  - text: "Giờ ta nói về hạt giống khó thấy nhất: lời nói. Một lời tử tế gieo xuống đại điện này, ngươi không biết nó sẽ mọc ở đâu."
+    seconds: 13
+  - text: "Có thể nó mọc trong lòng một người mới vào, đang định bỏ cuộc. Có thể nhiều năm sau, người ấy lại nói lời tử tế với kẻ khác."
+    seconds: 13
+  - text: "Một lời cay độc cũng vậy. Nó không tan đi khi ngươi đã quên. Nó còn ở lại trong lòng người nghe."
+    seconds: 11
+  - text: "Ở đời, người ta hay muốn đổi quả mà không chịu đổi hạt. Muốn khỏe mà không chịu ngủ, muốn giỏi mà không chịu học."
+    seconds: 12
+  - text: "Muốn được tin mà không chịu giữ lời. Muốn có bạn mà không chịu đối tốt với ai."
+    seconds: 9
+  - text: "Nếu ngươi không thích mùa gặt của mình, đừng nguyền rủa đất. Hãy đổi hạt giống từ hôm nay."
+    seconds: 10
+  - text: "Hạt hôm nay chưa đổi được mùa này. Nhưng nó đổi được mùa sau, và mùa sau nữa."
+    seconds: 9
+  - text: "Nghe thì chậm. Nhưng đó là cách duy nhất mà ta biết, và ta đã nhìn trời đất vận hành rất lâu rồi."
+    seconds: 11
+  - text: "Nhân quả còn có một mặt dịu dàng. Ngươi không cần hoàn hảo. Ngươi chỉ cần gieo hạt tốt nhiều hơn hạt xấu."
+    seconds: 11
+  - text: "Hôm qua ngươi lỡ gieo hạt xấu? Hôm nay vẫn còn nguyên một ngày để gieo lại. Đất không đóng cửa với ai."
+    seconds: 11
+  - text: "Trước khi làm một việc, hãy hỏi: hạt này sẽ mọc thành cây gì? Ta có muốn ngồi dưới bóng cây ấy không?"
+    seconds: 11
+  - text: "Hỏi vậy đủ lâu, ngươi sẽ không cần hỏi nữa. Tay ngươi sẽ tự chọn hạt tốt."
+    seconds: 9
+  - text: "Người làm vườn năm ấy, sau mùa bí, đã gieo lại đúng hạt dưa. Hắn không cầu nữa. Hắn tưới."
+    seconds: 10
+question: "Hôm nay ngươi muốn gieo hạt giống nào, để một năm sau ngươi được ngồi dưới bóng cây của nó?"
+takeaway: "Muốn đổi mùa gặt thì hãy đổi hạt giống từ hôm nay, vì đất trả đúng và không đóng cửa với ai."

@@ -1,0 +1,56 @@
+# Tử Tiêu Cung, bài giảng 5/8 (vòng đầu). Định dạng và quy tắc: README.md cùng thư mục.
+id: thien_bang_khac_ten
+order: 5
+title: Thiên Bảng khắc tên, không khắc đạo
+theme: Khiêm cung tự tại
+lines:
+  - text: "Ngoài kia có Thiên Bảng, tấm bia đá khắc tên những người đi xa nhất. Hôm nay ta muốn nói về nó."
+    seconds: 11
+  - text: "Thiên Bảng là thật. Tên trên đó là công phu thật của người ta. Ta không bảo các ngươi coi khinh nó."
+    seconds: 11
+  - text: "Nhưng hãy nhớ: bia đá chỉ khắc được tên và cảnh giới. Nó không khắc được ngươi đã đi qua những gì."
+    seconds: 11
+  - text: "Người đứng thứ một trăm có thể đã vượt qua nhiều hơn người đứng thứ nhất. Bia đá không biết điều đó. Đạo thì biết."
+    seconds: 12
+  - text: "Có người ngày nào cũng mở Thiên Bảng ra, đếm xem mình hơn ai, thua ai. Đếm xong, lòng chẳng vui hơn."
+    seconds: 11
+  - text: "Hơn người thì sinh kiêu. Thua người thì sinh buồn. Cả hai đều làm hồ tâm gợn sóng, như ta đã giảng."
+    seconds: 11
+  - text: "Mỗi người bước vào con đường này vào một ngày khác nhau, với linh căn khác nhau, giữa những bận rộn khác nhau."
+    seconds: 12
+  - text: "So mình với người khác chẳng khác gì so một cây non với một cây cổ thụ. Có ích gì đâu?"
+    seconds: 11
+  - text: "Người duy nhất đáng để ngươi so là chính ngươi của hôm qua. Hôm nay vững hơn một chút, thế là đủ."
+    seconds: 11
+  - text: "Ngươi của hôm qua không bao giờ chạy trước ngươi quá xa, cũng không bao giờ cười nhạo ngươi."
+    seconds: 10
+  - text: "Còn ai đang đứng cao trên Thiên Bảng, hãy nghe ta nói điều này. Đứng cao thì gió cũng mạnh hơn."
+    seconds: 11
+  - text: "Cây lúa chín thì cúi đầu. Bông lép mới ngẩng cao. Ngươi càng đi xa, càng nên biết mình còn thiếu gì."
+    seconds: 11
+  - text: "Kẻ tưởng mình đã hiểu hết đạo là kẻ dừng lại sớm nhất. Vì hắn không còn nghe được ai nữa."
+    seconds: 11
+  - text: "Ta ngồi đây giảng đạo, nhưng đạo không thuộc về ta. Ta chỉ là người đã nhìn nó lâu hơn các ngươi một chút."
+    seconds: 12
+  - text: "Người mới vào hôm qua, đôi khi lại hỏi ta một câu mà ta phải ngồi nghĩ rất lâu. Ta biết ơn những câu hỏi ấy."
+    seconds: 12
+  - text: "Khiêm cung không phải là tự hạ thấp mình. Khiêm cung là biết thế gian còn rộng, và mình còn nhiều điều để học."
+    seconds: 12
+  - text: "Ở đời cũng vậy. Nhìn bạn bè khoe điều tốt đẹp, ngươi chỉ thấy phần họ muốn cho thấy, chẳng thấy phần đường họ đã đi."
+    seconds: 12
+  - text: "Đem phần tốt nhất của người khác so với những ngày mệt nhất của mình, thì ai mà chẳng thấy mình thua."
+    seconds: 11
+  - text: "Thay vì ganh, hãy học. Thấy ai đi nhanh, hãy hỏi họ đã làm thế nào. Phần lớn người ta vui lòng chỉ cho."
+    seconds: 12
+  - text: "Thấy ai đi chậm, đừng cười. Ngươi không biết họ đang gánh gì trên vai ngoài đời."
+    seconds: 9
+  - text: "Thiên Bảng sẽ đổi thay mỗi ngày. Tên hôm nay ở trên, mai có thể ở dưới. Đá vẫn là đá."
+    seconds: 11
+  - text: "Thứ không đổi là đạo tâm ngươi tự xây lấy. Không ai đẩy nó xuống được, cũng không ai khắc nó lên giúp ngươi."
+    seconds: 12
+  - text: "Cứ nhìn Thiên Bảng như nhìn sao trời: để biết đường còn dài, để thấy cảm hứng. Đừng nhìn nó để tự làm khổ mình."
+    seconds: 12
+  - text: "Rồi cúi xuống, nhìn đôi chân mình, và bước tiếp bước của riêng mình."
+    seconds: 8
+question: "Gần đây ngươi đã so mình với ai? Nếu chỉ so với chính ngươi của tháng trước, ngươi đã tiến được bao xa?"
+takeaway: "Thiên Bảng khắc tên chứ không khắc đạo, và người duy nhất đáng để so là chính mình của hôm qua."
