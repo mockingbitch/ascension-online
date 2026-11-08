@@ -6,6 +6,8 @@
 	import { audio, type AudioChannel } from '$lib/engine/audio/AudioManager';
 	import { fullscreen } from '$lib/engine/fullscreen.svelte';
 	import type { Quality } from '$lib/engine/fx/particles';
+	import type { Fallback3dReason } from '$lib/engine/render/select';
+	import type { RendererKind } from '$lib/engine/render/types';
 	import { settings } from '$lib/engine/settings.svelte';
 	import Icon from './Icon.svelte';
 
@@ -14,6 +16,16 @@
 		{ value: 'lite', label: 'Nhẹ', hint: 'Ít hạt hơn, hợp máy yếu' },
 		{ value: 'off', label: 'Tắt', hint: 'Không hoạt ảnh trang trí' }
 	];
+	const rendererOptions: { value: RendererKind; label: string; hint: string }[] = [
+		{ value: '2d', label: '2D (mặc định)', hint: 'Tranh vẽ 2D cho mọi cảnh' },
+		{ value: '3d', label: '3D thử nghiệm (Tử Tiêu Cung)', hint: 'Chỉ Tử Tiêu Cung, cần WebGL2; máy yếu tự về 2D' }
+	];
+	const fallbackLabel: Record<Fallback3dReason, string> = {
+		'no-webgl2': 'thiết bị không có WebGL2',
+		'context-lost': 'mất ngữ cảnh đồ họa',
+		slow: 'khung hình dưới 40 fps',
+		error: 'lỗi khi tải 3D'
+	};
 	const channels: { id: AudioChannel; label: string }[] = [
 		{ id: 'bgm', label: 'Nhạc nền' },
 		{ id: 'ambience', label: 'Âm cảnh' },
@@ -91,7 +103,7 @@
 	</fieldset>
 
 	<fieldset>
-		<legend class="panel-title text-lg">Đồ họa</legend>
+		<legend class="panel-title text-lg">Hiển thị</legend>
 		{#if fullscreen.supported}
 			<div class="row mt-3">
 				<span>Toàn màn hình</span>
@@ -101,13 +113,32 @@
 				</button>
 			</div>
 		{/if}
-		<div class="row" class:mt-3={!fullscreen.supported}>
-			<span>Kết xuất</span>
-			<span class="ml-auto font-semibold text-mist-100">2D</span>
+		<p class="mt-3" id="renderer-label">Kết xuất</p>
+		<div class="mt-2 grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="renderer-label">
+			{#each rendererOptions as o (o.value)}
+				<button
+					type="button"
+					role="radio"
+					aria-checked={settings.rendererChoice === o.value}
+					class="opt"
+					class:is-on={settings.rendererChoice === o.value}
+					title={o.hint}
+					data-setting-renderer={o.value}
+					onclick={() => settings.setRenderer(o.value)}
+				>
+					{o.label}
+				</button>
+			{/each}
 		</div>
-		{#if settings.rendererRequested && settings.rendererRequested !== '2d'}
-			<p class="text-xs text-mist-500">Đường dẫn yêu cầu “{settings.rendererRequested}” — chưa hỗ trợ, đang dùng 2D.</p>
-		{/if}
+		<p class="mt-2 text-xs text-mist-500" data-renderer-note>
+			{#if settings.fallback3d}
+				Đã chuyển về 2D: {fallbackLabel[settings.fallback3d.reason]}. Chọn lại “3D thử nghiệm” để thử lần nữa.
+			{:else if settings.rendererRequested === '3d' || settings.rendererRequested === '2d'}
+				Đường dẫn đang buộc dùng {settings.rendererRequested.toUpperCase()}.
+			{:else}
+				3D đang thử nghiệm: chỉ Tử Tiêu Cung, tốn pin hơn 2D.
+			{/if}
+		</p>
 	</fieldset>
 </div>
 

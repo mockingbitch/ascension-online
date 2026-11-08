@@ -6,6 +6,8 @@
 	Ambient: aura breathes (full: scale + glow, lite: glow, off: static). The qi stream (dais → my cushion) and the smoke
 	puff when a new listener's seat appears are particles of the scene field (full: dense, lite: sparse, off: none);
 	speech bubbles pop in with a light bounce (lite: fade, off: instant).
+	3D (GĐ7, renderer=3d): the 3D hall draws Hồng Quân and the cushions itself (at the same anchors), so the DOM sage
+	(kept invisible, as a measurable point) and the DOM cushions of seats the def knows are hidden; listeners, cards, bubbles and the qi stream stay DOM/canvas.
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
@@ -35,6 +37,7 @@
 	const dais = $derived(scene.at('dais'));
 	const stream = $derived(listening && mySeat?.p && dais ? { from: dais, to: mySeat.p } : null);
 	const qiMote = { ...mote, size: [1.4, 2.6] as [number, number] };
+	const is3d = $derived(scene.renderer.kind === '3d');
 
 	// linh khí from Hồng Quân's dais to the player's cushion while listening (path particles, slight wobble)
 	$effect(() => {
@@ -81,9 +84,9 @@
 	};
 </script>
 
-<div class="hall" data-quality={quality} style:--u="{scene.unit}px">
+<div class="hall" data-quality={quality} data-renderer={is3d ? '3d' : undefined} style:--u="{scene.unit}px">
 	{#if sageAt}
-		<div class="sage" class:is-phone={phone.current} style:left="{sageAt.x}px" style:top="{sageAt.y}px" aria-hidden="true">
+		<div class="sage" class:is-phone={phone.current} class:is-3d={is3d} style:left="{sageAt.x}px" style:top="{sageAt.y}px" aria-hidden="true">
 			<span class="aura"></span>
 			{#if sage}
 				<img src={sage.src} srcset={sage.srcset} alt="" draggable="false" />
@@ -93,6 +96,11 @@
 		</div>
 	{/if}
 
+
+	{#if is3d && dais}
+		<!-- 3D: the qi source as a measurable point (the 3D hall draws the dais itself) -->
+		<span class="probe" data-anchor="dais" style:left="{dais.x}px" style:top="{dais.y}px" aria-hidden="true"></span>
+	{/if}
 
 	<ul class="seats" aria-label="Đạo hữu đang nghe giảng">
 		{#each placed as s (s.seat)}
@@ -110,7 +118,7 @@
 					style:z-index={Math.round(s.y * 100) + (mine ? 50 : 0)}
 				>
 					{#if mine}<span class="halo" aria-hidden="true"></span>{/if}
-					<span class="cushion" aria-hidden="true"></span>
+					{#if !is3d || !scene.def.anchors[`seat.${s.seat}`]}<span class="cushion" aria-hidden="true"></span>{/if}
 					{#if l}
 						{#if sitter}
 							<img class="sitter" src={sitter.src} srcset={sitter.srcset} alt="" draggable="false" />
@@ -153,6 +161,14 @@
 		width: calc(var(--u) * 13);
 		transform: translate(-50%, -100%);
 		z-index: 30;
+	}
+	/* 3D: the 3D hall draws Hồng Quân; the element stays (invisible) as the anchor's measurable point */
+	.sage.is-3d,
+	.probe {
+		visibility: hidden;
+	}
+	.probe {
+		position: absolute;
 	}
 	.sage.is-phone {
 		width: calc(var(--u) * 15);

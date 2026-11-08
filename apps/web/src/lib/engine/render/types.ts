@@ -2,11 +2,14 @@
 // or, later, 3D. UI and FX ask it for screen positions of anchors and never assume pixels or percentages.
 import type { Quality } from '../fx/particles';
 import type { Anchor, SceneDef } from '../scene/types';
+import type { Fallback3dReason } from './select';
 
 export type RendererKind = '2d' | '3d';
 
 export interface RendererOptions {
 	quality: Quality;
+	/** 3D: run the fps watchdog (fallback to 2D under 40 fps for 5 s); default true. `?fpsguard=0` for software-GL tests. */
+	fpsGuard?: boolean;
 }
 
 export interface ScreenPoint {
@@ -32,4 +35,6 @@ export interface SceneRenderer {
 	setQuality(q: Quality): void;
 	pause(): void;
 	resume(): void;
+	/** 3D only: the renderer gave up at runtime (context lost, too slow) — the caller swaps the scene to 2D. */
+	onFail?(fn: (reason: Fallback3dReason) => void): () => void;
 }

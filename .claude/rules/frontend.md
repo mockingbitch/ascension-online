@@ -14,7 +14,12 @@ paths:
 - No per-frame updates of large component trees. Use CSS animations/transitions or one `requestAnimationFrame`
   loop in a small component; respect `prefers-reduced-motion`.
 - MVP rendering = DOM + CSS + SVG. **Do not add PixiJS/Phaser/Three or any canvas/3D engine** without an approved
-  design decision (3D stays forbidden until the GĐ7 spike is approved in `docs/decisions.md`).
+  design decision. **3D (GĐ7, approved 2026-11-08 in `docs/decisions.md`):** Three.js is allowed **only** inside
+  `src/lib/engine/render/render3d/`, reached **only** through a dynamic import behind the `renderer=3d` flag
+  (`render/index.ts`); nothing else may import `three` or `render3d/*` statically (the initial `/play` bundle stays
+  3D-free). 2D stays the default; a 3D renderer implements `SceneRenderer`, renders on `gameLoop()` (never
+  `setAnimationLoop`/its own rAF), takes colours from tokens, disposes every GPU resource on unmount and falls back to
+  2D (no WebGL2 / context lost / fps < 40 for 5 s, remembered in settings).
   Exceptions (plain Canvas 2D, no engine): `src/lib/minigames/` for the approved mini games, and the client engine in
   `src/lib/engine/` (decisions.md 2026-11-07 "Client webgame"):
   - **One** `requestAnimationFrame` loop: subscribe to `engine/loop.ts` (`gameLoop()`); never start another rAF.

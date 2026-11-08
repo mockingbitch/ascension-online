@@ -3,8 +3,51 @@
 Product/architecture decisions that refine or deviate from the GDD
 ([design/tien-dao-online-gdd-architecture.md](design/tien-dao-online-gdd-architecture.md)). Newest first.
 
+## 2026-11-08 — GĐ7 spike result: 3D Tử Tiêu Cung — go for continuing behind the flag, no-go for default
+Spike per `apps/web/src/lib/engine/render/render3d/README.md`: plain Three.js r187 (not Threlte: the contract is an
+imperative class on the shared loop; Threlte adds its own scheduler and bytes for no gain), procedural hall from
+primitives (no downloaded assets), token colours, `gameLoop()` rendering, per-scene renderer selection.
+- **Numbers (measured).** Initial `/play` JS 111.5 → 112.4 kB gz (+0.9, budget +1). Lazy 3D chunk (three + renderer,
+  one chunk, only fetched under `renderer=3d`) 611.5 kB raw / 151.2 kB gz / 125.5 kB br (budget 250 gz). Scene: ~21k
+  triangles, 51–66 draw calls (lite/off), 79–99 with the full shadow pass (budget 150k / 120). Textures: one 64² puff
+  + 1024² shadow map at full. `anchorToScreen` parity with 2D at rest (fx off): ≤ 0.15 px at 1440 and 375 for Hồng
+  Quân, dais and all 36 seats (≤ 0.31 px after a resize); with the idle drift anchors stay within 1–7 px of the 2D
+  points and follow the 3D objects. Mount: shaders via `compileAsync`, 20–220 ms after the first (≈ 1.1 s cold).
+  40× world ↔ hall mount/unmount: one live WebGL context at a time, heap flat after warm-up (Δ cycles 20→40 +0.40 MB
+  vs +0.37 MB for the same loop in 2D, dev build).
+- **fps: not representative.** Headless Chromium on SwiftShader (software GL): 1440 full ≈ 12, lite ≈ 14 fps; 375
+  full ≈ 41, lite ≈ 48; 2D 60. These prove the code paths (the < 40 fps watchdog really tripped after 7.7 s and fell
+  back) — not device performance. **Real-device measurement remains for the owner**: mid-range Android + laptop, idle
+  and effect fps, battery/heat over 10 min, heap.
+- **Verified:** WebGL canvas only in the hall under the flag, other scenes stay 2D; static render at off/reduced
+  motion (one frame per layout); a window pauses rendering; fallbacks no-WebGL2 / context lost / slow → 2D + toast +
+  remembered reason (shown in Cài đặt, cleared by choosing 3D again); Cài đặt › Hiển thị choice switches live and
+  persists; no console errors.
+- **Risks observed:** shader compile per new context (blocked the main thread for seconds on software GL before
+  `compileAsync`); continuous rendering at full costs battery (lite/off mitigate); a device slow only sometimes may
+  flip to 2D for good until the player re-enables 3D; listeners are still DOM sprites over 3D cushions.
+- **Go / no-go.** **Go** to keep 3D behind the experimental flag and continue to real art; **no-go** for making 3D the
+  default or porting other scenes until real-device numbers (owner) meet 60 fps idle on mid-range Android.
+- **Next steps:** original/licensed `model.glb` + `characters/hong-quan.glb` (slots already load them), gltf-transform
+  pipeline with KTX2/Basis + Draco/meshopt decoders (lazy), small prefiltered `env.hdr`, instanced 3D listeners, then
+  Động Phủ / Thế Giới only after the hall passes on devices.
+
+## 2026-11-08 — GĐ7 3D spike approved by owner 2026-11-08
+The project owner approved the GĐ7 spike today by asking for it directly ("gd7"). This opens the 3D path of the
+"Client webgame" entry below, **for the spike only**:
+- **Scope** (per `apps/web/src/lib/engine/render/render3d/README.md`): Tử Tiêu Cung only, drawn by a 3D
+  `SceneRenderer` (Three.js) behind `renderer=3d` (URL `?renderer=3d` or Cài đặt › Hiển thị "3D thử nghiệm"); every
+  other scene stays 2D and **2D stays the default**. Same `SceneDef`/anchors contract, same single `gameLoop()`,
+  same FxLayer. Fallback to 2D on missing WebGL2, `webglcontextlost`, or fps < 40 for 5 s (remembered in settings).
+  No downloaded assets: procedural hall from primitives, with `model.glb` / `env.hdr` / character `.glb` slots.
+- **Budgets** (mid-range Android): triangles ≤ 150k scene + ≤ 20k per character; draw calls ≤ 120; textures
+  ≤ 48 MB GPU, 2048² max, KTX2; lazy 3D JS ≤ 250 kB gz and **never** in the initial `/play` bundle (initial `/play`
+  may grow ≤ 1 kB gz for the flag check); 60 fps idle, ≥ 45 fps during big effects.
+- **Where 3D code may live:** only `apps/web/src/lib/engine/render/render3d/`, loaded by dynamic import
+  (`.claude/rules/frontend.md`). The go/no-go for going beyond the spike is recorded below once measured.
+
 ## 2026-11-07 — Client webgame: cảnh/cửa sổ/chế độ, engine 2D tách renderer, lộ trình 3D
-Spec: [design/webgame-refactor-prompt.md](design/webgame-refactor-prompt.md). GĐ0–GĐ6 done; GĐ7 (3D spike) blocked until the owner records approval.
+Spec: [design/webgame-refactor-prompt.md](design/webgame-refactor-prompt.md). GĐ0–GĐ6 done; GĐ7 (3D spike) approved 2026-11-08 and done — see the two GĐ7 entries above.
 - **Architecture.** The `/play` client becomes a webgame: a **scene** always alive behind (Thế Giới, Động Phủ, Tử
   Tiêu Cung, …), **windows** over it (stack ≤ 2, Back/Esc closes the window before leaving the scene, shallow
   routing), full-screen **modes** for mini games / breakthrough. Client engine in `apps/web/src/lib/engine/`:

@@ -3,13 +3,18 @@
 	SceneRenderer (lazy: renderer, def and view are dynamic imports) into a box that follows the page's SceneSlot, or
 	the shell's stage cell when the page has none. It never unmounts for a window: a covering window or screen pauses
 	the renderer (parallax) and the ambient loops, and dims the scene.
+	GĐ7: the renderer kind is per scene (settings.rendererFor: 2D unless `renderer=3d` and the scene has a 3D version).
+	A 3D renderer that cannot mount (no WebGL2) or gives up later (context lost, too slow) is remembered as a fallback
+	in settings, a toast says so, and the scene re-mounts in 2D.
 -->
 <script lang="ts">
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { tokenResolver } from '../fx/colors';
 	import { ParticleField } from '../fx/layer';
 	import { ParticleSystem } from '../fx/particles';
+	import { toast } from '$lib/game/toasts.svelte';
 	import { createRenderer } from '../render';
+	import { FALLBACK_REASONS, type Fallback3dReason } from '../render/select';
 	import type { SceneRenderer } from '../render/types';
 	import { settings } from '../settings.svelte';
 	import { loadSceneDef } from './defs';
@@ -65,20 +70,50 @@
 		};
 	});
 
+	// 3D gave up: remember it (the scene's renderer kind turns 2D, which re-runs the mount effect) and say so.
+	let failOff: (() => void) | null = null;
+	function fallBack(reason: Fallback3dReason) {
+		if (settings.fallback3d) return;
+		settings.recordFallback3d(reason);
+		toast('warn', 'Thiết bị không hỗ trợ 3D, đã chuyển về 2D');
+	}
+
 	// Mount the shown scene (under the transition cover when there is one), then tell the stage it is ready.
 	$effect(() => {
 		const id = stage.shown;
 		const el = host;
 		if (!id || !el) return;
+		const kind = settings.rendererFor(id); // tracked: a fallback or a Cài đặt change re-mounts the scene
 		let cancelled = false;
 		void (async () => {
 			const r = untrack(() => renderer);
-			const [rr, def, View] = await Promise.all([r ?? createRenderer(settings.renderer), loadSceneDef(id), loadSceneView(id)]);
+			const reuse = r && r.kind === kind ? r : null;
+			const make = reuse ? Promise.resolve(reuse) : createRenderer(kind).catch(() => null);
+			const [rr, def, View] = await Promise.all([make, loadSceneDef(id), loadSceneView(id)]);
 			if (cancelled || !def) return;
+			if (!rr) return fallBack('error'); // the 3D chunk failed to load
 			untrack(() => current)?.ctx.dispose();
 			current = null;
-			await rr.mount(el, def, { quality: untrack(() => settings.fx) });
-			if (cancelled) return;
+			if (r && r !== rr) {
+				// switching 2D ↔ 3D: the old renderer leaves the host before the new one mounts
+				failOff?.();
+				failOff = null;
+				r.unmount();
+				renderer = null;
+				stage.renderer = null;
+			}
+			try {
+				await rr.mount(el, def, { quality: untrack(() => settings.fx), fpsGuard: settings.fpsGuard });
+			} catch (e) {
+				if (rr.kind !== '3d') throw e;
+				const reason = (e as { reason?: Fallback3dReason } | null)?.reason; // render3d/failure.ts RendererFailure
+				return fallBack(reason && FALLBACK_REASONS.includes(reason) ? reason : 'error');
+			}
+			if (cancelled) {
+				if (rr.kind === '3d' && rr !== r) rr.unmount(); // never strand a GL context
+				return;
+			}
+			if (rr !== r) failOff = rr.onFail?.(fallBack) ?? null;
 			renderer = rr;
 			stage.renderer = rr;
 			stage.def = def;
@@ -99,6 +134,7 @@
 	});
 
 	onDestroy(() => {
+		failOff?.();
 		current?.ctx.dispose();
 		renderer?.unmount();
 		stage.renderer = null;

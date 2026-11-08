@@ -4,7 +4,8 @@
 
 export type SceneId = 'world' | 'dong_phu' | 'tu_tieu_cung' | 'son_mon' | 'dao_hoa_dinh' | 'bi_canh_gate';
 
-/** Normalised point in the scene's art frame: x, y in 0..1 (0,0 = top-left); z optional depth for 3D. */
+/** Normalised point in the scene's art frame: x, y in 0..1 (0,0 = top-left). `z` (3D only, the 2D renderer ignores
+ * it): height above the floor in hall units — the 3D renderer puts the anchor where the frame ray meets that height. */
 export interface Anchor {
 	x: number;
 	y: number;

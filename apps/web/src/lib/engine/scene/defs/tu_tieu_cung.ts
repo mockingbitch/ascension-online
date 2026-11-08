@@ -39,9 +39,11 @@ export const tuTieuCung: SceneDef = {
 	frame: { aspect: 16 / 9, fit: 'cover', focus: { x: 0.5, y: 0 } },
 	layers: [{ id: 'hall', art: 'scenes/tu-tieu-cung', depth: 0 }],
 	anchors: {
-		dais: HALL_DAIS,
+		// z = height above the floor for the 3D renderer (render3d/hall.ts: dais top 0.9; the qi source sits on the sage's
+		// lap at the same depth); 2D ignores it
+		dais: { ...HALL_DAIS, z: 1.46 },
 		// the sage image is bottom-aligned at 73% from the bottom of the painting → feet at y = 0.27
-		hong_quan: { x: 0.5, y: 0.27 },
+		hong_quan: { x: 0.5, y: 0.27, z: 0.9 },
 		subtitle: { x: 0.5, y: 0.86 },
 		...Object.fromEntries(hallSeats().map((s) => [`seat.${s.seat}`, { x: s.x, y: s.y }]))
 	},
