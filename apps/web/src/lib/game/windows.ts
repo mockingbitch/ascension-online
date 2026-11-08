@@ -1,33 +1,38 @@
-// Game-shell windows: features open over the cultivation scene instead of navigating away. Uses SvelteKit
-// shallow routing, so the browser Back button (and Esc) closes the window and the scene never unmounts.
-import { pushState, replaceState } from '$app/navigation';
+// Game-shell windows: features open over the current scene instead of navigating away. SvelteKit shallow routing:
+// `page.state.wins` is the window stack (≤ 2, lib/game/windowStack.ts), one history entry per stacked window, so the
+// browser Back button (and Esc / swipe-down, which call history.back()) closes the top window first and the scene
+// never unmounts.
+import { goto, pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
+import { pushWindow, updateTop, type WindowState } from './windowStack';
 
-export type WindowState =
-	| { kind: 'tasks' }
-	| { kind: 'vip' }
-	| { kind: 'notifications' }
-	| { kind: 'chat' } // mobile: the chat panel is docked on desktop
-	| {
-			kind: 'profile';
-			characterId: string;
-			name: string;
-			stageId: string;
-			messageId?: number;
-			/** equipped cosmetics carried by the row/message (display only) */
-			avatarFrameId?: string;
-			titleId?: string;
-			nameFx?: string;
-	  };
+export type { WindowKind, WindowState } from './windowStack';
 
-export type WindowKind = WindowState['kind'];
+/** The open windows, bottom → top. */
+export const openWindows = (): WindowState[] => page.state.wins ?? [];
 
-/** Open a window; switching from one window to another replaces the entry so Back returns to the scene. */
+/** Open a window over the scene (stacked over an open window; at most two — the top one is replaced when full). */
 export function openWindow(w: WindowState) {
-	if (page.state.win) replaceState('', { win: w });
-	else pushState('', { win: w });
+	const { stack, mode } = pushWindow(openWindows(), w);
+	if (mode === 'push') pushState('', { wins: stack });
+	else replaceState('', { wins: stack });
 }
 
+/** Change the top window's state in place (its tab) — same history entry. */
+export function updateWindow(w: WindowState) {
+	if (openWindows().length) replaceState('', { wins: updateTop(openWindows(), w) });
+}
+
+/** Close the top window (history.back(), so the URL/back stack stay consistent). */
 export function closeWindow() {
-	if (page.state.win) history.back();
+	if (openWindows().length || page.state.sub) history.back();
+}
+
+// A mode route (the mini games) closes back to where the player came from inside the game, or to
+// the world when the game was opened on it directly. The shell records whether an in-app navigation happened.
+let cameInApp = false;
+export const markInAppNavigation = (inApp: boolean) => (cameInApp = inApp);
+export function leaveRoute() {
+	if (cameInApp) history.back();
+	else void goto('/play');
 }

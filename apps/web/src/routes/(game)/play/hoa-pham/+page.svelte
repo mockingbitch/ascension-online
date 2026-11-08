@@ -2,12 +2,20 @@
      The server issues the seeded run and judges the submission by replaying the stroke log; this page only plays,
      records and shows the server's verdict. Practice mode is local and never sent. -->
 <script lang="ts">
+	import { onDestroy, tick } from 'svelte';
 	import { ApiError, api, newIdempotencyKey } from '$lib/api/client';
 	import Icon from '$lib/components/Icon.svelte';
 	import RealmBadge from '$lib/components/RealmBadge.svelte';
-	import ScreenFrame from '$lib/components/ScreenFrame.svelte';
+	import { leaveRoute } from '$lib/game/windows';
 	import type { HoaPhamParams, TrialClaim, TrialKindStatus, TrialRunStart, TrialSubmitResult } from '$lib/game/types';
 	import { game } from '$lib/game/store.svelte';
+	import { InFlight, TimeoutError } from '$lib/game/inflight';
+	import { fxBus } from '$lib/engine/fx/bus';
+	import { countdownMs, RESPONSE_TIMEOUT_MS } from '$lib/engine/mode/machine';
+	import { ModeController } from '$lib/engine/mode/mode.svelte';
+	import ModeResult from '$lib/engine/mode/ModeResult.svelte';
+	import ModeShell from '$lib/engine/mode/ModeShell.svelte';
+	import { settings } from '$lib/engine/settings.svelte';
 	import { toast } from '$lib/game/toasts.svelte';
 	import HoaPhamBoard from '$lib/minigames/hoa-pham/HoaPhamBoard.svelte';
 	import type { EndReason } from '$lib/minigames/hoa-pham/sim';
@@ -15,17 +23,20 @@
 	let { data } = $props();
 
 	const KIND = 'hoa_pham';
+
 	// svelte-ignore state_referenced_locally
 	let kind = $state<TrialKindStatus | null>(data.status?.kinds.find((k) => k.kind === KIND) ?? null);
-	type Phase = 'intro' | 'play' | 'judging' | 'verdict';
-	let phase = $state<Phase>('intro');
 	let run = $state<{ params: HoaPhamParams; seed: number; runId: string | null; key: string; nonce: number } | null>(null);
 	let claim = $state<TrialClaim | null>(null);
 	let local = $state<{ won: boolean; reason: EndReason; score: number; cuts: number } | null>(null);
 	let verdict = $state<TrialSubmitResult | null>(null);
 	let busy = $state(false);
-	let sendError = $state(false);
 	let board = $state<{ giveUp: () => void }>();
+	const submitting = new InFlight<TrialSubmitResult>();
+
+	// Full-screen mode (lobby → 3-2-1 → play → the server judges → result); Esc/Back pause first, then confirm.
+	const mode = new ModeController({ exit: leaveRoute, giveUp: () => board?.giveUp() });
+	onDestroy(() => mode.dispose());
 
 	const cat = $derived(game.catalogue!);
 	const fromRealm = $derived(kind?.fromRealmId ? cat.realms.get(kind.fromRealmId) : undefined);
@@ -56,6 +67,13 @@
 		kind = st?.kinds.find((k) => k.kind === KIND) ?? kind;
 	}
 
+	function begin(r: NonNullable<typeof run>) {
+		run = r;
+		claim = null;
+		verdict = null;
+		mode.send({ type: 'start', countdownMs: countdownMs(settings.fx) });
+	}
+
 	async function start() {
 		if (!kind || busy) return;
 		busy = true;
@@ -63,10 +81,7 @@
 			const r: TrialRunStart = await api.trialStart(fetch, kind.kind);
 			kind = r.status;
 			if (r.resumed) toast('warn', 'Phiên đang mở được tiếp tục: thế cục như cũ, ván chơi bắt đầu lại từ đầu.');
-			run = { params: r.params as HoaPhamParams, seed: r.seed, runId: r.runId, key: newIdempotencyKey(), nonce: Date.now() };
-			claim = null;
-			verdict = null;
-			phase = 'play';
+			begin({ params: r.params as HoaPhamParams, seed: r.seed, runId: r.runId, key: newIdempotencyKey(), nonce: Date.now() });
 		} catch (e) {
 			if (e instanceof ApiError && e.details) kind = e.details as TrialKindStatus;
 			toast('err', e instanceof ApiError ? e.message : 'Không mở được thử luyện, thử lại sau.');
@@ -79,133 +94,137 @@
 		if (!kind) return;
 		const buf = new Uint32Array(1);
 		crypto.getRandomValues(buf);
-		run = { params: kind.params as HoaPhamParams, seed: buf[0]! || 1, runId: null, key: '', nonce: Date.now() };
-		claim = null;
-		verdict = null;
-		phase = 'play';
+		begin({ params: kind.params as HoaPhamParams, seed: buf[0]! || 1, runId: null, key: '', nonce: Date.now() });
 	}
 
 	function onend(c: TrialClaim, l: { won: boolean; reason: EndReason; score: number; cuts: number }) {
 		claim = c;
 		local = l;
-		if (!run?.runId) {
-			phase = 'verdict'; // practice: nothing to send
-			return;
-		}
-		void submit();
+		mode.send({ type: 'ended', local: !run?.runId }); // practice: nothing to send
+		if (run?.runId) void submit();
+	}
+
+	/** The server's verdict (once per run, even if a retry and a late answer both deliver it). */
+	async function apply(v: TrialSubmitResult, key: string) {
+		if (!run || run.key !== key || verdict) return;
+		verdict = v;
+		kind = v.status;
+		mode.send({ type: 'verdict' });
+		await tick(); // the result screen is on screen before its effects start
+		if (v.verdict === 'pass' || v.verdict === 'fail') fxBus.emit('trialResult', { verdict: v.verdict });
+		if (v.verdict === 'pass') void game.refreshSide(); // the breakthrough preview now shows the pass
 	}
 
 	async function submit() {
 		if (!run?.runId || !claim) return;
-		phase = 'judging';
-		sendError = false;
+		const { runId, key } = run;
+		const c = claim;
+		if (mode.phase === 'error') mode.send({ type: 'retry' });
 		try {
-			// Same Idempotency-Key on retry: a lost response never turns into a second submission.
-			verdict = await api.trialSubmit(fetch, run.runId, claim, run.key);
-			kind = verdict.status;
-			phase = 'verdict';
-			if (verdict.verdict === 'pass') void game.refreshSide(); // the breakthrough preview now shows the pass
+			// Same Idempotency-Key on retry (and a retry joins a request still in flight): never a second submission.
+			const v = await submitting.run(() => api.trialSubmit(fetch, runId, c, key), RESPONSE_TIMEOUT_MS);
+			await apply(v, key);
 		} catch (e) {
+			if (e instanceof TimeoutError) {
+				mode.send({ type: 'fail' });
+				submitting.late((v) => void apply(v, key));
+				return;
+			}
 			if (e instanceof ApiError && e.code === 'already_submitted') {
 				await refreshStatus();
-				phase = 'intro';
+				backToIntro();
 				toast('warn', 'Phiên này đã được phán định trước đó.');
 				return;
 			}
-			sendError = true;
+			mode.send({ type: 'fail' });
 		}
 	}
 
-	function giveUp() {
-		if (confirm(run?.runId ? 'Dừng thử luyện? Lần này sẽ tính là chưa qua.' : 'Dừng ván luyện tập?')) board?.giveUp();
-	}
-
 	function backToIntro() {
-		phase = 'intro';
+		mode.send({ type: 'reset' });
 		run = null;
 		void refreshStatus();
 	}
+	const replay = () => (run && !run.runId ? practice() : backToIntro());
 </script>
 
 <svelte:head><title>Hóa Phàm · Tiên Đạo</title></svelte:head>
 
-<ScreenFrame title="Hóa Phàm" subtitle={phase === 'play' && run && !run.runId ? 'Luyện tập — không tính, không gửi máy chủ' : toRealm ? `Đoạn trần duyên trước khi lên ${toRealm.name}` : 'Đoạn trần duyên'} icon="lotus" bleed>
-	{#snippet actions()}
-		{#if phase === 'play'}
-			<button type="button" class="btn btn-ghost h-10 px-3 text-sm" onclick={giveUp}><Icon name="exit" size={16} /> Dừng</button>
-		{:else}
-			<a href="/play/dot-pha" class="btn btn-ghost h-10 px-3 text-sm"><Icon name="bolt" size={16} /> Đột Phá</a>
-		{/if}
-	{/snippet}
-
-	{#if phase === 'play' && run}
+<ModeShell
+	{mode}
+	title="Hóa Phàm"
+	subtitle={run && !run.runId && mode.phase !== 'lobby' ? 'Luyện tập — không tính, không gửi máy chủ' : toRealm ? `Đoạn trần duyên trước khi lên ${toRealm.name}` : 'Đoạn trần duyên'}
+	icon="lotus"
+	orientation="portrait"
+	waitingText="Thiên đạo đang phát lại từng nét chém…"
+	confirmText={run?.runId ? 'Dừng giữa chừng: lần này sẽ tính là chưa qua.' : 'Dừng ván luyện tập?'}
+	onretry={() => void submit()}
+>
+	{#if (mode.phase === 'countdown' || mode.phase === 'play') && run}
 		<div class="h-full p-3 sm:p-4">
 			{#key run.nonce}
-				<HoaPhamBoard bind:this={board} params={run.params} seed={run.seed} practice={!run.runId} {onend} />
+				<HoaPhamBoard
+					bind:this={board}
+					bind:paused={() => mode.paused, (v) => mode.send({ type: v ? 'pause' : 'resume' })}
+					hold={mode.phase === 'countdown'}
+					countdownMs={0}
+					params={run.params}
+					seed={run.seed}
+					practice={!run.runId}
+					{onend}
+				/>
 			{/key}
 		</div>
-	{:else if phase === 'judging'}
-		<div class="grid h-full place-items-center p-6 text-center">
-			<div>
-				<div class="seal mx-auto grid size-24 place-items-center rounded-full text-gold-300" class:animate-qi-breathe={!sendError}>
-					<Icon name="lotus" size={36} />
-				</div>
-				{#if sendError}
-					<p class="mt-5 text-mist-100">Chưa gửi được kết quả về máy chủ.</p>
-					<p class="mt-1 text-sm text-mist-500">Ván chơi đã được lưu tạm trên trang này. Gửi lại trước khi phiên hết hạn.</p>
-					<button type="button" class="btn btn-jade mt-4" onclick={() => void submit()}>Gửi lại</button>
+	{:else if mode.phase === 'result'}
+		{#if !run?.runId && claim && local}
+			<ModeResult
+				verdict="practice"
+				heading={local.won ? 'Tâm đã giản phác' : 'Trần duyên còn vương'}
+				reason={reasonText[local.reason] ?? ''}
+				stats={[
+					{ label: 'Điểm trần duyên', value: `${local.score}/${run?.params.passScore ?? ''}` },
+					{ label: 'Nút đã đoạn', value: String(local.cuts) }
+				]}
+				replayLabel="Luyện lại"
+				onreplay={replay}
+				onback={leaveRoute}
+			>
+				<p class="text-xs text-mist-500">Ván luyện tập không gửi máy chủ nên không mở cửa đột phá.</p>
+			</ModeResult>
+		{:else if verdict}
+			<ModeResult
+				verdict={verdict.verdict === 'pass' ? 'pass' : verdict.verdict === 'fail' ? 'fail' : 'void'}
+				heading={verdict.verdict === 'pass'
+					? 'Hóa phàm đã thành'
+					: verdict.verdict === 'fail'
+						? 'Trần duyên còn vương'
+						: verdict.verdict === 'expired'
+							? 'Phiên đã hết hạn'
+							: 'Kết quả không được ghi nhận'}
+				reason={reasonText[verdict.reason] ?? ''}
+				stats={verdict.outcome
+					? [
+							{ label: 'Điểm trần duyên', value: `${verdict.outcome.score}/${run?.params.passScore ?? ''}` },
+							{ label: 'Nút đã đoạn', value: String(verdict.outcome.lines) }
+						]
+					: []}
+				onreplay={replay}
+				onback={leaveRoute}
+			>
+				{#if verdict.verdict === 'pass'}
+					<p>Ấn chứng có hiệu lực tới <span class="text-mist-100">{fmtTime(verdict.passValidUntil, true)}</span> và được giữ qua các lần đột phá thất bại.</p>
+					{#if verdict.vipPoints > 0}<p class="text-mist-500">+{verdict.vipPoints} điểm duyên</p>{/if}
 				{:else}
-					<p class="mt-5 font-display text-2xl text-gold-300">Thiên đạo đang phát lại từng nét chém…</p>
-					<p class="mt-1 text-sm text-mist-500">Kết quả chỉ do máy chủ phán định.</p>
+					<p>Không mất tu vi. Tĩnh dưỡng rồi thử lại lúc <span class="text-mist-100">{fmtTime(verdict.cooldownUntil)}</span>.</p>
 				{/if}
-			</div>
-		</div>
-	{:else if phase === 'verdict'}
-		<div class="grid h-full place-items-center overflow-y-auto p-4">
-			<div class="panel w-full max-w-md p-5 text-center">
-				{#if !run?.runId && claim && local}
-					<p class="eyebrow">Luyện tập — không tính</p>
-					<p class="mt-2 font-display text-3xl font-bold" class:text-jade-300={local.won} class:text-mist-100={!local.won}>
-						{local.won ? 'Tâm đã giản phác' : 'Trần duyên còn vương'}
-					</p>
-					<p class="mt-2 text-mist-300">
-						{reasonText[local.reason] ?? ''} Được <span class="text-mist-100 tabular-nums">{local.score}</span> điểm trần duyên, đoạn
-						<span class="text-mist-100 tabular-nums">{local.cuts}</span> nút.
-					</p>
-					<p class="mt-1 text-xs text-mist-500">Ván luyện tập không gửi máy chủ nên không mở cửa đột phá.</p>
-				{:else if verdict}
-					{#if verdict.verdict === 'pass'}
-						<div class="seal pass mx-auto grid size-20 place-items-center rounded-full text-gold-300"><Icon name="check" size={34} /></div>
-						<p class="mt-4 font-display text-3xl font-bold text-gold-300">Hóa phàm đã thành</p>
-						<p class="mt-2 text-mist-300">
-							{reasonText[verdict.reason] ?? ''} Ấn chứng có hiệu lực tới
-							<span class="text-mist-100">{fmtTime(verdict.passValidUntil, true)}</span> và được giữ qua các lần đột phá thất bại.
-						</p>
-						{#if verdict.vipPoints > 0}<p class="mt-1 text-sm text-mist-500">+{verdict.vipPoints} điểm duyên</p>{/if}
-						<a href="/play/dot-pha" class="btn btn-gold mt-5 h-12 w-full text-base"><Icon name="bolt" size={18} /> Tới Đột Phá</a>
-					{:else}
-						<div class="seal mx-auto grid size-20 place-items-center rounded-full text-cinnabar-300"><Icon name="cross" size={30} /></div>
-						<p class="mt-4 font-display text-3xl font-bold text-mist-100">
-							{verdict.verdict === 'fail' ? 'Trần duyên còn vương' : verdict.verdict === 'expired' ? 'Phiên đã hết hạn' : 'Kết quả không được ghi nhận'}
-						</p>
-						<p class="mt-2 text-mist-300">{reasonText[verdict.reason] ?? ''}</p>
-						{#if verdict.outcome}
-							<p class="mt-1 text-sm text-mist-500">
-								Thiên đạo ghi nhận {verdict.outcome.score}/{run?.params.passScore} điểm trần duyên, đoạn {verdict.outcome.lines} nút.
-							</p>
-						{/if}
-						<p class="mt-3 text-sm text-mist-300">
-							Không mất tu vi. Tĩnh dưỡng rồi thử lại lúc <span class="text-mist-100">{fmtTime(verdict.cooldownUntil)}</span>.
-						</p>
+				{#snippet actions()}
+					{#if verdict?.verdict === 'pass'}
+						<a href="/play/dot-pha" class="btn btn-gold h-12 w-full text-base"><Icon name="bolt" size={18} /> Tới Đột Phá</a>
 					{/if}
-				{/if}
-				<div class="mt-4 grid gap-2 sm:grid-cols-2">
-					<button type="button" class="btn btn-ghost" onclick={backToIntro}>Về thử luyện</button>
-					<button type="button" class="btn btn-ghost" onclick={practice}><Icon name="lotus" size={16} /> Luyện tập</button>
-				</div>
-			</div>
-		</div>
-	{:else}
+				{/snippet}
+			</ModeResult>
+		{/if}
+	{:else if mode.phase === 'lobby'}
 		<div class="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] content-start overflow-y-auto lg:grid-cols-[minmax(0,1fr)_380px] lg:content-stretch">
 			<section class="intro relative flex flex-col items-center justify-center gap-4 px-4 py-6 text-center">
 				<div class="mist absolute inset-0" aria-hidden="true"></div>
@@ -274,7 +293,7 @@
 			</aside>
 		</div>
 	{/if}
-</ScreenFrame>
+</ModeShell>
 
 <style>
 	.mist {
@@ -314,18 +333,5 @@
 	.state {
 		border: 1px solid color-mix(in oklab, var(--color-gold-500) 25%, transparent);
 		background: color-mix(in oklab, var(--color-ink-950) 50%, transparent);
-	}
-	.seal {
-		background: radial-gradient(circle, color-mix(in oklab, var(--color-gold-500) 14%, var(--color-ink-800)), var(--color-ink-950));
-		box-shadow:
-			0 0 0 1px var(--color-gold-500),
-			0 0 0 6px var(--color-ink-950),
-			0 0 0 7px color-mix(in oklab, var(--color-gold-500) 40%, transparent);
-	}
-	.seal.pass {
-		box-shadow:
-			0 0 0 1px var(--color-gold-300),
-			0 0 0 6px var(--color-ink-950),
-			0 0 30px -4px color-mix(in oklab, var(--color-gold-300) 50%, transparent);
 	}
 </style>

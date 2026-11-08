@@ -9,11 +9,15 @@
 	import { game } from '$lib/game/store.svelte';
 	import { toast } from '$lib/game/toasts.svelte';
 	import type { FortuneView } from '$lib/game/types';
+	import { fxBus } from '$lib/engine/fx/bus';
+	import FortuneCup from './FortuneCup.svelte';
 	import Icon from './Icon.svelte';
 
 	let view = $state<FortuneView | null>(null);
 	let drawing = $state(false);
 	let showOdds = $state(false);
+	/** drawn in this visit: the cup and the odds stay on screen next to the result */
+	let drew = $state(false);
 
 	$effect(() => {
 		api
@@ -26,9 +30,11 @@
 
 	async function draw() {
 		drawing = true;
+		drew = true;
 		try {
 			view = await api.fortuneDraw();
 			const o = view.today?.outcome;
+			if (o) fxBus.emit('fortune', { outcomeId: o.id, name: o.name, lucky: o.rateBonusBp > 0 });
 			if (o) toast('ok', o.rateBonusBp > 0 ? `${o.name}: tốc độ tu luyện +${formatBp(o.rateBonusBp)} tới hết hôm nay.` : `${o.name}: một ngày bình thường.`);
 			await game.reload();
 		} catch (e) {
@@ -49,7 +55,8 @@
 	{#if !view}
 		<p class="mt-2 text-sm text-mist-500">Đang tải…</p>
 	{:else}
-		{#if showOdds || !view.today}
+		{#if !view.today || drew}<div class="mt-2"><FortuneCup shaking={drawing} /></div>{/if}
+		{#if showOdds || !view.today || drew}
 			<table class="odds mt-2 w-full text-xs">
 				<caption class="sr-only">Tỉ lệ công bố của mỗi quẻ</caption>
 				<thead><tr><th scope="col">Quẻ</th><th scope="col">Tỉ lệ</th><th scope="col">Tốc độ tu luyện</th></tr></thead>

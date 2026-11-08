@@ -16,9 +16,15 @@
 		seed: number;
 		/** practice: local seed, nothing is sent */
 		practice?: boolean;
+		/** paused (bindable: the mode frame pauses on Esc/Back; the board pauses itself on P, hidden tab, its buttons) */
+		paused?: boolean;
+		/** frozen without the pause veil (the mode's 3-2-1 countdown runs over the board) */
+		hold?: boolean;
+		/** the board's own countdown before the first tick (0 when the mode frame counts down) */
+		countdownMs?: number;
 		onend: (claim: TrialClaim, local: { won: boolean; reason: EndReason }) => void;
 	}
-	let { params, seed, practice = false, onend }: Props = $props();
+	let { params, seed, practice = false, paused = $bindable(false), hold = false, countdownMs = 3000, onend }: Props = $props();
 
 	// svelte-ignore state_referenced_locally
 	const g = new TamMaGame(params, seed);
@@ -39,8 +45,8 @@
 	let ticksLeft = $state(0);
 	let charge = $state(0);
 	let calmLeft = $state(0);
-	let paused = $state(false);
-	let countdown = $state(3);
+	// svelte-ignore state_referenced_locally
+	let countdown = $state(Math.ceil(countdownMs / 1000));
 	let ended = $state(false);
 	let reducedMotion = $state(false);
 	let clearFlash = 0;
@@ -124,7 +130,7 @@
 	}
 
 	function push(a: number) {
-		if (ended || paused || countdown > 0 || queue.length >= QUEUE_MAX) return;
+		if (ended || paused || hold || countdown > 0 || queue.length >= QUEUE_MAX) return;
 		queue.push(a);
 	}
 
@@ -149,7 +155,7 @@
 		if (ended) return;
 		const target = e.target as HTMLElement | null;
 		if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
-		if (e.code === 'KeyP' || e.code === 'Escape') {
+		if (e.code === 'KeyP') {
 			e.preventDefault();
 			if (!e.repeat) paused = !paused;
 			return;
@@ -193,11 +199,11 @@
 		let raf = 0;
 		let last = performance.now();
 		let acc = 0;
-		let cdLeft = 3000;
+		let cdLeft = countdownMs;
 		const frame = (t: number) => {
 			const dt = Math.min(250, t - last);
 			last = t;
-			if (!paused && !ended) {
+			if (!paused && !ended && !hold) {
 				if (cdLeft > 0) {
 					cdLeft -= dt;
 					countdown = Math.max(0, Math.ceil(cdLeft / 1000));

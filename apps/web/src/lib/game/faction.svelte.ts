@@ -1,6 +1,7 @@
 // Faction state for the shell (GET /factions, GET /factions/me). Every value is server data and is REPLACED by each
 // response. Mutations keep their idempotency key across network errors so a retry replays the same intent.
 import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
+import { withRetry } from './retry';
 import type { FactionList, FactionMembership, FactionView, PathId } from './types';
 
 export const factions = $state<{ list: FactionList | null; me: FactionMembership | null; busy: boolean }>({
@@ -35,20 +36,25 @@ export const factionColor = (f: Pick<FactionView, 'color'> | undefined | null) =
 
 export const factionOf = (id: string | null | undefined) => (id ? factions.list?.factions.find((f) => f.id === id) : undefined);
 
-export async function loadFactions(f: typeof fetch = fetch) {
-	try {
-		factions.list = await api.factions(f);
-	} catch {
-		/* decorative elsewhere; the Thế Lực screen shows its own error */
-	}
-}
+// GET /factions is public and rate limited per IP (shared with /world). The shell passes `retry` so a 429/5xx/network
+// miss at startup is retried with backoff (lib/game/retry.ts) instead of leaving every faction name unresolved.
+const load = (fn: () => Promise<void>, retry: boolean) => withRetry(fn, retry).then(() => undefined);
 
-export async function loadFactionMe(f: typeof fetch = fetch) {
-	try {
-		factions.me = await api.factionMe(f);
-	} catch {
-		/* keep the last known state */
-	}
+export const loadFactions = (f: typeof fetch = fetch, retry = false) =>
+	load(async () => void (factions.list = await api.factions(f)), retry);
+
+export const loadFactionMe = (f: typeof fetch = fetch, retry = false) =>
+	load(async () => void (factions.me = await api.factionMe(f)), retry);
+
+/**
+ * Membership as the UI should show it. `me` null = not loaded yet (never "no faction"); a member whose faction is
+ * missing from the roster (roster still loading or failed) is still a member — the name is just unknown.
+ */
+export function myFaction(): { state: 'loading' } | { state: 'none' } | { state: 'member'; id: string; view: FactionView | undefined } {
+	const id = factions.me?.factionId;
+	if (!factions.me) return { state: 'loading' };
+	if (!id) return { state: 'none' };
+	return { state: 'member', id, view: factionOf(id) };
 }
 
 // One pending key per intent (action + target), reused on 5xx/network errors only.

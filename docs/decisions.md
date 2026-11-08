@@ -3,6 +3,303 @@
 Product/architecture decisions that refine or deviate from the GDD
 ([design/tien-dao-online-gdd-architecture.md](design/tien-dao-online-gdd-architecture.md)). Newest first.
 
+## 2026-11-07 — Client webgame: cảnh/cửa sổ/chế độ, engine 2D tách renderer, lộ trình 3D
+Spec: [design/webgame-refactor-prompt.md](design/webgame-refactor-prompt.md). GĐ0–GĐ6 done; GĐ7 (3D spike) blocked until the owner records approval.
+- **Architecture.** The `/play` client becomes a webgame: a **scene** always alive behind (Thế Giới, Động Phủ, Tử
+  Tiêu Cung, …), **windows** over it (stack ≤ 2, Back/Esc closes the window before leaving the scene, shallow
+  routing), full-screen **modes** for mini games / breakthrough. Client engine in `apps/web/src/lib/engine/`:
+  `loop.ts` (the single rAF loop, paused when the tab is hidden or explicitly), `fx/` (`FxBus` semantic events +
+  pooled Canvas2D `ParticleSystem`), `scene/` (`SceneManager`, `SceneDef` data in `scene/defs/`), `render/`
+  (`SceneRenderer` contract + `render2d/`; `render3d/` README only), `audio/` (`AudioManager`, Web Audio API, no
+  library), `settings.svelte.ts` (Cài đặt: Hiệu ứng Đầy đủ/Nhẹ/Tắt, âm thanh, renderer flag; localStorage).
+- **Server authority unchanged.** Stores emit `fxBus` events only after a server response, with server values
+  (`settled{earnedMilli}`, `reward`, `breakthrough`, `stageUp`, `insight`, …). Effects/audio listen; they never call
+  the API or compute rewards. No API/DB/catalogue change.
+- **Renderer split.** Every scene position is a normalised anchor in `SceneDef` resolved by
+  `SceneRenderer.anchorToScreen` (cover/contain fit math in `render/frame.ts`, matching today's CSS). This is what
+  lets a 3D renderer replace 2D later without touching UI or game logic.
+- **Performance budget.** 60 fps idle, ≥ 45 fps during big effects; one rAF loop; transform/opacity only for DOM;
+  canvas DPR ≤ 2; ≤ 300 particles (≤ 80 Nhẹ); scenes/mini games/audio lazy-loaded; initial `/play` JS ≤ +60 kB gz
+  per phase. GĐ1 measured: initial `/play` JS 101.0 → 106.3 kB gz (+5.3).
+- **No 3D engine yet.** No PixiJS/Phaser/Three (GĐ0–6). **GĐ7** (Three.js/Threlte spike for Tử Tiêu Cung behind
+  `renderer=3d`) opens only when the project owner adds a decision here, after GĐ2–6 meet the budgets above; the
+  proposal and budgets are in `apps/web/src/lib/engine/render/render3d/README.md`.
+- **GĐ0 fixes.** (1) `/play/tu-luyen` < 1024 px: the scene column had a fixed `min-height` while its scene box
+  (`container-type: size`) contributes no content height, so the grid row ended above the buttons and the details
+  panel painted over "Thu nhận tu vi"/"Đột phá"; the column is now content-sized with a definite scene height.
+  (2) `/play/nhan-vat` showed "Chưa gia nhập thế lực" for members whenever the public roster `GET /factions` failed:
+  the shell re-fetched it on **every** navigation (the `(game)` layout load reads `url.pathname`, so `data` changes),
+  draining the per-IP `world` rate limit (burst 20, 1/2 s), and the next reload got 429 with no retry; the page read a
+  missing roster as "not a member". Now: load once per character, retry 429/5xx with backoff, and membership comes
+  from `/factions/me` (`myFaction()`: loading / none / member).
+- **GĐ2 outcome (GameRoot, three scenes, transitions).**
+  - `routes/(game)/play/+layout.svelte` is the GameRoot: `SceneLayer` (fixed behind the shell, always mounted),
+    `FxLayer` (one canvas + DOM overlay host; `fx/layer.ts` subscribes to the loop only while particles live — no
+    effects wired yet, GĐ4), UiLayer (HUD, chat, dock, the route page, windows, toasts), `ModeLayer` host (empty, GĐ5).
+    The shell is pointer-transparent except real UI, so scene hotspots under transparent areas stay clickable.
+  - **Thế Giới** (`/play`), **Động Phủ** (`/play/tu-luyen`) and **Tử Tiêu Cung** (`/play/tu-tieu-cung`) are scenes:
+    `Render2D` draws the def's layers, a lazily imported scene view (`scene/views/{World,DongPhu,Hall}View.svelte`)
+    draws plaques/landmarks/lanterns, the cultivator + aura + motes + decorations, Hồng Quân + seats + bubbles + qi
+    stream — every position via `anchorToScreen` / `projectPoint`. Pages keep only UI and mark where the scene shows
+    with `<SceneSlot>`; the scene box follows the slot (else the stage cell). The hall page's `ROWS`/`DAIS` are gone
+    (def `hallSeats`). `WorldMap.svelte` is now art only (login backdrop + scene no-art fallback); plaques are
+    `MapPlaque.svelte` (scene + phone list). Other screens render over the scene behind them (world on a deep link).
+  - **Contract additions** (`SceneRenderer`): `projectPoint(anchor)` for server-sized layouts (hall seat count comes
+    from the server, the rule from the def), `scale()` (px per scene width, overlays size with `--u`), `onLayout(fn)`.
+    Render2D: depth-0 layers sit exactly on the frame (no parallax overscan) so anchors match the painting; it no
+    longer forces `position: relative` on an absolutely positioned host.
+  - **Transitions** (`scene/stage.svelte.ts` + pure `scene/routes.ts`): SvelteKit `onNavigate` awaits `stage.leave()`
+    — from the world, camera zoom to the clicked hotspot (420 ms, CSS transform) — then the ink-cloud wipe covers
+    (325 ms, WAAPI transform/opacity), the scene swaps under it, and `arrive()` reveals (325 ms) once the new scene is
+    mounted (≤ 2.5 s guard). Lite: 120 + 140 ms plain fade, no zoom. Off: instant swap. Superseded navigations are
+    dropped by token. Same scene / screen over the scene → no transition.
+  - **Windows** stay shallow routing; `SceneManager` mirrors `page.state.win`. A window (or a non-scene screen) marks
+    the scene covered: renderer `pause()` (parallax), ambient CSS loops paused, scene dimmed — never unmounted. Back
+    closes the window first, then leaves the scene (browser history). Deep link `?win=tasks|vip|notifications|
+    settings|chat` builds the route's (or default) scene, strips the param and opens the window by `pushState`.
+  - **Ambient (cheap part of §4.3).** World: 3 cloud bands at different speeds + 6 lantern glows flickering at
+    `lantern.*` anchors (lite: 1 slow band, slow glow). Động Phủ: breathing figure (scale 1 → 1.015,
+    `--ease-in-out-sine`), realm aura, 16 converging motes (lite 6). Hall: Hồng Quân aura breathe (lite: glow only),
+    qi stream 9 motes (lite 4). Off: static. Under reduced motion the global rule + fx default off apply.
+  - **Data reload fixed (GĐ1 open question 1).** `(game)/+layout.ts` no longer reads the URL (login return path via
+    `untrack`) and `depends('app:character')`; the onboarding guard moved to `(game)/play/+layout.ts`, `/create` and
+    `/chon-the-luc` page loads, which read only `parent()` against fixed paths (same targets as before). Measured over
+    7 in-app navigations: **70 → 7 API requests (avg 10.0 → 1.0)**; what remains is each screen's own data (fortune,
+    lecture enter/scripts/chat, leaderboard). Trade-off: a faction change made elsewhere is picked up by the guard on
+    the next `invalidateAll`/reload, not on every click (onboarding steps already `invalidateAll`).
+  - **Cosmetics catalogue retry (GĐ1 open question 2):** the shell calls `cosmetics.load(true)` — same 2/6/15 s
+    backoff on 429/5xx/network as the faction roster, shared helper `lib/game/retry.ts`.
+  - **Measured.** Initial `/play` JS 106.3 → **111.8 kB gz (+5.5)**; scene defs, views and Render2D are lazy chunks.
+    `?fps=1` (headless Chrome, 375 and 1440): 60 fps idle on all three scenes and 60 during a world → hall transition.
+- **GĐ3 outcome (windows, action bar, floating chat, less text).**
+  - **Every menu is a window.** One frame, `components/GameWindow.svelte`: wood/jade plaque header (icon + name, "?"
+    help, ✕), optional tabs (horizontal slide `--dur-fast`), native modal `<dialog>` (focus contained, `aria-modal`,
+    labelled by its title, focus returns to the opener). ≥ 640 px: centred panel, scale 0.96 → 1 + fade over a dimmed
+    backdrop (`--dur-window` 220 ms, new token); < 640 px: bottom sheet sliding up, header drag down closes (fast flick
+    or > 110 px), drag up expands. Lite = short fade, Off = no motion; reduced motion via the global rule. Dragging the
+    desktop panel was skipped (cost vs value).
+  - **Stack ≤ 2 in history.** `page.state.wins` (bottom → top) replaces `page.state.win`; pure rules in
+    `lib/game/windowStack.ts` (`pushWindow`: push = one history entry, same kind or a full stack = replace the top), so
+    Back / Esc / swipe-down (all `history.back()`) close the top window, then the next, then leave the scene. Windows
+    opened inside a window stack on it (player card → Trao đổi; Thông báo → Nhiệm vụ). Local modals inside a window or
+    page (Túi Đồ item detail, Đạo Lữ oath, ngộ đạo reveal, Sổ Đạo Ngộ) use `GameWindow local`: own history entry
+    (`page.state.sub`) so Back closes them first, and they count as covering the scene.
+  - **Screens → windows, routes kept as deep links.** Nhân Vật, Túi Đồ (Hành trang/Cửa hàng/Trang phục/Trao đổi), Xếp
+    Hạng (Tu sĩ/Thế lực), Thiên Đạo Sử, Đột Phá, Thế Lực, Đạo Lữ (Đào Hoa Đình) moved from routes to lazy content
+    components in `lib/windows/` (registry: title, icon, size, tabs, help topic, `import()`), plus Nhiệm vụ, Tiên
+    Duyên, Thông báo, Cài đặt, player card, Gieo quẻ, help ("?"), "Thêm" menu and a "sealed" place. Chosen over
+    "route rendered as a window": a route change unmounts the scene page's UI (slot, status card) and re-fits the scene
+    box behind the window; a pure shallow window keeps the scene page exactly as it was. Old URLs stay valid:
+    `/play/<slug>` (and unknown `/play/<x>` → sealed) redirect in `[screen]/+page.ts` to `/play?win=…`, the shell
+    builds the default scene, strips the link params and opens the window (`?win=` links work on any scene route; the
+    trade/proposal targets and tabs travel as params). In-app links/`goto` to those URLs (scene hotspots, plaques, text
+    links) are intercepted in `beforeNavigate` and open the window over the **current** scene; over a mini-game route
+    they navigate normally. `ScreenFrame` and `GameDock` are deleted; mini-game routes (Tâm Ma, Hóa Phàm, Bí Cảnh)
+    render in `GameWindow variant="inline"` (same header, Esc left to the game) until GĐ5 makes them modes.
+  - **Action bar** (`components/ActionBar.svelte`): ≥ 640 px a vertical rail on the right (scenes · primary · windows,
+    labels on hover/focus, hover lifts 2 px with a faint gold border); < 640 px a bottom row (Bản đồ, Tu luyện, Nhân
+    vật, primary, Túi đồ, Nhiệm vụ, Thêm → menu window). Badges carry a count or "!" + aria label. The scene's
+    **primary button** is registered by the scene page (`lib/game/primary.svelte.ts`, a getter): Thế Giới / Động Phủ
+    "Thu nhận" (store `settle`, ring = banked time / offline cap), Tử Tiêu Cung "Ngộ đạo" (the page's `ngoDao`, ring =
+    insight progress, countdown hint) — the bar never holds game logic. Ready → light sweep (Off: none); disabled never
+    animates; press = scale 0.96 (`.press`, `.btn`).
+  - **Floating chat** (`components/FloatingChat.svelte`) bottom-left replaces the fixed column (and the mobile peek strip
+    and the hall's docked chat): the 3 newest messages as bubbles that slide up and fade after 8 s (pure rules
+    `lib/game/chatBubbles.ts`, one timer, no rAF), own message flashes jade; click → the tabbed `ChatPanel` (Luận Đạo in
+    the hall / Thế Giới), Esc or chevron collapses; `?win=chat` and "Nhắc tên" expand it. Not modal. Pages can lift it
+    over their bottom band (`--chat-lift`, the hall subtitles).
+  - **Less text.** Rules moved behind "?" (`lib/game/help.ts`, help window): Thế Giới, Động Phủ, Tử Tiêu Cung, Đột Phá,
+    Thiên Đạo Sử, Túi Đồ. Động Phủ is now scene + qi bar + three big numbers (tốc độ, bế quan with time to full and
+    cap, hôm nay / hạn mức) + Đột phá / Tụ Linh Phù / Gieo quẻ; the details list and the daily board left the screen
+    (board = Nhiệm vụ window, total tu vi = Nhân Vật). The hall's status band moved above the scene. Empty states with an
+    ink-wash SVG + action (`components/EmptyState.svelte`): Túi Đồ ("Vào bí cảnh để kiếm pháp bảo"), Thông báo, Sổ Đạo
+    Ngộ, faction merit board. HUD currency chips are buttons (Linh thạch → Túi Đồ › Cửa hàng, Tụ Linh Phù → Túi Đồ).
+  - **Shared motion** in app.css: `.stagger` (children rise in 30 ms apart, first 10 only), `.press`, `data-fx` on
+    `<html>` mirrors Cài đặt so plain CSS follows full/lite/off.
+  - **Measured.** Initial `/play` JS **111.8 → 101.6 kB gz (−10.2)**: window contents (incl. the old static
+    DailyTasks/VipWindow/Settings/Profile/Notifications imports) are lazy chunks. API requests over the same 7 in-app
+    moves 7 → 5 (Động Phủ no longer fetches the fortune until Gieo quẻ opens). 60 fps idle on all three scenes and
+    during a transition at 375 and 1440 (headless Chrome, `?fps=1`).
+- **GĐ4 outcome (effects §4.1–4.8, FxLayer, count-up, world announcements).**
+  - **Pipeline.** Stores (and the few components that own an API call: shop, Gieo quẻ, bí cảnh/trial pages, faction
+    works, the realtime feed) emit on `fxBus` after the server answered, with server values. `engine/fx/plan.ts` (pure,
+    unit-tested) maps event + `settings.fx` → commands; `engine/fx/director.ts` (lazy chunk, started by the shell) runs
+    them at real positions: scene anchors via the renderer (đan điền, the player's hall seat), HUD/bar targets by data
+    attributes (`data-fx-target="qi"`, `data-bar="inventory"`, `data-chip="stones"`), the last pointer press as "where it
+    came from". Breakthrough / stageUp / lôi kiếp events exist but plan nothing — GĐ5 modes.
+  - **Particles.** `ParticleSystem` gained path particles (quadratic Bézier, per-particle delay), bell alpha, petal
+    shape, grow, and per-instance caps; `ParticleField` (`fx/layer.ts`) runs one on the shared loop only while particles
+    live or an emitter runs. Two fields: `fxLayer` (full-screen, above the UI) and a **scene field** per SceneLayer
+    (90 full / 30 lite, inside the scene box under the UI, cleared and paused while the scene is covered, moving or
+    hidden). The hall qi stream and Động Phủ's converging motes moved from DOM motes to the scene field.
+  - **FxLayer in the top layer.** The FxLayer is a manual popover, re-raised whenever an effect starts, so a reward
+    claimed inside a modal window (Nhiệm vụ) flies over it to the action bar. DOM overlay (`FxOverlay.svelte`, lazy):
+    "+X tu vi" floats, reward icons (pop 0.4 → 1.15 → 1, curved hop, rarity aura + rotating rays for huyền+), light
+    rings, the announcement scroll. Bounded: ≤ 16 overlay items, ≤ 3 queued scrolls.
+  - **Effects shipped.** Boot screen (fonts + first scene mounted + initial data; min 700/350/0 ms, max 6 s; "Chạm để
+    vào" only when sound files exist and audio is locked — never now). World: peach petals at Đào Hoa Đình, a flock
+    crossing every ~34 s, Tử Tiêu Cung rays breathing, hotspot glow on hover/focus and when suggested (breakthrough
+    ready or idle qi full → Động Phủ). Động Phủ: motes converge in the realm aura colour; an incense burner (new anchor
+    `incense`) lit with smoke when the incense task says offered today. Hall: subtitles fade by level, smoke puff when a
+    listener sits down (WS `lecture.enter` after the first state), chat bubbles bounce in. HUD: `CountUp` for tu vi and
+    linh thạch (held while orbs/items fly, then counts to the server value; jade copy fades on increase), tu vi bar
+    shimmer while accumulating, gold pulse at bình cảnh, one shake when a settle reports `hitDailyCap` (added to the
+    `settled` event), `.badge-pop` (0.6 → 1.1 → 1 + glint) on HUD/action-bar badges, Túi Đồ "new items" badge (count
+    of reward lines since the bag was last opened — a UI marker) + bounce on landing. Thu nhận: 8–24 orbs
+    (`motesForEarned`, log10 of `earnedMilli`, capped) over 600–900 ms (`orbFlightMs`) from the đan điền to the visible
+    tu vi bar (HUD ≥ 768 px, else Động Phủ's bar). Ngộ đạo: gold edge pulse when the moment opens, light ring from the
+    button, teaching on an unrolling scroll, orbs from the seat. Gieo quẻ: cup shakes while the request is in flight,
+    a stick pops and its slip flips to the outcome; the odds table stays visible after a draw. Dâng hương: three sticks
+    ignite in turn with smoke, streak as flame counters (text kept). Announcements: WS feed → calligraphy scroll
+    mid-screen 2.5 s (tap to skip; lite = fade; off = none — the HUD ticker, now sliding in per item, carries the text).
+    Đạo Lữ: red thread with a running glint while song tu is open today, heartbeat on both portraits while the partner
+    is present. Faction: badge flutters; firework when a donation finishes a works stage (`worksLevelUp`). New rewards
+    wired: shop purchases, bí cảnh loot (`reward` source trial), `trialResult` from the three mini games.
+  - **Levels.** Every effect has full/lite/off. `:root[data-fx='off']` now has a global rule like reduced motion (all
+    CSS animations/transitions jump to their end state) and the planner emits no motion when off (only the static
+    "+X tu vi" label). Reduced motion → off by default (unchanged).
+  - **Bug found and fixed (GĐ3).** `GameWindow local` did `sceneStage.localWindows++` inside an effect, which read
+    the counter it wrote → `effect_update_depth_exceeded` whenever a local window opened (first seen on the ngộ đạo
+    reveal); now untracked.
+  - **Measured.** Initial `/play` JS **101.6 → 107.0 kB gz (+5.4)**; director, overlay, scene views stay lazy.
+    `?fps=1` (headless Chrome 1440, 24 orbs + sparks + motes + a rare reward flight): **59–60 fps**. Heap soak
+    (10 min, 1440, fx full, heap after forced GC): **4.78 → 5.65 MB, DOM 478 → 468 nodes**, no console errors — but only
+    3 full cycles (clicks on buttons disabled after the first mocked claim/ngộ đạo waited out Playwright timeouts), so a
+    tighter re-run is open. Playwright `gd4/verify.mjs`: all checks green at 375/1440 × full/lite/off + reduced motion.
+- **GĐ5 outcome (modes: mini games, breakthrough / lôi kiếp).**
+  - **Mode system.** The ModeLayer hosts full-screen modes; while one is up the shell (HUD, action bar, floating chat,
+    route page, windows) is `visibility: hidden` + `inert` with its boxes kept, so the scene behind stays mounted,
+    measured, covered and paused (renderer + ambient). Pure rules in `engine/mode/machine.ts` (unit-tested), wrapped by
+    `ModeController`: lobby → 3-2-1 countdown (`countdownMs`: 3 s full/lite; off → an instant "Bắt đầu" and the board
+    is live at once) → play → waiting → result, plus pause, a confirmed exit and a soft error. **Esc and Back share one
+    rule:** 1st = pause, 2nd = "Rời thử luyện?", 3rd = close the question (still paused); "Rời đi" during play = give
+    up (the board ends and its log is judged like any end — never a silent leave of a server run); waiting ignores
+    Back; lobby/result leave. Browser Back is cancelled in `beforeNavigate` (popstate) while a run or an unsent result
+    is live. The boards' own Esc handling moved to the mode (P still toggles pause on the board).
+  - **Mini games stay routes** (`/play/tam-ma|hoa-pham|bi-canh`, `modeRoutes` in `scene/routes.ts`), rendered in the
+    ModeLayer instead of the page cell, inside `engine/mode/ModeShell.svelte` (mode HUD: title, pause, exit; countdown;
+    confirm; "Thiên đạo đang phán định…" gather loop = converging motes on the pooled fxLayer + breathing seal; soft
+    error "Gửi lại"; a "turn upright" hint for the portrait boards on phones held sideways — Bí cảnh's arena is square,
+    so no game needs landscape). Deep links still work (default scene behind); Về from a result goes back in history
+    (in-app) or to `/play`. `GameWindow variant="inline"` is no longer used by them.
+  - **Results** (`engine/mode/ModeResult.svelte`): badge = icon + text (Đạt / Chưa đạt / Không ghi nhận / Luyện tập),
+    heading, the server's stats (outcome lines/score/kills/level), reward lines from the server loot, "Chơi lại" (a
+    practice replays; a server run returns to the lobby, which shows cooldown/runs left) / "Về". Bí cảnh loot flies with
+    the existing reward fly from the result card (`data-fx-source`) to the card's bag button (`data-bar="inventory"`);
+    the director now ignores targets hidden by `visibility` (`checkVisibility`). Shown **only after** the server answer:
+    submissions go through `lib/game/inflight.ts` — 8 s soft timeout (`RESPONSE_TIMEOUT_MS`), the request keeps running,
+    "Gửi lại" joins it (same Idempotency-Key, never a second submission), a late answer still lands; effects are emitted
+    after the result renders (`await tick()`).
+  - **Logic untouched.** Boards gained presentation props only — `paused` (bindable), `hold` (frozen under the mode's
+    countdown, no veil), `countdownMs` (0: the mode counts) — and lost the Esc key. `sim.ts`, `render.ts`, seeds, input
+    logs, golden vectors and Go are unchanged; Go trial/secretrealm golden tests and the TS sim tests pass unmodified.
+  - **Breakthrough / lôi kiếp mode** (not a route). The store emits `breakthroughStart` (kind/tribulation from the
+    preview) when the attempt is sent → the mode opens and gathers; `breakthrough` (server outcome + from/to/lossMilli/
+    failStreak) → the timeline; `breakthroughStalled` after 8 s or a network error (retry joins the in-flight request;
+    a late answer still plays); `breakthroughCancelled` on a 4xx (mode closes, the window's toasts explain).
+    `planFx` → `planBreakthrough` (`engine/fx/breakthrough.ts`, pure, unit-tested): minor = gather 0.8 s → flash →
+    new realm aura + stage text; major = formation spins faster 1.2 s → pillar → realm name in font-display → clouds
+    part; lôi kiếp = sky darkens + black clouds roll → 3 strikes (full-screen flash + 200 ms shake each) → pillar +
+    name or the failure crack; failure = frosted-glass crack + 200 ms shake + the server's text ("Tu vi vẫn còn
+    nguyên" / "Mất X tu vi", streak). Every branch reaches its static result card ≤ 3 s after the answer (2.7 s max);
+    skippable any time (tap, Space/Enter/Esc, "Bỏ qua", Back). Lite = ×0.6 time, fewer particles, no shake; off =
+    the static card at once; reduced motion = never flash/shake. The director runs the `mode` commands into
+    `engine/mode/breakthrough.svelte.ts`; the shell lazy-loads `BreakthroughMode.svelte` (4.9 kB gz). It replaces the
+    Đột Phá window's history entry (`page.state.mode`) — Back skips, then closes back to the scene. The old
+    auto-dismissing `BreakthroughCelebration` and `game.celebrate` are gone; the store keeps a toast fallback only if
+    the director is not running.
+  - **Fixes from review.** (a) Toasts start below the lowest visible `[data-toast-below]` element (Động Phủ's header:
+    state chip + realm plaque), so they no longer cover that label; toasts sit above modes (z 75). (b) Túi Đồ › Tất
+    cả hides a zero Linh thạch tile (an empty bag reads empty; the Linh thạch tab still shows 0). (c) Heap soak: clicks
+    are enabled-only with a 2 s timeout and the mocked server state resets each cycle (see measured).
+  - **Measured.** Initial `/play` JS **107.0 → 107.9 kB gz (+0.9)** (machine/controller/flags in the shell; shell,
+    result and breakthrough chunks lazy). `?fps=1` headless 1440 during gather + lôi kiếp (3 flashes, strikes, reveal
+    burst): **58–60 fps**. Heap soak (1440, fx full, heap
+    after forced GC; clicks now enabled-only with a 2 s timeout, mocked state reset each cycle): **4.84 → 6.34 MB,
+    DOM 485 → 481 nodes, no console errors, but only 9 cycles** — cycles 1–8 took 8.2 s each, then one cycle stalled
+    939 s inside a plain `waitForTimeout` (no page step was slow), i.e. the host idle-slept; a 4-min run reached 30
+    cycles (4.84 → 6.58 MB, DOM 485 → 481). The ≥ 30-cycle 10-minute soak is deferred (re-run with `caffeinate`).
+  - **Verification.** Vitest 160 tests (mode machine: countdown, pause, Back order, exit confirm, result only after
+    the answer; breakthrough planning: wait → five branches, ≤ 3 s, skip, lite/off/reduced gating; in-flight timeout).
+    Playwright `gd5/verify.mjs` 507/507 at 375/1440 × full/off/reduced (modes hide HUD/bar/chat, scene covered, countdown,
+    Esc/Back, delayed answer, 8 s timeout → retry → late answer with one request, deep link, all breakthrough branches,
+    skip/Back/tap, stall + retry, off static, no console errors); gd0 smoke, gd2, gd3, gd4 suites green (unchanged).
+- **GĐ6 — Âm thanh, toàn màn hình, PWA (2026-11-08).**
+  - **Audio engine.** `engine/audio/AudioManager.ts` (Web Audio, no library): channels BGM / Ambience / SFX / UI with a
+    gain each under a master; volumes + "Tắt tiếng" in Cài đặt, persisted by the settings store (localStorage, try/catch).
+    Nothing before the first gesture: the AudioContext is created only by `unlock()` from a pointer/key/touch event,
+    and **never while muted** (muted = zero AudioContext work; a context created earlier is suspended while muted or
+    while the tab is hidden — `visibilitychange` — and resumed after). Unmuting is a click, so the settings toggle
+    unlocks at once. BGM and ambience each hold one loop with a **1 s crossfade** (`playLoop`), chosen by the scene
+    (`SceneDef.music` / `.ambience`, wired in the shell on scene change). Bursts: the same id ≤ once per 120 ms and
+    ≤ 6 one-shots at once (24 orbs = one sound). Loading is lazy: files resolve by `import.meta.glob ?url` (OGG
+    preferred, MP3 fallback when the browser lacks Ogg Vorbis) and are fetched/decoded on first play.
+  - **Sounds.** Every id is a slot in `engine/audio/manifest.ts` (`AUDIO_SLOTS`): a produced **file** wins; else the
+    19 UI/SFX slots have an original **synth placeholder** rendered at runtime (`engine/audio/synth.ts`: oscillators +
+    seeded noise → mono PCM, −3 dBFS peak; a lazy chunk, no binary assets, nothing downloaded); BGM/ambience (6
+    slots) stay **missing** = silent until produced. Specs per id (channel, loop, length, status) in
+    `lib/assets/audio/README.md`.
+  - **Wiring.** fxBus gained two UI events (`window` from `GameWindow` open/close, `countdown` from `ModeShell`); chat
+    now emits `chat` for new lines. `engine/audio/sfxMap.ts` is the pure map event → cues (`{id, channel, at}`):
+    settle, item by rarity (one cue per reward = its rarest item), stage up, breakthrough on the reveal beat, thunder
+    on each strike of the same `planBreakthrough` timeline the visuals use (so lite/off/reduced follow automatically),
+    failure on the crack, ngộ đạo, chat (not my own), world announcement, countdown 3-2-1 / "Bắt đầu", window
+    open/close, button press. `engine/audio/router.ts` (lazy, started after boot) feeds it from fxBus + one delegated
+    click listener; it does nothing while sound is not running; a press that opens a window plays only the window
+    sound; the `stageUp` that follows a breakthrough is swallowed (4 s). Audio never calls the API or derives values.
+  - **"Chạm để vào".** The boot screen asks for a tap only when the first scene has a real music/ambience **file**,
+    sound is on and audio is still locked (`needsTapToEnter`, `engine/boot.ts`). One-shot SFX (synth today) never
+    gate the boot — the player's first real tap unlocks them; muted players are never blocked. With today's assets
+    the tap never appears.
+  - **Fullscreen.** `engine/fullscreen.svelte.ts` (Fullscreen API, webkit fallback); a toggle in Cài đặt › Đồ họa and
+    in the HUD gear menu, hidden where unsupported (Safari on iPhone — the installed PWA is the route there).
+  - **Install hint.** `engine/install.svelte.ts` + `components/InstallHint.svelte`: on phones (coarse pointer ≤ 1024
+    px) a small dismissible card above the action bar — "Cài" calls the kept `beforeinstallprompt` (Chromium), iOS
+    gets "Xem cách" → instructions in a local `GameWindow`. Hidden when standalone/installed, on desktop, during modes
+    and once dismissed (`tiendao.installHint.v1`).
+  - **PWA.** `static/manifest.webmanifest` (name "Tiên Đạo Online", short "Tiên Đạo", `display: standalone` with
+    `display_override: [fullscreen, standalone]`, `start_url: /play`, `scope: /`, theme/background = `--color-ink-950`;
+    literal hex only in the manifest/meta because they cannot read CSS variables — `lib/sw/manifest.test.ts` keeps them
+    equal to the token). Icons 192/512 + maskable 512 + apple-touch 180 generated from the existing logo
+    (`static/favicon.svg`) by `apps/web/tools/make-icons.mjs` (no dependencies, no new art).
+  - **Service worker.** SvelteKit's `src/service-worker.ts`; the rules are the pure `lib/sw/routes.ts`
+    (`classifyRequest`, unit-tested): `/_app/immutable/*` and the listed static files cache-first in one versioned
+    cache (old versions deleted on activate; JS/CSS + small statics precached, art cached on first use); page
+    navigations **network-only** — the HTML is never cached — with the prerendered `/offline` page (no JS, tokens via
+    app.css, `<base href="/">` pinned so it styles under nested URLs) only when the network fails; `/api/*` (incl. the
+    Google OAuth redirects `/api/v1/auth/google/*`), `/ws`, `__data.json`, version.json, other origins and non-GET are
+    never answered by the SW (no `respondWith`).
+  - **/play touch.** The shell sets `data-play` on `<html>`: `overscroll-behavior: none` (no pull-to-refresh) +
+    `touch-action: manipulation` (no double-tap zoom; panning, pinch-zoom and text inputs untouched). Site pages keep
+    the defaults.
+  - **Nginx.** Unchanged: the container nginx proxies `/` to the Node server, which already serves
+    `/manifest.webmanifest` as `application/manifest+json` and `/service-worker.js` as `text/javascript` with no
+    Cache-Control (no long cache; browsers revalidate the SW script themselves). Host-nginx samples and env untouched.
+  - **Fix found on the way.** `GameWindow` local windows (item detail, ngộ đạo reveal, confirmations) did not close on
+    Esc/Back/✕-through-history: the effect that closes them when their history entry is popped short-circuited on a
+    non-reactive flag and tracked nothing. It now tracks `open` + `page.state` and closes once its own entry has been
+    seen and is gone.
+  - **Measured.** Initial `/play` JS **107.9 → 111.6 kB gz (+3.7)** (AudioManager core, fullscreen/install stores, the
+    hint; synth, router and sfx map are lazy chunks). Precache ≈ 1.36 MB raw JS/CSS (served compressed).
+  - **Verification.** Vitest 191 tests (new: AudioManager — no context/play before a gesture, muted =
+    no context, suspend on mute/hidden + resume, 24-call burst = 1 sound, voice cap, 1 s crossfade schedule, settings
+    persistence; sfxMap/router — every spec cue, rarest item, strikes on the timeline, quiet stageUp, press vs window,
+    zero work when off; synth — every slot renders ≤ −3 dBFS within length; SW `classifyRequest` — API/OAuth/WS/data
+    bypass, navigations network-only, immutable/static cached; manifest = token colour + icons; install/fullscreen/
+    boot-tap rules). Playwright `gd6/verify.mjs` 50/50 against the rebuilt container at 375/1440: manifest linked and
+    parsed (CDP), **installable** in a regular Chrome profile (`Page.getInstallabilityErrors` = [], appId `/play`;
+    Lighthouse is not installed locally and v12 dropped its PWA category), SW active + controlling, /api never served
+    by the SW and the cache holds no API/HTML, offline reload of /play (and a nested URL) shows the styled fallback,
+    fullscreen enter/leave from Cài đặt + HUD menu item, mute + volume persist across reload, no AudioContext before
+    the first interaction (instrumented), muted tap creates none, unmute click unlocks, install hint (simulated
+    `beforeinstallprompt` → prompt(), iOS instructions, dismissal remembered, none on desktop), `/play` touch rules
+    and none on site pages, Google login page intact, no console errors. gd0 smoke 21/21, gd2 34/34, gd3 202/202, gd4
+    168/168 (`--no-soak`), gd5 507/507 — unchanged scripts. `make lint` green.
+  - **Still open for the owner.** Real BGM/ambience and final SFX (slots + specs in the audio README); whether the
+    installed app should open `fullscreen` rather than `standalone` by default (now: standalone, fullscreen via
+    `display_override` where supported); a painted app icon (today generated from the favicon).
+  - **GĐ7 (3D spike, Three.js/Threlte behind `renderer=3d`) remains blocked** until the owner records approval here.
+
 ## 2026-11-07 — Chủ dự án: tăng tốc đầu game bằng cách dồn điểm về sau
 - **What.** `realms.yaml`: Luyện Khí 300 → **100** points, split by new `stage_weights: [1…9]` (tầng 1–9 =
   2/4/6/8/11/14/16/18/21); Trúc Cơ 650 → **550** (entry 100); Kim Đan 1,100 → **1,400** (entry 650). Nguyên Anh

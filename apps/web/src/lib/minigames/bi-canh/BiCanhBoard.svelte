@@ -17,9 +17,15 @@
 		params: BiCanhParams;
 		seed: number;
 		practice?: boolean;
+		/** paused (bindable: the mode frame pauses on Esc/Back; the board pauses itself on P, hidden tab, its buttons) */
+		paused?: boolean;
+		/** frozen without the pause veil (the mode's 3-2-1 countdown runs over the board) */
+		hold?: boolean;
+		/** the board's own countdown before the first tick (0 when the mode frame counts down) */
+		countdownMs?: number;
 		onend: (claim: SecretRealmClaim, local: { won: boolean; reason: EndReason; score: number; kills: number; qi: number }) => void;
 	}
-	let { params, seed, practice = false, onend }: Props = $props();
+	let { params, seed, practice = false, paused = $bindable(false), hold = false, countdownMs = 3000, onend }: Props = $props();
 
 	// svelte-ignore state_referenced_locally
 	const g = new BiCanhGame(params, seed);
@@ -37,8 +43,8 @@
 	let hp = $state(0);
 	let qi = $state(0);
 	let level = $state(0);
-	let paused = $state(false);
-	let countdown = $state(3);
+	// svelte-ignore state_referenced_locally
+	let countdown = $state(Math.ceil(countdownMs / 1000));
 	let ended = $state(false);
 	let reducedMotion = $state(false);
 	let levelFlash = $state(0);
@@ -113,7 +119,7 @@
 	}
 
 	function down(e: PointerEvent) {
-		if (ended || paused || countdown > 0 || !e.isPrimary) return;
+		if (ended || paused || hold || countdown > 0 || !e.isPrimary) return;
 		e.preventDefault();
 		canvas?.setPointerCapture(e.pointerId);
 		const r = canvas!.getBoundingClientRect();
@@ -184,7 +190,7 @@
 
 	function onkeydown(e: KeyboardEvent) {
 		if (ended) return;
-		if (e.code === 'KeyP' || e.code === 'Escape') {
+		if (e.code === 'KeyP') {
 			e.preventDefault();
 			if (!e.repeat) togglePause();
 			return;
@@ -222,11 +228,11 @@
 		let raf = 0;
 		let last = performance.now();
 		let acc = 0;
-		let cdLeft = 3000;
+		let cdLeft = countdownMs;
 		const frame = (t: number) => {
 			const dt = Math.min(250, t - last);
 			last = t;
-			if (!paused && !ended) {
+			if (!paused && !ended && !hold) {
 				if (cdLeft > 0) {
 					cdLeft -= dt;
 					countdown = Math.max(0, Math.ceil(cdLeft / 1000));

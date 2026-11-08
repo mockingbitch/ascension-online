@@ -24,7 +24,7 @@
 <svelte:head><title>Nhập Đạo · Tiên Đạo Online</title></svelte:head>
 
 <div class="relative h-dvh overflow-hidden">
-	<div class="absolute inset-0"><WorldMap cover /></div>
+	<div class="absolute inset-0"><WorldMap /></div>
 	{#if splash}
 		<img src={splash.src} srcset={splash.srcset} alt="" class="absolute inset-0 size-full object-cover sm:hidden" draggable="false" />
 	{/if}

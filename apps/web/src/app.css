@@ -45,6 +45,20 @@
 	}
 }
 
+/* Motion tokens (spec §4): durations + easings for Svelte transitions, WAAPI and CSS. Always emitted (read via var()
+   from TS/WAAPI too). Dark-only theme (color-scheme: dark), so there is no light-mode variant to mirror. */
+@theme static {
+	--dur-instant: 90ms; /* press feedback */
+	--dur-fast: 160ms; /* tab slide, hover */
+	--dur-base: 240ms; /* window close, dim */
+	--dur-window: 220ms; /* window open: scale 0.96→1 + fade (spec §4.7) */
+	--stagger-step: 30ms; /* list items appear one after another (max 10) */
+	--dur-slow: 420ms; /* reward fly, count-up */
+	--dur-scene: 650ms; /* ink-wash scene transition */
+	--ease-out-back: cubic-bezier(0.34, 1.56, 0.64, 1); /* badge pop, overshoot */
+	--ease-in-out-sine: cubic-bezier(0.37, 0, 0.63, 1); /* camera pans, breathing */
+}
+
 /* Referenced dynamically (var(--color-aura-{aura})) so Tailwind can't see them: always emit. */
 @theme static {
 	/* Realm auras — keyed by realms.yaml visual.aura */
@@ -87,6 +101,13 @@
 	}
 	:focus-visible {
 		@apply outline-2 outline-offset-2 outline-gold-500;
+	}
+	/* Inside /play only (the shell sets data-play): no pull-to-refresh / scroll chaining, no double-tap zoom.
+	   `manipulation` keeps panning and pinch-zoom (accessibility) and leaves text inputs/chat untouched. */
+	:root[data-play],
+	:root[data-play] body {
+		overscroll-behavior: none;
+		touch-action: manipulation;
 	}
 }
 
@@ -210,6 +231,106 @@
 :root {
 	/* Subtle paper grain (alpha-only noise, colour-neutral). */
 	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ── GĐ3 interaction motion (spec §4.7). `data-fx` on <html> mirrors Cài đặt › Hiệu ứng (full | lite | off). ── */
+@layer components {
+	/* List stagger: children rise in 30 ms apart, only the first 10; later ones appear with the 10th. */
+	.stagger > * {
+		animation: rise-in var(--dur-base) var(--ease-qi) both;
+		animation-delay: calc(min(var(--i, 9), 9) * var(--stagger-step));
+	}
+	.stagger > :nth-child(1) { --i: 0; }
+	.stagger > :nth-child(2) { --i: 1; }
+	.stagger > :nth-child(3) { --i: 2; }
+	.stagger > :nth-child(4) { --i: 3; }
+	.stagger > :nth-child(5) { --i: 4; }
+	.stagger > :nth-child(6) { --i: 5; }
+	.stagger > :nth-child(7) { --i: 6; }
+	.stagger > :nth-child(8) { --i: 7; }
+	.stagger > :nth-child(9) { --i: 8; }
+	:root[data-fx='lite'] .stagger > * {
+		animation: fade-in var(--dur-fast) linear both;
+	}
+	:root[data-fx='off'] .stagger > * {
+		animation: none;
+	}
+
+	/* Press: sink to 0.96 (all buttons, cheap transform). Disabled buttons never animate. */
+	.btn:not(:disabled):active,
+	.press:not(:disabled):active {
+		transform: scale(0.96);
+	}
+	.press {
+		transition: transform var(--dur-instant) var(--ease-qi);
+	}
+	:root[data-fx='off'] .btn:active,
+	:root[data-fx='off'] .press:active {
+		transform: none;
+	}
+}
+
+/* ── GĐ4 (spec §4.4, §4.7). ── */
+@layer components {
+	/* New badge: pops 0.6 → 1.1 → 1 with a glint sweeping across. Re-key the element to replay. */
+	.badge-pop {
+		animation: badge-pop var(--dur-slow) var(--ease-out-back) both;
+		overflow: hidden;
+	}
+	.badge-pop::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		background: linear-gradient(110deg, transparent 30%, color-mix(in oklab, var(--color-mist-100) 80%, transparent) 50%, transparent 70%);
+		transform: translateX(-120%);
+		animation: glint 600ms var(--ease-qi) 280ms both;
+		pointer-events: none;
+	}
+	:root[data-fx='lite'] .badge-pop::after {
+		display: none;
+	}
+	:root[data-fx='off'] .badge-pop,
+	:root[data-fx='off'] .badge-pop::after {
+		animation: none;
+	}
+}
+@keyframes badge-pop {
+	from {
+		transform: scale(0.6);
+	}
+	60% {
+		transform: scale(1.1);
+	}
+}
+@keyframes glint {
+	to {
+		transform: translateX(120%);
+	}
+}
+
+/* Effects off (Cài đặt › Hiệu ứng › Tắt; the default under reduced motion): every CSS animation/transition jumps to
+   its end state, like the reduced-motion rule below. Information never depends on these. */
+:root[data-fx='off'] *,
+:root[data-fx='off'] *::before,
+:root[data-fx='off'] *::after {
+	animation-duration: 0.01ms !important;
+	animation-delay: 0ms !important;
+	animation-iteration-count: 1 !important;
+	transition-duration: 0.01ms !important;
+	transition-delay: 0ms !important;
+}
+
+@keyframes rise-in {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+}
+@keyframes fade-in {
+	from {
+		opacity: 0;
+	}
 }
 
 @media (prefers-reduced-motion: reduce) {

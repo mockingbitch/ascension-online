@@ -4,14 +4,26 @@ import { loadChat, onChatHidden, onChatMessage } from '$lib/game/chat.svelte';
 import { onHallChat, onHallEvent } from '$lib/game/lecture.svelte';
 import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
 import { loadWorld } from '$lib/game/world.svelte';
+import { fxBus } from '$lib/engine/fx/bus';
 import type { Announcement, ChatEvent, LectureEvent } from '$lib/game/types';
 
 export const feed = $state<{ items: Announcement[]; connected: boolean }>({ items: [], connected: false });
 
 const MAX_ITEMS = 5;
 
+const KIND = {
+	'announcement.major_breakthrough': 'breakthrough',
+	'world.milestone_reached': 'milestone',
+	'world.event_ended': 'event',
+	'faction.announcement': 'faction'
+} as const;
+
 function pushFeed(msg: Announcement) {
-	if (!feed.items.some((m) => m.id === msg.id && m.type === msg.type)) feed.items = [msg, ...feed.items].slice(0, MAX_ITEMS);
+	if (feed.items.some((m) => m.id === msg.id && m.type === msg.type)) return;
+	feed.items = [msg, ...feed.items].slice(0, MAX_ITEMS);
+	// the server's text, as sent: effects unroll it as a scroll (the HUD ticker shows it either way)
+	fxBus.emit('announcement', { id: `${msg.type}:${msg.id}`, text: msg.data.text, kind: KIND[msg.type as keyof typeof KIND] ?? 'event' });
+	if (msg.type === 'world.milestone_reached') fxBus.emit('milestone', { id: String(msg.id) });
 }
 let started = false;
 let chatEnabled = false;

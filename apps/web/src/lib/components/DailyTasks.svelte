@@ -4,6 +4,7 @@
 	import { screens } from '$lib/game/nav';
 	import type { DailyBoard, DailyTask, TaskReward } from '$lib/game/types';
 	import Icon from './Icon.svelte';
+	import IncenseSticks from './IncenseSticks.svelte';
 
 	interface Props {
 		board: DailyBoard | null;
@@ -28,7 +29,7 @@
 	{#if !board}
 		<p class="mt-3 text-sm text-mist-500">Đang tải…</p>
 	{:else}
-		<ul class="mt-3 divide-y divide-gold-500/10">
+		<ul class="stagger mt-3 divide-y divide-gold-500/10">
 			{#each board.tasks as t (t.id)}
 				{@const pct = Math.min(1, t.progress / t.target)}
 				<li class="flex items-center gap-3 py-3" class:opacity-60={t.claimed}>
@@ -40,6 +41,7 @@
 						<p class="text-xs text-mist-500">{t.description}</p>
 						<div class="mt-1.5 h-1 bg-ink-950" aria-hidden="true"><div class="h-full bg-jade-500" style:width="{pct * 100}%"></div></div>
 						{#if t.kind === 'incense'}
+							<div class="mt-1.5"><IncenseSticks lit={!!t.streak?.offeredToday || t.claimed} streak={t.streak?.current ?? 0} /></div>
 							<p class="mt-1 text-xs text-jade-300">{streakLine(t)}</p>
 							{#if t.streak}
 								<p class="mt-0.5 text-xs text-gold-300">

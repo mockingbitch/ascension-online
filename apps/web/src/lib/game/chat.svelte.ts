@@ -1,6 +1,7 @@
 // World chat state. History comes from REST; live messages from the WebSocket (`chat.message` / `chat.hidden`).
 // Delivery over WS is at-most-once, so after a reconnect we backfill from REST and merge by id.
 import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
+import { fxBus } from '$lib/engine/fx/bus';
 import type { ChatChannel, ChatMessage } from './types';
 
 const KEEP = 200; // messages kept in memory per channel
@@ -33,6 +34,9 @@ export const chat = $state<{
 	visible: false,
 	draft: ''
 });
+
+/** Floating chat of the shell: collapsed (latest bubbles) or expanded (tabbed panel). */
+export const chatUi = $state({ open: false });
 
 const CHANNEL = 'world';
 let pendingKey: string | null = null;
@@ -101,6 +105,7 @@ export function onChatMessage(m: ChatMessage) {
 	const known = chat.messages.some((x) => x.id === m.id);
 	merge([m]);
 	if (!known && !chat.visible) chat.unread = Math.min(99, chat.unread + 1);
+	if (!known) fxBus.emit('chat', { message: m }); // sound only (the router skips my own lines)
 }
 
 export function onChatHidden(id: number) {

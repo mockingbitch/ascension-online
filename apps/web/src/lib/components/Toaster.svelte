@@ -1,10 +1,26 @@
-<!-- Toast stack at the top-centre of the game screen. -->
+<!-- Toast stack at the top-centre of the game screen, above modes. It starts below the HUD, or below the lowest
+     visible element a page marks `data-toast-below` (scene UI at the top centre, e.g. Động Phủ's realm plaque), so a
+     toast never covers that UI. -->
 <script lang="ts">
 	import { dismiss, toasts } from '$lib/game/toasts.svelte';
 	import Icon from './Icon.svelte';
+
+	let top = $state(64);
+	// re-measured whenever the first toast of a burst appears (pages, scenes and windows change between toasts)
+	const any = $derived(toasts.items.length > 0);
+	$effect(() => {
+		if (!any) return;
+		let y = 64;
+		for (const el of document.querySelectorAll('[data-toast-below]')) {
+			if (el.checkVisibility && !el.checkVisibility({ visibilityProperty: true })) continue;
+			const r = el.getBoundingClientRect();
+			if (r.height > 0 && r.top < innerHeight / 2) y = Math.max(y, r.bottom + 8);
+		}
+		top = Math.round(y);
+	});
 </script>
 
-<div class="pointer-events-none fixed inset-x-0 top-16 z-50 flex flex-col items-center gap-2 px-3" role="status" aria-live="polite">
+<div class="toaster pointer-events-none fixed inset-x-0 flex flex-col items-center gap-2 px-3" style:top="{top}px" role="status" aria-live="polite">
 	{#each toasts.items as t (t.id)}
 		<button
 			type="button"
@@ -21,6 +37,9 @@
 </div>
 
 <style>
+	.toaster {
+		z-index: 75; /* above the ModeLayer (70) */
+	}
 	.toast {
 		border: 1px solid color-mix(in oklab, currentColor 45%, transparent);
 		border-left-width: 3px;

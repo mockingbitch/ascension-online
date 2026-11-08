@@ -45,7 +45,19 @@
 		clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM12 7v5l3 2',
 		spark: 'M12 3c.6 4.2 2.8 6.4 7 7-4.2.6-6.4 2.8-7 7-.6-4.2-2.8-6.4-7-7 4.2-.6 6.4-2.8 7-7Z',
 		arrow: 'M5 12h14M13 6l6 6-6 6',
-		exit: 'M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10'
+		exit: 'M14 4h5v16h-5M10 8l-4 4 4 4M6 12h10',
+		// GĐ3: help ("?" behind which rules live), more (mobile "Thêm"), chevron (collapse), dice (gieo quẻ)
+		help: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18ZM9.5 9.2a2.6 2.6 0 0 1 5 .9c0 1.8-2.5 2.2-2.5 3.9M12 17h.01',
+		more: 'M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5zM14 14h5v5h-5z',
+		chevron: 'm6 9 6 6 6-6',
+		dice: 'M8 3h8l-1 4H9L8 3ZM9 7h6l1 14H8L9 7ZM11 11v6M13 11v6',
+		// GĐ6: fullscreen enter/leave, share (iOS install instructions), add-to-home, sound on/off
+		expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
+		shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
+		share: 'M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1',
+		home: 'M4 11 12 4l8 7M6 9.5V20h12V9.5M12 12v6M9 15h6',
+		sound: 'M4 9h4l5-4v14l-5-4H4V9ZM16.5 9a4 4 0 0 1 0 6M19 6.5a7.5 7.5 0 0 1 0 11',
+		mute: 'M4 9h4l5-4v14l-5-4H4V9ZM16 9.5l5 5M21 9.5l-5 5'
 	} as const;
 	export type IconName = keyof typeof PATHS;
 </script>

@@ -3,6 +3,7 @@
 // everything here is presentation. Raster art, when added, lives at src/lib/assets/art/cosmetics/<slug>.webp and wins
 // over the SVG/CSS fallback (lib/game/art.ts).
 import { api } from '$lib/api/client';
+import { withRetry } from './retry';
 import type { CosmeticCatalog, CosmeticDef, CosmeticKind } from './types';
 
 class CosmeticsStore {
@@ -10,16 +11,17 @@ class CosmeticsStore {
 	readonly byId = $derived(new Map((this.catalog?.cosmetics ?? []).map((c) => [c.id, c])));
 	#loading: Promise<void> | null = null;
 
-	/** Loads the catalogue once per page life (it is immutable server-side). */
-	load(): Promise<void> {
-		this.#loading ??= api
-			.cosmeticCatalog()
-			.then((c) => {
-				this.catalog = c;
-			})
-			.catch(() => {
-				this.#loading = null; // retry on the next call
-			});
+	/**
+	 * Loads the catalogue once per page life (it is immutable server-side). GET /cosmetics/catalog is public and rate
+	 * limited per IP like /factions: the shell passes `retry` so a 429/5xx/network miss at startup is retried with
+	 * backoff; without it a failure just clears the in-flight promise so the next call tries again.
+	 */
+	load(retry = false): Promise<void> {
+		this.#loading ??= withRetry(async () => {
+			this.catalog = await api.cosmeticCatalog();
+		}, retry).then((ok) => {
+			if (!ok) this.#loading = null;
+		});
 		return this.#loading;
 	}
 

@@ -1,28 +1,22 @@
 <!-- Notification centre: everything waiting for the player, each with its action. Derived from server state. -->
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { feed } from '$lib/api/realtime.svelte';
-	import { screens } from '$lib/game/nav';
 	import { game } from '$lib/game/store.svelte';
-	import { closeWindow, openWindow } from '$lib/game/windows';
+	import { openWindow } from '$lib/game/windows';
+	import EmptyState from './EmptyState.svelte';
 	import Icon from './Icon.svelte';
 
 	const tasks = $derived(game.board?.tasks.filter((t) => t.complete && !t.claimed) ?? []);
 	const gift = $derived(game.vip && game.vip.benefits.dailyGift > 0 && !game.vip.giftClaimedToday ? game.vip.benefits.dailyGift : 0);
 	const ready = $derived(!!game.preview?.ready);
-
-	async function go(href: string) {
-		closeWindow();
-		await goto(href);
-	}
 </script>
 
-<ul class="space-y-2">
+<ul class="stagger space-y-2">
 	{#if ready}
 		<li class="note">
 			<Icon name="bolt" size={20} class="text-gold-300" />
 			<span class="flex-1">Bình cảnh đã viên mãn — có thể đột phá.</span>
-			<button class="btn btn-gold h-9 px-3 text-sm" onclick={() => go(screens.breakthrough.href)}>Đột phá</button>
+			<button class="btn btn-gold h-9 px-3 text-sm" onclick={() => openWindow({ kind: 'breakthrough' })}>Đột phá</button>
 		</li>
 	{/if}
 	{#each tasks as t (t.id)}
@@ -46,7 +40,7 @@
 		</li>
 	{/each}
 	{#if !ready && !tasks.length && !gift && !feed.items.length}
-		<li class="py-8 text-center text-mist-500">Thiên địa tĩnh lặng — chưa có việc gì chờ bạn.</li>
+		<li><EmptyState icon="bell" title="Thiên địa tĩnh lặng" hint="Chưa có việc gì chờ bạn — tu luyện rồi quay lại." /></li>
 	{/if}
 </ul>
 <button class="mt-4 inline-flex items-center gap-1 text-sm text-jade-300 hover:underline" onclick={() => openWindow({ kind: 'tasks' })}>

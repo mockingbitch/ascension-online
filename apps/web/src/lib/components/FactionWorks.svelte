@@ -4,6 +4,7 @@
 	điểm duyên or tu vi. Every number comes from the server; bars are display only.
 -->
 <script lang="ts">
+	import { fxBus } from '$lib/engine/fx/bus';
 	import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
 	import { factionOf } from '$lib/game/faction.svelte';
 	import { formatQi, progressRatio } from '$lib/game/format';
@@ -60,7 +61,10 @@
 		try {
 			const r = await api.factionDonate(amount, key);
 			key = null;
+			const before = view?.mine?.progress.unlocked.length ?? 0;
 			view = r.state;
+			const after = r.state.mine?.progress.unlocked.length ?? 0;
+			if (!r.replayed && r.state.mine && after > before) fxBus.emit('worksLevelUp', { factionId: r.state.mine.factionId, unlocked: after });
 			toast('ok', `Đã cúng góp ${r.amount.toLocaleString('vi-VN')} linh thạch cho công trình.`);
 			open = false;
 			await game.reload();

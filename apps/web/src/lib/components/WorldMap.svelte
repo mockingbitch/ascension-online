@@ -1,17 +1,12 @@
 <!--
-	Hồng Hoang world map: one layered SVG (sky, moon, far peaks, drifting cloud sea, floating palace with light
-	rays, cave peak, sect hall, peach pavilion, moon-gate portal, battlefield) + clickable location plaques.
-	Only transform/opacity animate (clouds, rays, motes). Locations come from lib/game/nav (status-aware).
+	Hồng Hoang world map ART only: the painted map / its sky layer when the raster files exist, else one layered SVG
+	(sky, moon, far peaks, drifting cloud sea, floating palace with light rays, cave peak, sect hall, peach pavilion,
+	moon-gate portal, battlefield). Fills its box (slice). The playable map is the world scene (SceneLayer +
+	WorldView: plaques via anchors); this component is the login backdrop and the scene's no-art fallback.
+	Only transform/opacity animate (clouds, rays, motes).
 -->
 <script lang="ts">
-	import { goto } from '$app/navigation';
 	import { art } from '$lib/game/art';
-	import { mapLocations, screens } from '$lib/game/nav';
-	import { toast } from '$lib/game/toasts.svelte';
-	import Icon from './Icon.svelte';
-
-	/** cover: decorative full-bleed background (login) — art fills the box, no plaques. */
-	let { cover = false }: { cover?: boolean } = $props();
 
 	const motes = Array.from({ length: 22 }, (_, i) => ({
 		x: (i * 73) % 1600,
@@ -21,44 +16,15 @@
 	}));
 	const stars = Array.from({ length: 60 }, (_, i) => ({ x: (i * 197) % 1600, y: (i * 89) % 330, r: 0.6 + (i % 4) * 0.35, o: 0.25 + (i % 5) * 0.12 }));
 
-	// Raster art (docs/design/art-prompts.md §1–2): 4 parallax layers > one painted map > the SVG below.
-	const layers = (['sky', 'far', 'mid', 'ground'] as const).map((l, depth) => ({ depth, img: art(`world/${l}`) })).filter((l) => l.img);
-	const layered = layers.length > 0 && !!art('world/sky');
-	const painted = art('world/map');
-	let px = $state(0);
-	let py = $state(0);
-	function parallax(e: PointerEvent) {
-		const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-		px = ((e.clientX - r.left) / r.width - 0.5) * 2;
-		py = ((e.clientY - r.top) / r.height - 0.5) * 2;
-	}
-
-	function enter(id: keyof typeof screens) {
-		const s = screens[id];
-		if (s.status === 'soon') toast('warn', `${s.label}: cấm chế chưa giải — sẽ khai mở theo Thiên Đạo Sử.`);
-		else void goto(s.href);
-	}
+	// Raster art (docs/design/art-prompts.md §1–2): the painted map, else the sky layer, else the SVG below.
+	const img = art('world/map') ?? art('world/sky');
 </script>
 
-<div class="fit-box" class:is-cover={cover}>
-<div class="map relative overflow-hidden">
-	{#if layered && !cover}
-		<div class="absolute inset-0" onpointermove={parallax} onpointerleave={() => ((px = 0), (py = 0))} role="presentation">
-			{#each layers as l (l.depth)}
-				<img src={l.img!.src} srcset={l.img!.srcset} alt="" class="layer" style:--d={l.depth} style:--px={px} style:--py={py} draggable="false" />
-			{/each}
-			{#each mapLocations as l (l.screen)}
-				{@const a = art(`landmarks/${l.landmark}`)}
-				{#if a}
-					<img src={a.src} srcset={a.srcset} alt="" class="landmark" class:is-soon={screens[l.screen].status === 'soon'} style:left="{l.x}%" style:top="{l.y - 9}%" draggable="false" />
-				{/if}
-			{/each}
-		</div>
-	{:else if painted || (layered && cover)}
-		{@const img = painted ?? art('world/sky')!}
+<div class="map relative size-full overflow-hidden">
+	{#if img}
 		<img src={img.src} srcset={img.srcset} alt="" class="absolute inset-0 size-full object-cover" draggable="false" />
 	{:else}
-	<svg viewBox="0 0 1600 900" class="block h-full w-full" preserveAspectRatio={cover ? 'xMidYMid slice' : 'xMidYMid meet'} aria-hidden="true">
+	<svg viewBox="0 0 1600 900" class="block h-full w-full" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
 		<defs>
 			<linearGradient id="wm-sky" x1="0" y1="0" x2="0" y2="1">
 				<stop offset="0" stop-color="var(--color-ink-950)" />
@@ -195,131 +161,9 @@
 		{/each}
 	</svg>
 	{/if}
-
-	<!-- location plaques (desktop/tablet: over the art) -->
-	{#if !cover}
-	<ul class="hidden sm:block">
-		{#each mapLocations as l (l.screen)}
-			{@const s = screens[l.screen]}
-			<li class="absolute w-max -translate-x-1/2 -translate-y-1/2" style:left="{l.x}%" style:top="{l.y}%">
-				<button type="button" class="plaque" class:is-soon={s.status === 'soon'} onclick={() => enter(l.screen)}>
-					<span class="ring"><Icon name={s.status === 'soon' ? 'lock' : s.icon} size={18} /></span>
-					<span class="text-left">
-						<span class="block font-display text-lg leading-tight font-bold">{l.title}</span>
-						<span class="block text-xs text-mist-300">{l.subtitle}</span>
-					</span>
-				</button>
-			</li>
-		{/each}
-	</ul>
-	{/if}
 </div>
-</div>
-
-<!-- mobile: the map is a banner, places are a list (thumb-friendly) -->
-{#if !cover}
-<ul class="mt-3 grid grid-cols-2 gap-2 sm:hidden">
-	{#each mapLocations as l (l.screen)}
-		{@const s = screens[l.screen]}
-		<li>
-			<button type="button" class="plaque w-full" class:is-soon={s.status === 'soon'} onclick={() => enter(l.screen)}>
-				<span class="ring"><Icon name={s.status === 'soon' ? 'lock' : s.icon} size={18} /></span>
-				<span class="min-w-0 text-left">
-					<span class="block truncate font-display text-base leading-tight font-bold">{l.title}</span>
-					<span class="block truncate text-xs text-mist-300">{l.subtitle}</span>
-				</span>
-			</button>
-		</li>
-	{/each}
-</ul>
-{/if}
 
 <style>
-	/* The map keeps 16:9 (plaques are positioned in %) and fits whichever side is tighter. */
-	.map {
-		width: 100%;
-		aspect-ratio: 16 / 9;
-		border: 1px solid color-mix(in oklab, var(--color-gold-500) 25%, transparent);
-	}
-	.fit-box.is-cover,
-	.fit-box.is-cover .map {
-		width: 100%;
-		height: 100%;
-		aspect-ratio: auto;
-		border: 0;
-	}
-	@media (min-width: 640px) {
-		.fit-box:not(.is-cover) {
-			height: 100%;
-			container-type: size;
-			display: grid;
-			place-items: center;
-		}
-		.fit-box:not(.is-cover) .map {
-			width: min(100cqw, 177.78cqh);
-		}
-	}
-	.layer {
-		position: absolute;
-		inset: -3%;
-		width: 106%;
-		height: 106%;
-		object-fit: cover;
-		pointer-events: none;
-		/* deeper layers move less; transform only */
-		transform: translate(calc(var(--px) * var(--d) * -6px), calc(var(--py) * var(--d) * -3px));
-		transition: transform 400ms var(--ease-qi);
-	}
-	.landmark {
-		position: absolute;
-		width: 15%;
-		transform: translate(-50%, -50%);
-		pointer-events: none;
-		filter: drop-shadow(0 6px 14px var(--color-ink-950));
-	}
-	.landmark.is-soon {
-		filter: grayscale(1) brightness(0.6);
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.layer {
-			transform: none;
-		}
-	}
-	.plaque {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 0.4rem 0.9rem 0.4rem 0.4rem;
-		color: var(--color-gold-300);
-		border: 1px solid color-mix(in oklab, var(--color-gold-500) 55%, transparent);
-		background: linear-gradient(180deg, color-mix(in oklab, var(--color-ink-800) 92%, transparent), color-mix(in oklab, var(--color-ink-950) 92%, transparent));
-		box-shadow: 0 8px 24px -10px var(--color-ink-950);
-		border-radius: 2px;
-		transition:
-			transform 200ms var(--ease-qi),
-			box-shadow 200ms;
-	}
-	.plaque:hover,
-	.plaque:focus-visible {
-		transform: translateY(-2px);
-		box-shadow:
-			0 8px 24px -10px var(--color-ink-950),
-			0 0 22px -2px color-mix(in oklab, var(--color-gold-300) 55%, transparent);
-	}
-	.plaque.is-soon {
-		color: var(--color-mist-500);
-		border-color: color-mix(in oklab, var(--color-mist-500) 40%, transparent);
-	}
-	.ring {
-		display: grid;
-		width: 2.25rem;
-		height: 2.25rem;
-		flex-shrink: 0;
-		place-items: center;
-		border-radius: 9999px;
-		border: 1px solid currentColor;
-		background: color-mix(in oklab, var(--color-ink-950) 70%, transparent);
-	}
 	.rays {
 		animation: rays 14s ease-in-out infinite;
 	}

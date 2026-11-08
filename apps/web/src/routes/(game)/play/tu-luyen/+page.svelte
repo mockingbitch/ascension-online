@@ -1,16 +1,21 @@
-<!-- Động Phủ · Tu Luyện: the idle-cultivation core. All values are server state; the bar/clock interpolate for display. -->
+<!--
+	Động Phủ · Tu Luyện: the idle-cultivation core. The cave, the cultivator and the aura are the dong_phu SCENE
+	(SceneLayer + DongPhuView); this page is UI over it — the slot the scene fills, the qi bar, a few big numbers and
+	the Đột phá button. "Thu nhận" is the action bar's primary button (registered here, runs the store's settle). Rules
+	live behind "?" (help window), the daily board in the Nhiệm vụ window, the fortune in Gieo quẻ. All values are server
+	state; the bar/clock interpolate for display.
+-->
 <script lang="ts">
-	import CultivationScene from '$lib/components/CultivationScene.svelte';
-	import DailyTasks from '$lib/components/DailyTasks.svelte';
-	import FortuneCard from '$lib/components/FortuneCard.svelte';
+	import HelpButton from '$lib/components/HelpButton.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import QiBar from '$lib/components/QiBar.svelte';
 	import RealmBadge from '$lib/components/RealmBadge.svelte';
-	import ScreenFrame from '$lib/components/ScreenFrame.svelte';
-	import { formatBp, formatPoints, ratePerDay } from '$lib/game/format';
+	import SceneSlot from '$lib/engine/scene/SceneSlot.svelte';
+	import { formatBp, formatPoints } from '$lib/game/format';
 	import { useIdleClock } from '$lib/game/idle.svelte';
-	import { screens } from '$lib/game/nav';
+	import { usePrimaryAction } from '$lib/game/primary.svelte';
 	import { game } from '$lib/game/store.svelte';
+	import { openWindow } from '$lib/game/windows';
 
 	const clock = useIdleClock();
 	const ch = $derived(game.character!);
@@ -19,94 +24,109 @@
 	const realm = $derived(cat.realmOf(ch.stageId));
 	const aura = $derived(realm?.visual.aura ?? 'jade');
 	const subStage = $derived(stage && realm && stage.name.startsWith(realm.name) ? stage.name.slice(realm.name.length).trim() : (stage?.name ?? ''));
-	const total = $derived((stage?.cumulativeBeforeMilli ?? 0) + clock.shown);
 	const pv = $derived(game.preview);
+	const phu = $derived(cat.items.get('tu_linh_phu'));
+	const capped = $derived(ch.today.pointsMilli >= ch.today.ceilingMilli);
 
 	// One headline state, most important first.
 	const state = $derived.by(() => {
 		if (pv?.ready) return { tone: 'gold', icon: 'bolt', text: 'Đủ điều kiện đột phá' } as const;
 		if (clock.atBottleneck) return { tone: 'gold', icon: 'lock', text: 'Bình cảnh — cần đột phá' } as const;
 		if (clock.isFull) return { tone: 'gold', icon: 'clock', text: 'Linh khí đã đầy — hãy thu nhận' } as const;
-		if (ch.today.pointsMilli >= ch.today.ceilingMilli) return { tone: 'mist', icon: 'check', text: 'Đã đạt hạn mức hôm nay' } as const;
+		if (capped) return { tone: 'mist', icon: 'check', text: 'Đã đạt hạn mức hôm nay' } as const;
 		return { tone: 'jade', icon: 'lotus', text: 'Đang tu luyện' } as const;
 	});
+
+	usePrimaryAction(() => ({
+		id: 'settle',
+		label: 'Thu nhận',
+		icon: 'lotus',
+		hint: clock.isFull ? 'Đã đầy' : clock.elapsedLabel,
+		ready: clock.shown > ch.cultivationMilli,
+		disabled: game.busy,
+		progress: clock.capSeconds ? clock.elapsedSeconds / clock.capSeconds : 0,
+		tone: 'jade',
+		run: game.settle
+	}));
 </script>
 
 <svelte:head><title>Tu Luyện · Tiên Đạo</title></svelte:head>
 
-<ScreenFrame title="Động Phủ" subtitle="Bế quan tu luyện — linh khí tích lũy cả khi bạn rời đi" icon="lotus" bleed>
-	<div class="grid h-full min-h-0 overflow-y-auto lg:grid-cols-[minmax(0,1fr)_320px] lg:overflow-hidden">
-		<!-- scene + bar + actions -->
-		<section class="flex min-h-[420px] flex-col px-3 pt-3 pb-3 sm:px-6 lg:min-h-0">
-			<header class="text-center">
-				<span class="chip" data-tone={state.tone}><Icon name={state.icon} size={14} /> {state.text}</span>
-				<div class="mt-2 flex flex-col items-center gap-1">
-					{#if realm}<RealmBadge name={realm.name} aura={realm.visual.aura} size="lg" />{/if}
-					<span class="font-display text-lg text-mist-100">{subStage}</span>
-				</div>
-			</header>
+<div class="dong-phu flex h-full min-h-0 flex-col overflow-y-auto px-3 pt-2 pb-3 sm:px-6">
+	<header class="ui relative text-center" data-toast-below>
+		<p class="eyebrow">Động Phủ · bế quan</p>
+		<span class="chip" data-tone={state.tone} data-state-chip><Icon name={state.icon} size={14} /> {state.text}</span>
+		<div class="mt-2 flex flex-col items-center gap-1">
+			{#if realm}<RealmBadge name={realm.name} aura={realm.visual.aura} size="lg" />{/if}
+			<span class="font-display text-lg text-mist-100">{subStage}</span>
+		</div>
+		<HelpButton topic="dong_phu" class="absolute top-0 right-0" />
+	</header>
 
-			<div class="scene-box relative min-h-0 flex-1">
-				<div class="scene-fit"><CultivationScene {aura} ready={clock.atBottleneck} backlash={game.backlash} decorations={game.character?.appearance?.caveDecorationIds} /></div>
-				<div class="pointer-events-none absolute inset-0 flex items-center justify-center" aria-live="polite">
-					{#each game.floats as f (f.id)}<span class="float font-display text-3xl font-bold text-jade-300">{f.text}</span>{/each}
-				</div>
+	<SceneSlot class="scene-box" />
+
+	<div class="ui controls panel mx-auto w-full max-w-xl shrink-0 p-3">
+		<div data-fx-target="qi"><QiBar current={clock.shown} required={ch.requiredMilli} cap={ch.capMilli} {aura} label="Tu vi · ước tính" /></div>
+		<dl class="stats stagger mt-3 grid grid-cols-3 gap-2 text-center">
+			<div>
+				<dt><Icon name="spark" size={14} /> Tốc độ</dt>
+				<dd class="text-jade-300">+{formatPoints(ch.idleRateMilliPerHour)}<small>/giờ</small></dd>
 			</div>
-
-			<div class="mx-auto w-full max-w-xl shrink-0">
-				<QiBar current={clock.shown} required={ch.requiredMilli} cap={ch.capMilli} {aura} label="Tu vi · ước tính" />
-				<div class="mt-3 grid grid-cols-2 gap-2.5">
-					<button class="btn btn-jade h-12 px-2 text-sm whitespace-nowrap sm:text-base" onclick={game.settle} disabled={game.busy} title="Số hiển thị là ước tính — máy chủ kết toán khi bạn thu nhận.">
-						<Icon name="lotus" size={18} /> Thu nhận tu vi
-					</button>
-					<a href={screens.breakthrough.href} class="btn btn-gold h-12 px-2 text-sm whitespace-nowrap sm:text-base" class:is-ready={pv?.ready}>
-						<Icon name="bolt" size={18} stroke={1.8} /> Đột phá{#if pv && !pv.missing.some((m) => m.kind === 'final_stage')}<span class="tabular-nums opacity-80">{formatBp(pv.successBp)}</span>{/if}
-					</a>
-				</div>
+			<div>
+				<dt><Icon name="clock" size={14} /> Bế quan</dt>
+				<dd class:text-gold-300={clock.isFull}>{clock.elapsedLabel}</dd>
+				<p class="sub">{clock.isFull ? 'Đã đầy' : `đầy sau ${clock.untilFullLabel}`} · tối đa {Math.round(clock.capSeconds / 3600)} giờ</p>
 			</div>
-		</section>
-
-		<!-- details -->
-		<aside class="details space-y-4 border-gold-500/15 p-4 lg:overflow-y-auto lg:border-l">
-			<dl class="info">
-				<div><dt>Cảnh giới</dt><dd style:color="var(--color-aura-{aura})">{realm?.name}</dd></div>
-				<div><dt>Tiểu cảnh giới</dt><dd>{subStage}</dd></div>
-				<div><dt>Tổng tu vi</dt><dd class="tabular-nums">{formatPoints(total)}</dd></div>
-				<div><dt>Tu vi tầng này</dt><dd class="tabular-nums">{formatPoints(clock.shown)} / {formatPoints(ch.requiredMilli)}</dd></div>
-				<div><dt>Tốc độ</dt><dd class="text-jade-300 tabular-nums">+{formatPoints(ch.idleRateMilliPerHour)} / giờ <span class="text-xs text-mist-500">({ratePerDay(ch.idleRateMilliPerHour)})</span></dd></div>
-				<div><dt>Đã tích lũy</dt><dd class="tabular-nums" class:text-gold-300={clock.isFull}>{clock.elapsedLabel}</dd></div>
-				<div><dt>Giới hạn bế quan</dt><dd class="tabular-nums">{Math.round(clock.capSeconds / 3600)} canh giờ{#if ch.offlineBonusSeconds > 0}<span class="block text-xs text-jade-300">gồm +{ch.offlineBonusSeconds / 3600}h Tụ Linh Phù</span>{/if}</dd></div>
-				<div><dt>Còn tới khi đầy</dt><dd class="tabular-nums">{clock.isFull ? 'Đã đầy' : clock.untilFullLabel}</dd></div>
-				<div>
-					<dt>Hôm nay</dt>
-					<dd class="tabular-nums" class:text-gold-300={ch.today.pointsMilli >= ch.today.ceilingMilli}>{formatPoints(ch.today.pointsMilli)} / {formatPoints(ch.today.ceilingMilli)} điểm</dd>
-				</div>
-			</dl>
-			{#if ch.today.catchUp.active}
-				<p class="text-xs text-gold-300">Thiên đạo bù đắp người đến sau: tu vi nhận ×{ch.today.catchUp.multiplierBp / 10000}.</p>
-			{/if}
+			<div>
+				<dt><Icon name="check" size={14} /> Hôm nay</dt>
+				<dd class:text-gold-300={capped}>{formatPoints(ch.today.pointsMilli)}</dd>
+				<p class="sub">/ {formatPoints(ch.today.ceilingMilli)}{capped ? ' · đã đủ' : ''}</p>
+			</div>
+		</dl>
+		{#if ch.today.catchUp.active || ch.offlineBonusSeconds > 0}
+			<p class="mt-2 flex flex-wrap justify-center gap-2 text-xs">
+				{#if ch.today.catchUp.active}<span class="tag text-gold-300"><Icon name="bolt" size={12} /> Bù đắp ×{ch.today.catchUp.multiplierBp / 10000}</span>{/if}
+				{#if ch.offlineBonusSeconds > 0}<span class="tag text-jade-300"><Icon name="talisman" size={12} /> +{ch.offlineBonusSeconds / 3600} giờ {phu?.name ?? 'Tụ Linh Phù'}</span>{/if}
+			</p>
+		{/if}
+		<div class="mt-3 flex gap-2">
+			<button type="button" class="btn btn-gold h-12 flex-1 px-2 text-sm whitespace-nowrap sm:text-base" class:is-ready={pv?.ready} onclick={() => openWindow({ kind: 'breakthrough' })} data-open-breakthrough>
+				<Icon name="bolt" size={18} stroke={1.8} /> Đột phá{#if pv && !pv.missing.some((m) => m.kind === 'final_stage')}<span class="tabular-nums opacity-80">{formatBp(pv.successBp)}</span>{/if}
+			</button>
 			{#if ch.offlineBonusSeconds <= 0 && game.phuCount > 0 && !ch.bonusUsedToday}
-				<button class="btn btn-ghost w-full" disabled={game.busy} onclick={game.usePhu}><Icon name="talisman" size={16} /> Dùng Tụ Linh Phù (+4 canh giờ)</button>
+				<button class="btn btn-ghost h-12 px-3" disabled={game.busy} onclick={game.usePhu} title="Dùng {phu?.name ?? 'Tụ Linh Phù'}{phu?.offlineCapBonusHours ? ` (+${phu.offlineCapBonusHours} canh giờ)` : ''}">
+					<Icon name="talisman" size={18} /><span class="sr-only sm:not-sr-only">{phu?.name ?? 'Tụ Linh Phù'}</span>
+				</button>
 			{/if}
-			<div class="border-t border-gold-500/15 pt-3">
-				<FortuneCard />
-			</div>
-			<div class="border-t border-gold-500/15 pt-3">
-				<DailyTasks board={game.board} catalogue={cat} busy={game.busy} onclaim={game.claimTask} onincense={game.offerIncense} />
-			</div>
-		</aside>
+			<button type="button" class="btn btn-ghost h-12 px-3" onclick={() => openWindow({ kind: 'fortune' })}>
+				<Icon name="dice" size={18} /><span class="sr-only sm:not-sr-only">Gieo quẻ</span>
+			</button>
+		</div>
 	</div>
-</ScreenFrame>
+</div>
 
 <style>
-	.scene-box {
-		container-type: size;
-		display: grid;
-		place-items: center;
-		min-height: 220px;
+	/* the scene fills the slot (renderer: 4:3 stage contain-fitted); definite height on narrow screens */
+	.dong-phu :global(.scene-box) {
+		flex: none;
+		width: 100%;
+		max-width: 640px;
+		margin-inline: auto;
+		height: clamp(200px, 38dvh, 380px);
 	}
-	.scene-fit {
-		width: min(100cqw, 133cqh, 520px);
+	@media (min-width: 640px) {
+		.dong-phu :global(.scene-box) {
+			flex: 1 1 0;
+			height: auto;
+			min-height: 200px;
+			max-width: 760px;
+		}
+	}
+	.ui {
+		pointer-events: auto;
+	}
+	.controls {
+		backdrop-filter: blur(4px);
 	}
 	.chip {
 		display: inline-flex;
@@ -128,40 +148,44 @@
 	.chip[data-tone='mist'] {
 		color: var(--color-mist-300);
 	}
-	.info > div {
-		display: flex;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.4rem 0;
-		font-size: 0.875rem;
-		border-bottom: 1px dashed color-mix(in oklab, var(--color-gold-500) 12%, transparent);
+	.stats > div {
+		padding: 0.45rem 0.25rem;
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 15%, transparent);
+		background: color-mix(in oklab, var(--color-ink-950) 45%, transparent);
 	}
-	.info dt {
+	.stats dt {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.25rem;
+		font-size: 0.7rem;
 		color: var(--color-mist-300);
 	}
-	.info dd {
-		text-align: right;
-		font-weight: 600;
+	.stats dd {
+		margin-top: 1px;
+		font-size: 1.15rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
 		color: var(--color-mist-100);
 	}
-	.float {
-		position: absolute;
-		animation: float-up 1.6s var(--ease-qi) forwards;
-		text-shadow: 0 0 12px var(--color-jade-500);
+	.stats small {
+		font-size: 0.65rem;
+		font-weight: 500;
+		color: var(--color-mist-300);
 	}
-	@keyframes float-up {
-		from {
-			opacity: 0;
-			transform: translateY(20px) scale(0.9);
-		}
-		20% {
-			opacity: 1;
-			transform: translateY(0) scale(1);
-		}
-		to {
-			opacity: 0;
-			transform: translateY(-60px);
-		}
+	.sub {
+		font-size: 0.65rem;
+		line-height: 1.2;
+		color: var(--color-mist-300);
+		font-variant-numeric: tabular-nums;
+	}
+	.tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 1px 8px;
+		border: 1px solid currentColor;
+		border-radius: 9999px;
 	}
 	.is-ready {
 		animation: ready-glow 2.4s ease-in-out infinite;

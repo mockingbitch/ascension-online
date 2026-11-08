@@ -1,26 +1,25 @@
-<!-- Player card: opened from chat names, Thiên Bảng rows or my own HUD plate. -->
+<!-- Player card (window): opened from chat names, Thiên Bảng rows or my own HUD plate. -->
 <script lang="ts">
-	import { goto } from '$app/navigation';
-	import { mention } from '$lib/game/chat.svelte';
+	import { chatUi, mention } from '$lib/game/chat.svelte';
 	import { cosmetics } from '$lib/game/cosmetics.svelte';
 	import { game } from '$lib/game/store.svelte';
 	import { closeWindow, openWindow } from '$lib/game/windows';
+	import type { WindowProps } from '$lib/windows/registry';
 	import Icon from './Icon.svelte';
 	import NameFx from './NameFx.svelte';
 	import Portrait from './Portrait.svelte';
 	import RealmBadge from './RealmBadge.svelte';
 	import ReportDialog from './ReportDialog.svelte';
 
-	interface Props {
-		characterId: string;
-		name: string;
-		stageId: string;
-		messageId?: number;
-		avatarFrameId?: string;
-		titleId?: string;
-		nameFx?: string;
-	}
-	let { characterId, name, stageId, messageId, avatarFrameId, titleId, nameFx }: Props = $props();
+	let { win }: WindowProps = $props();
+	const p = $derived(win.kind === 'profile' ? win : { characterId: '', name: '', stageId: '' });
+	const characterId = $derived(p.characterId);
+	const name = $derived(p.name);
+	const stageId = $derived(p.stageId);
+	const messageId = $derived('messageId' in p ? p.messageId : undefined);
+	const avatarFrameId = $derived('avatarFrameId' in p ? p.avatarFrameId : undefined);
+	const titleId = $derived('titleId' in p ? p.titleId : undefined);
+	const nameFx = $derived('nameFx' in p ? p.nameFx : undefined);
 
 	const me = $derived(characterId === game.character?.id);
 	// My own card shows live data; others show the snapshot carried by the chat message / leaderboard row.
@@ -32,23 +31,15 @@
 	const rank = $derived(me ? game.myRank : (game.top.find((e) => e.characterId === characterId)?.rank ?? null));
 	let reportTarget = $state<{ characterId: string; name: string; messageId?: number } | null>(null);
 
-	// Đạo lữ: open Đào Hoa Đình with the proposal confirmation for this character (the server checks every gate).
-	async function propose() {
-		closeWindow();
-		await goto(`/play/dao-lu?cau-than=${encodeURIComponent(characterId)}&ten=${encodeURIComponent(name)}&canh-gioi=${encodeURIComponent(stage)}`);
-	}
-
-	// Trao đổi: open Túi Đồ › Trao đổi with the composer addressed to this character (the server checks every gate).
-	async function trade() {
-		closeWindow();
-		await goto(`/play/tui-do?tab=trao-doi&den=${encodeURIComponent(characterId)}&ten=${encodeURIComponent(name)}&canh-gioi=${encodeURIComponent(stage)}`);
-	}
+	// Đạo lữ: Đào Hoa Đình over this card with the proposal confirmation (the server checks every gate).
+	const propose = () => openWindow({ kind: 'companion', propose: { characterId, name, stageId: stage } });
+	// Trao đổi: Túi Đồ › Trao đổi over this card, composer addressed to this character (the server checks every gate).
+	const trade = () => openWindow({ kind: 'inventory', tab: 'trade', to: { characterId, name, stageId: stage } });
 
 	function doMention() {
 		mention(name);
-		// Desktop shows chat beside the scene; on mobile chat is a window.
-		if (matchMedia('(min-width: 1024px)').matches) closeWindow();
-		else openWindow({ kind: 'chat' });
+		closeWindow();
+		chatUi.open = true; // the floating chat expands with the mention in its composer
 	}
 </script>
 

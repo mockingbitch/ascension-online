@@ -1,33 +1,56 @@
 <!--
-	Game shell: a fixed screen that never scrolls. HUD, world chat (docked on desktop, peek strip on mobile), dock,
-	toasts and windows stay mounted; only the centre swaps between screens (nested routes), with a short fade.
-	All numbers come from the server via lib/game/store; screens on sample data are labelled.
+	GameRoot (spec §3.1): a fixed screen that never scrolls, in four layers —
+	  SceneLayer  always mounted, renders the current scene (world / Động Phủ / Tử Tiêu Cung) behind everything;
+	  FxLayer     one effects canvas + DOM overlay host (effects arrive in GĐ4);
+	  UiLayer     HUD, action bar (right rail ≥ 640px, bottom row on phones), floating chat (bottom-left), the route's
+	              page (scene UI), the window stack (WindowHost), toasts;
+	  ModeLayer   full-screen modes: the mini-game routes (Tâm Ma, Hóa Phàm, Bí cảnh) render here instead of the page cell,
+	              and the breakthrough / lôi kiếp sequence (lazy BreakthroughMode, driven by fxBus via the director).
+	              While a mode is up the HUD, action bar, chat and windows are hidden (visibility + inert, boxes kept so
+	              the scene behind stays mounted, measured and paused).
+	Scenes are routes; moving between them runs the ink-wash transition (stage.leave/arrive around the navigation).
+	Every menu is a window over the scene (shallow routing, page.state.wins ≤ 2): the scene stays mounted, pauses and
+	dims. In-app links to a former screen URL (/play/tui-do…) open its window instead of navigating; a direct link builds
+	the default scene and opens it. All numbers come from the server via lib/game/store.
 -->
 <script lang="ts">
+	import { afterNavigate, beforeNavigate, onNavigate, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fade } from 'svelte/transition';
+	import { untrack, type Component } from 'svelte';
 	import { feed, startRealtime } from '$lib/api/realtime.svelte';
-	import BreakthroughCelebration from '$lib/components/BreakthroughCelebration.svelte';
-	import ChatPanel from '$lib/components/ChatPanel.svelte';
-	import DailyTasks from '$lib/components/DailyTasks.svelte';
-	import GameDock from '$lib/components/GameDock.svelte';
+	import ActionBar from '$lib/components/ActionBar.svelte';
+	import BootScreen from '$lib/components/BootScreen.svelte';
+	import FloatingChat from '$lib/components/FloatingChat.svelte';
 	import GameHud from '$lib/components/GameHud.svelte';
-	import GameWindow from '$lib/components/GameWindow.svelte';
 	import Icon from '$lib/components/Icon.svelte';
-	import NotificationList from '$lib/components/NotificationList.svelte';
-	import ProfileWindow from '$lib/components/ProfileWindow.svelte';
+	import InstallHint from '$lib/components/InstallHint.svelte';
+	import { audio } from '$lib/engine/audio/AudioManager';
+	import { audioManifest } from '$lib/engine/audio/manifest';
+	import { fullscreen } from '$lib/engine/fullscreen.svelte';
+	import { installHint } from '$lib/engine/install.svelte';
+	import { loadSceneDef } from '$lib/engine/scene/defs';
+	import FpsOverlay from '$lib/engine/FpsOverlay.svelte';
+	import FxLayer from '$lib/engine/fx/FxLayer.svelte';
+	import { btMode } from '$lib/engine/mode/breakthrough.svelte';
+	import { isModePath, sceneOfPath } from '$lib/engine/scene/routes';
+	import SceneLayer from '$lib/engine/scene/SceneLayer.svelte';
+	import SceneWipe from '$lib/engine/scene/SceneWipe.svelte';
+	import { sceneStage as stage } from '$lib/engine/scene/stage.svelte';
+	import { settings } from '$lib/engine/settings.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
-	import VipWindow from '$lib/components/VipWindow.svelte';
-	import { chat } from '$lib/game/chat.svelte';
+	import { chatUi } from '$lib/game/chat.svelte';
 	import { cosmetics } from '$lib/game/cosmetics.svelte';
 	import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
-	import { screens } from '$lib/game/nav';
 	import { startPresence } from '$lib/game/presence';
 	import { game } from '$lib/game/store.svelte';
-	import { closeWindow, openWindow } from '$lib/game/windows';
+	import { markInAppNavigation, openWindow } from '$lib/game/windows';
+	import { WINDOW_PARAMS, windowFromPath, windowFromSearch } from '$lib/game/windowStack';
+	import WindowHost from '$lib/windows/WindowHost.svelte';
 
 	let { data, children } = $props();
+	let booting = $state(true);
 
 	// Synchronously, before child screens render (they read game.character / game.catalogue), then on data changes.
 	// svelte-ignore state_referenced_locally
@@ -36,135 +59,238 @@
 	$effect(() => startRealtime(true));
 	// Hộ pháp presence: "online" while a game screen is visible (Redis TTL on the server).
 	$effect(() => startPresence());
-	// Cosmetics catalogue (public, cached): resolves the frame/title/name-effect ids on characters, chat and boards.
-	$effect(() => void cosmetics.load());
+	// Cosmetics catalogue (public, cached, per-IP rate limited): retried with backoff like the faction roster.
+	$effect(() => void cosmetics.load(true));
 	// Faction card in the HUD / Nhân Vật: membership + roster names (light; refreshed by the Thế Lực screen and WS).
+	// Once per character (the (game) load no longer re-runs on navigation, but invalidateAll still re-runs it).
+	const characterId = $derived(data.character?.id);
 	$effect(() => {
-		if (data.character?.id) void Promise.all([loadFactionMe(), loadFactions()]);
+		if (characterId) void Promise.all([loadFactionMe(fetch, true), loadFactions(fetch, true)]);
 	});
 
-	const cat = $derived(data.catalogue);
-	const win = $derived(page.state.win);
-	const wide = new MediaQuery('min-width: 1024px'); // chat docked beside the screen
+	// Engine: audio follows the persisted settings, unlocks on the first interaction (autoplay policy; never while
+	// muted) and pauses while the tab is hidden. The manifest (files + synth placeholders) resolves lazily; the router
+	// (fxBus + button presses → sounds) is a lazy chunk started after boot. `?fps=1` shows the shared loop's frame rate.
+	$effect(() => audio().configure(settings.audio));
 	$effect(() => {
-		if (wide.current && win?.kind === 'chat') closeWindow(); // resized to desktop: chat is already visible
+		const a = audio();
+		void audioManifest().then((m) => a.register(m));
+		const offUnlock = a.installUnlock(window);
+		const offVis = a.installVisibility(document);
+		return () => {
+			offUnlock();
+			offVis();
+		};
 	});
-	const lastChat = $derived(chat.messages.at(-1));
-	const titles: Record<string, string> = {
-		tasks: 'Nhiệm vụ ngày',
-		vip: 'Tiên Duyên',
-		notifications: 'Thông báo',
-		chat: 'Truyền âm · Thế Giới'
-	};
+	$effect(() => {
+		if (booting) return;
+		let stop: (() => void) | null = null;
+		let alive = true;
+		void import('$lib/engine/audio/router').then((m) => {
+			if (alive) stop = m.startAudioRouter({ audio: audio(), target: document });
+		});
+		return () => {
+			alive = false;
+			stop?.();
+		};
+	});
+	// Scene music / ambience (SceneDef.music / .ambience): 1 s crossfade on scene change; missing files = silence.
+	$effect(() => {
+		const id = stage.shown;
+		if (!id) return;
+		let alive = true;
+		void loadSceneDef(id).then((def) => {
+			if (!alive) return;
+			void audio().playLoop('bgm', def?.music ?? null);
+			void audio().playLoop('ambience', def?.ambience ?? null);
+		});
+		return () => void (alive = false);
+	});
+	// Fullscreen button support + "Thêm vào màn hình chính" hint (phones); no pull-to-refresh / double-tap zoom in /play.
+	$effect(() => fullscreen.install());
+	$effect(() => installHint.install());
+	$effect(() => {
+		document.documentElement.dataset.play = '';
+		return () => delete document.documentElement.dataset.play;
+	});
+	const showFps = $derived(page.url.searchParams.get('fps') === '1');
+	// Boot screen once per page load (spec §4.1); the effects director (fxBus → particles/overlay) is a lazy chunk.
+	$effect(() => {
+		let stop: (() => void) | null = null;
+		let alive = true;
+		void import('$lib/engine/fx/director').then((m) => {
+			if (alive) stop = m.startDirector();
+		});
+		return () => {
+			alive = false;
+			stop?.();
+		};
+	});
+	// Effects level on <html> so shared CSS (list stagger, press, badges) follows Cài đặt › Hiệu ứng.
+	$effect(() => {
+		document.documentElement.dataset.fx = settings.fx;
+		return () => delete document.documentElement.dataset.fx;
+	});
+
+	// ── scene stage ──
+	// The route decides the scene (first load, redirects and Back included); transitions wrap client navigations.
+	const isScene = $derived(!!sceneOfPath(page.url.pathname));
+	$effect(() => stage.sync(page.url.pathname));
+	$effect(() => stage.setWindows(page.state.wins));
+	// In-app links/goto to a former screen URL open its window over the current scene instead of navigating (the URL
+	// stays a valid deep link). Over a non-scene route (a mini game) the navigation runs: its redirect builds the world.
+	beforeNavigate((nav) => {
+		if (!nav.to || nav.willUnload || (nav.type !== 'link' && nav.type !== 'goto')) return;
+		if (nav.to.url.origin !== location.origin || !sceneOfPath(page.url.pathname)) return;
+		const w = windowFromPath(nav.to.url.pathname, nav.to.url.search);
+		if (!w) return;
+		nav.cancel();
+		queueMicrotask(() => openWindow(w));
+	});
+	onNavigate((nav) => {
+		const to = nav.to?.url.pathname;
+		if (!to || nav.willUnload || to === nav.from?.url.pathname) return;
+		return stage.leave(to, settings.fx).then((token) => {
+			if (token) nav.complete.then(() => stage.arrive(token), () => stage.arrive(token));
+		});
+	});
+	// Deep link to a window (?win=settings, or a former screen URL redirected here): the route's scene (default: the
+	// world) is built, the link parameters are stripped, then the window opens by shallow routing so Back closes it.
+	afterNavigate((nav) => {
+		markInAppNavigation(!!nav.from && nav.type !== 'enter');
+		const q = page.url.searchParams;
+		if (!q.has('win')) return;
+		const w = windowFromSearch(page.url.search);
+		const url = new URL(page.url);
+		for (const k of WINDOW_PARAMS) url.searchParams.delete(k);
+		replaceState(url, {});
+		if (q.get('win') === 'chat') chatUi.open = true;
+		else if (w) openWindow(w);
+	});
+
+	// ── modes ──
+	const modeRoute = $derived(isModePath(page.url.pathname));
+	const btActive = $derived(btMode.phase !== 'idle');
+	const inMode = $derived(modeRoute || btActive);
+	// the breakthrough sequence is a lazy chunk, loaded the first time it is needed
+	let BtMode = $state.raw<Component | null>(null);
+	$effect(() => {
+		if (btActive && !BtMode) void import('$lib/engine/mode/BreakthroughMode.svelte').then((m) => (BtMode = m.default));
+	});
+	// the breakthrough mode covers the scene too (route modes already do: screenOver)
+	$effect(() => {
+		if (!btActive) return;
+		untrack(() => stage.localWindows++); // untracked: it reads the counter it writes
+		return () => untrack(() => void stage.localWindows--);
+	});
+
+	const wide = new MediaQuery('min-width: 640px'); // action bar: right rail vs bottom row
 </script>
 
-<div class="shell flex h-dvh flex-col overflow-hidden">
+<SceneLayer {stage} />
+
+<div class="shell flex h-dvh flex-col overflow-hidden" class:is-hidden={inMode} inert={inMode}>
 	<GameHud />
 	{#if feed.items[0]}
-		<p class="ticker flex shrink-0 items-center gap-2 truncate px-3 py-1 text-sm text-gold-300" aria-live="polite">
+		<p class="ticker flex shrink-0 items-center gap-2 truncate px-3 py-1 text-sm text-gold-300" aria-live="polite" data-ticker>
 			<Icon name="bolt" size={14} class="shrink-0 text-gold-500" />
-			<span class="truncate">{feed.items[0].data.text}</span>
+			{#key feed.items[0].id}<span class="ticker-text truncate">{feed.items[0].data.text}</span>{/key}
 		</p>
 	{/if}
 
-	<div class="main grid min-h-0 flex-1 gap-3 p-2 sm:p-3 lg:grid-cols-[minmax(0,1fr)_340px]">
-		<div class="screen relative min-h-0">
-			{#key page.url.pathname}
-				<div class="absolute inset-0" in:fade={{ duration: 220 }}>
-					{@render children()}
-				</div>
-			{/key}
+	<div class="main relative flex min-h-0 flex-1 gap-2 p-2 sm:gap-3 sm:p-3 sm:pr-1">
+		<div class="screen relative min-h-0 min-w-0 flex-1" bind:this={stage.cell}>
+			{#if !modeRoute}
+				{#key page.url.pathname}
+					<!-- scene pages are transparent UI over the scene (the wipe covers their swap); other routes fade in -->
+					<div class="page absolute inset-0" class:is-scene={isScene} in:fade={{ duration: isScene || settings.fx === 'off' ? 0 : 220 }}>
+						{@render children()}
+					</div>
+				{/key}
+			{/if}
+			<SceneWipe {stage} />
 		</div>
-		{#if wide.current}
-			<aside class="panel flex min-h-0 flex-col"><ChatPanel /></aside>
-		{/if}
+		{#if wide.current}<ActionBar />{/if}
+		<FloatingChat />
 	</div>
 
-	{#if !wide.current && !page.url.pathname.startsWith(screens.hall.href)}
-		<!-- Mobile/tablet: latest world message, tap to open the channel (Tử Tiêu Cung shows its own tabbed chat) -->
-		<button type="button" class="chat-peek flex shrink-0 items-center gap-2 px-3 py-1.5 text-left text-sm" onclick={() => openWindow({ kind: 'chat' })}>
-			<Icon name="chat" size={16} class="shrink-0 text-gold-500" />
-			{#if lastChat}
-				<span class="min-w-0 flex-1 truncate">
-					<span class="font-semibold" style:color="var(--color-aura-{cat.realmOf(lastChat.stageId)?.visual.aura ?? 'none'})">{lastChat.name}</span><span class="text-mist-500">:</span>
-					<span class="text-mist-100">{lastChat.text}</span>
-				</span>
-			{:else}
-				<span class="flex-1 text-mist-500">Kênh Thế Giới — chạm để trò chuyện</span>
-			{/if}
-			{#if chat.unread}<span class="badge tabular-nums">{chat.unread > 9 ? '9+' : chat.unread}</span>{/if}
-		</button>
-	{/if}
-
-	<GameDock />
+	{#if !wide.current}<ActionBar />{/if}
 </div>
 
-<Toaster />
-
-<GameWindow open={!!win} title={win ? (win.kind === 'profile' ? win.name : (titles[win.kind] ?? '')) : ''} size={win?.kind === 'vip' ? 'lg' : 'md'} onclose={closeWindow}>
-	{#if win?.kind === 'tasks'}
-		<DailyTasks board={game.board} catalogue={cat} busy={game.busy} onclaim={game.claimTask} onincense={game.offerIncense} />
-	{:else if win?.kind === 'vip'}
-		<VipWindow />
-	{:else if win?.kind === 'notifications'}
-		<NotificationList />
-	{:else if win?.kind === 'chat' && !wide.current}
-		<div class="-mx-5 -my-4 h-[70dvh]"><ChatPanel compact /></div>
-	{:else if win?.kind === 'profile'}
-		{#key win.characterId}
-			<ProfileWindow
-				characterId={win.characterId}
-				name={win.name}
-				stageId={win.stageId}
-				messageId={win.messageId}
-				avatarFrameId={win.avatarFrameId}
-				titleId={win.titleId}
-				nameFx={win.nameFx}
-			/>
-		{/key}
+<FxLayer />
+<div class="mode-layer" data-mode-layer>
+	{#if modeRoute}
+		{#key page.url.pathname}{@render children()}{/key}
 	{/if}
-</GameWindow>
+	{#if btActive && BtMode}<BtMode />{/if}
+</div>
+<Toaster />
+{#if showFps}<FpsOverlay />{/if}
+{#if booting}<BootScreen ondone={() => (booting = false)} />{:else if !inMode}<InstallHint />{/if}
 
-{#if game.celebrate}
-	{@const c = game.celebrate}
-	{@const r = cat.realmOf(c.to)}
-	<BreakthroughCelebration
-		realmName={r?.name ?? ''}
-		stageName={cat.stages.get(c.to)?.name ?? ''}
-		aura={r?.visual.aura ?? 'jade'}
-		major={c.kind === 'major'}
-		tribulation={c.tribulation ? (game.preview?.tribulation?.name ?? 'Lôi Kiếp') : undefined}
-		onclose={() => (game.celebrate = null)}
-	/>
-{/if}
+<WindowHost />
 
 <style>
 	.shell {
+		position: relative;
+		z-index: 1;
 		overscroll-behavior: none;
 		user-select: none;
+		/* the scene lies behind the shell: only real UI takes the pointer, gaps fall through to scene hotspots */
+		pointer-events: none;
+	}
+	.shell > :global(*),
+	.main > :global(*) {
+		pointer-events: auto;
+	}
+	.shell > .main,
+	.main > .screen,
+	.main > :global(.floating-chat),
+	.page.is-scene {
+		pointer-events: none;
+	}
+	.page:not(.is-scene) {
+		pointer-events: auto;
+	}
+	/* phones: keep the floating chat button clear of the page's last controls */
+	@media (max-width: 639px) {
+		.screen {
+			margin-bottom: 3.25rem;
+		}
+	}
+	.mode-layer {
+		position: fixed;
+		inset: 0;
+		z-index: 70;
+		pointer-events: none;
+	}
+	/* a mode is up: the shell keeps its boxes (the scene behind stays measured) but is not seen nor reachable */
+	.shell.is-hidden {
+		visibility: hidden;
+	}
+	/* hide at once (the fx-off rule would otherwise run a 0.01 ms transition that keeps a frame of the old state) */
+	.shell.is-hidden,
+	.shell.is-hidden :global(*) {
+		transition-property: none !important;
+	}
+	.mode-layer:empty {
+		display: none;
 	}
 	.shell :global(input),
 	.shell :global(textarea),
 	.shell :global(.msg) {
 		user-select: text;
 	}
+	.ticker-text {
+		animation: ticker-in var(--dur-slow) var(--ease-qi) both;
+	}
+	@keyframes ticker-in {
+		from {
+			opacity: 0;
+			transform: translateY(-6px);
+		}
+	}
 	.ticker {
 		background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-gold-500) 10%, transparent) 15%, color-mix(in oklab, var(--color-gold-500) 10%, transparent) 85%, transparent);
-	}
-	.chat-peek {
-		border-top: 1px solid color-mix(in oklab, var(--color-gold-500) 18%, transparent);
-		background: color-mix(in oklab, var(--color-ink-950) 75%, transparent);
-	}
-	.badge {
-		min-width: 20px;
-		height: 20px;
-		padding: 0 5px;
-		border-radius: 9999px;
-		font-size: 0.7rem;
-		font-weight: 700;
-		line-height: 20px;
-		text-align: center;
-		color: var(--color-mist-100);
-		background: var(--color-cinnabar-500);
 	}
 </style>

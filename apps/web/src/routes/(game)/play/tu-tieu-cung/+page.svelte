@@ -1,61 +1,36 @@
 <!--
-	Tử Tiêu Cung: Hồng Quân lectures all day. Online players sit on the hall's cushions (server-assigned seats,
+	Tử Tiêu Cung: Hồng Quân lectures all day. The hall, Hồng Quân, the cushions, bubbles and the qi stream are the
+	tu_tieu_cung SCENE (SceneLayer + HallView, positions from the def's anchors); this page is the UI over it. Online players sit on the hall's cushions (server-assigned seats,
 	GET /lecture/state + WS lecture.enter/leave), hall chat shows as speech bubbles, and each ngộ đạo moment pays the
 	listening time the SERVER measured. Script playback, countdowns, the progress ring and the listening clock are
-	display only (server clock offset). The ngộ đạo control has exactly one state: listening | ready | cooldown.
+	display only (server clock offset). The ngộ đạo control has exactly one state: listening | ready | cooldown; it is
+	the action bar's primary button (registered here with its progress ring). Chat is the shell's floating chat
+	(Luận Đạo tab while here); rules live behind "?".
 -->
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
-	import { fade, fly } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
+	import { settings } from '$lib/engine/settings.svelte';
 	import { ApiError } from '$lib/api/client';
-	import ChatPanel from '$lib/components/ChatPanel.svelte';
+	import EmptyState from '$lib/components/EmptyState.svelte';
+	import GameWindow from '$lib/components/GameWindow.svelte';
+	import HelpButton from '$lib/components/HelpButton.svelte';
 	import Icon from '$lib/components/Icon.svelte';
-	import ScreenFrame from '$lib/components/ScreenFrame.svelte';
-	import { art } from '$lib/game/art';
+	import SceneSlot from '$lib/engine/scene/SceneSlot.svelte';
 	import { formatPoints } from '$lib/game/format';
 	import { hall } from '$lib/game/lecture.svelte';
 	import { screens } from '$lib/game/nav';
+	import { usePrimaryAction } from '$lib/game/primary.svelte';
 	import { game } from '$lib/game/store.svelte';
 	import { toast } from '$lib/game/toasts.svelte';
 	import type { InsightResult } from '$lib/game/types';
 
-	const bg = art('scenes/tu-tieu-cung');
-	const sage = art('characters/hong-quan');
-	const sitter = art('characters/listener');
-	const wide = new MediaQuery('min-width: 1024px'); // the shell docks the chat beside the screen
 	const phone = new MediaQuery('max-width: 639px');
 
-	// Hồng Quân's dais in the art (percent of the 16:9 painting): particles start here.
-	const DAIS = { x: 50, y: 24 };
-	// 4 rows × 9 cushions in the hall's perspective (percent of the 16:9 painting). Row 0 is nearest the dais.
-	// Rows stay above ~75% so the subtitle band never covers a listener.
-	const ROWS = [
-		{ y: 43, from: 35, to: 65, scale: 0.62 },
-		{ y: 52, from: 33, to: 67, scale: 0.72 },
-		{ y: 62, from: 31, to: 69, scale: 0.83 },
-		{ y: 72, from: 29, to: 71, scale: 0.94 }
-	];
-	const seatCount = $derived(hall.state?.seats ?? 36);
-	const perRow = $derived(Math.ceil(seatCount / ROWS.length));
-	// fill from the centre outwards so a half-empty hall still looks gathered around the aisle
-	const centreOut = $derived(
-		[...Array(perRow).keys()].sort((a, b) => Math.abs(a - (perRow - 1) / 2) - Math.abs(b - (perRow - 1) / 2) || a - b)
-	);
-	const layout = $derived(
-		Array.from({ length: seatCount }, (_, i) => {
-			const r = ROWS[Math.min(ROWS.length - 1, Math.floor(i / perRow))]!;
-			const x = r.from + ((r.to - r.from) * (centreOut[i % perRow]! + 0.5)) / perRow;
-			return { seat: i, x, y: r.y, scale: r.scale };
-		})
-	);
-
-	const cat = $derived(game.catalogue);
-	const me = $derived(game.character);
 	const speaking = $derived(hall.speaking);
 	const ins = $derived(hall.insight);
 	const phase = $derived(ins?.phase ?? 'listening');
-	const mySeat = $derived(hall.state?.me.inHall && hall.state.me.seat >= 0 ? layout[hall.state.me.seat] : undefined);
 	const outside = $derived(Math.max(0, hall.listeners - Object.keys(hall.seats).length));
 	const today = $derived(hall.state?.today);
 	const capped = $derived(!!today && today.milli >= today.capMilli);
@@ -63,13 +38,13 @@
 	let reveal = $state<InsightResult | null>(null);
 	let notebookOpen = $state(false);
 
+	// subtitles fade in line by line (lite: quicker, off: at once)
+	const subFade = $derived(settings.fx === 'full' ? 650 : settings.fx === 'lite' ? 250 : 0);
+
 	const mmss = (ms: number) => {
 		const s = Math.max(0, Math.ceil(ms / 1000));
 		return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 	};
-	// Ring geometry (SVG units)
-	const R = 46;
-	const C = 2 * Math.PI * R;
 
 	onMount(() => void hall.open());
 	onDestroy(() => hall.close());
@@ -86,6 +61,18 @@
 		}
 	}
 
+	usePrimaryAction(() => ({
+		id: 'ngo_dao',
+		label: 'Ngộ đạo',
+		icon: 'spark',
+		hint: phase === 'ready' ? `còn ${mmss(ins?.msToClose ?? 0)}` : phase === 'cooldown' ? `sau ${mmss(ins?.msToNext ?? 0)}` : `${Math.round((ins?.progress ?? 0) * 100)}%`,
+		ready: phase === 'ready',
+		disabled: phase !== 'ready' || hall.busy,
+		progress: ins?.progress ?? 0,
+		tone: 'gold',
+		run: () => void ngoDao()
+	}));
+
 	async function openNotebook() {
 		notebookOpen = true;
 		if (!hall.notebook) await hall.loadNotebook().catch(() => toast('err', 'Không tải được Sổ Đạo Ngộ.'));
@@ -97,14 +84,14 @@
 {#snippet subtitle()}
 	{#if phase === 'ready' && speaking}
 		{#key 'q' + ins?.slot}
-			<div in:fade={{ duration: 450 }}>
+			<div in:fade={{ duration: subFade }}>
 				<p class="sub-label !text-gold-300">Hồng Quân hỏi · {speaking.script.title}</p>
 				<p class="sub-text">{speaking.script.question}</p>
 			</div>
 		{/key}
 	{:else if speaking}
 		{#key speaking.script.id + ':' + speaking.line}
-			<div in:fade={{ duration: 450 }}>
+			<div in:fade={{ duration: subFade }}>
 				<p class="sub-label">Lời giảng {speaking.line + 1}/{speaking.script.lines.length} · {speaking.script.title}</p>
 				<p class="sub-text">{speaking.script.lines[speaking.line]!.text}</p>
 			</div>
@@ -116,91 +103,9 @@
 	{/if}
 {/snippet}
 
-<ScreenFrame title="Tử Tiêu Cung" subtitle="Hồng Quân giảng đạo — ngồi nghe, ngộ đạo, cùng đạo hữu luận đạo" icon="scroll" bleed>
-	{#snippet actions()}
-		<button type="button" class="btn btn-ghost !px-3 !py-1.5 text-sm" onclick={openNotebook} aria-label="Sổ Đạo Ngộ">
-			<Icon name="scroll" size={16} /> <span class="hidden sm:inline">Sổ Đạo Ngộ</span>
-		</button>
-		<a href={screens.timeline.href} class="btn btn-ghost hidden !px-3 !py-1.5 text-sm md:inline-flex"><Icon name="clock" size={16} /> Thiên Đạo Sử</a>
-	{/snippet}
-
-	<div class="flex h-full min-h-0 flex-col">
-		<!-- scene: full width; the painting covers the box anchored centre-top, seats ride on the painting -->
-		<div class="stage">
-			<div class="art">
-				{#if bg}<img class="bg" src={bg.src} srcset={bg.srcset} alt="" draggable="false" />{/if}
-
-				<div class="sage" aria-hidden="true">
-					<span class="aura"></span>
-					{#if sage}
-						<img src={sage.src} srcset={sage.srcset} alt="" draggable="false" />
-					{:else}
-						<span class="sage-fallback"><Icon name="spark" size={48} /></span>
-					{/if}
-				</div>
-
-				<!-- linh khí drifting from Hồng Quân to the player while listening (hidden under reduced motion) -->
-				{#if phase === 'listening' && mySeat}
-					<div class="qi-stream" aria-hidden="true" style:--dx="{mySeat.x - DAIS.x}cqw" style:--dy="{(mySeat.y - DAIS.y) * 0.5625}cqw">
-						{#each Array(9) as _, i (i)}
-							<span class="mote" style:--delay="{(i * 0.47) % 3.2}s" style:--wobble="{((i * 37) % 5) - 2}cqw"></span>
-						{/each}
-					</div>
-				{/if}
-
-				<ul class="seats" aria-label="Đạo hữu đang nghe giảng">
-					{#each layout as s (s.seat)}
-						{@const l = hall.seats[s.seat]}
-						{@const mine = !!l && l.characterId === me?.id}
-						{@const b = l ? hall.bubbles[l.characterId] : undefined}
-						<li
-							class="seat"
-							class:is-mine={mine}
-							class:is-empty={!l}
-							style:left="{s.x}%"
-							style:top="{s.y}%"
-							style:--s={mine ? s.scale * 1.3 : s.scale}
-							style:z-index={Math.round(s.y) + (mine ? 50 : 0)}
-						>
-							{#if mine}<span class="halo" aria-hidden="true"></span>{/if}
-							<span class="cushion" aria-hidden="true"></span>
-							{#if l}
-								{#if sitter}
-									<img class="sitter" src={sitter.src} srcset={sitter.srcset} alt="" draggable="false" />
-								{:else}
-									<span class="sitter-fallback" aria-hidden="true"></span>
-								{/if}
-								{#if mine}
-									<span class="me-tag">Bạn · {me?.name}</span>
-								{:else}
-									<span class="card" aria-hidden="true">
-										<strong>{l.name}</strong>
-										<span>{cat?.stageLabel(l.stageId) ?? l.stageId}</span>
-									</span>
-								{/if}
-								<span class="sr-only">{l.name}, {cat?.stageLabel(l.stageId) ?? ''}</span>
-								{#if b}
-									{#key b.id}
-										<span class="bubble" in:fly={{ y: 6, duration: 250 }} out:fade={{ duration: 300 }}>
-											<strong class="text-gold-300">{l.name}:</strong>
-											{b.text}
-										</span>
-									{/key}
-								{/if}
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			</div>
-
-			{#if outside > 0}<p class="outside">+{outside} đạo hữu nghe ngoài điện</p>{/if}
-			{#if !phone.current}<div class="subtitles" aria-live="polite">{@render subtitle()}</div>{/if}
-		</div>
-
-		{#if phone.current}<div class="subtitles is-below" aria-live="polite">{@render subtitle()}</div>{/if}
-
-		<!-- ngộ đạo: the one call to action on this screen (always visible above the chat on phones) -->
-		<section class="cta" data-phase={phase} aria-label="Ngộ đạo">
+	<div class="hall-page flex h-full min-h-0 flex-col">
+		<!-- ngộ đạo status (the button itself is the action bar's primary) -->
+		<section class="cta ui" data-phase={phase} aria-label="Ngộ đạo">
 			<div class="min-w-0 flex-1">
 				<p class="status">
 					{#if phase === 'ready'}
@@ -239,40 +144,44 @@
 				</dl>
 			</div>
 
-			<div class="orb-wrap">
-				<svg class="progress-ring" viewBox="0 0 100 100" aria-hidden="true">
-					<circle class="prog-track" cx="50" cy="50" r={R} />
-					<circle class="prog-fill" cx="50" cy="50" r={R} stroke-dasharray={C} stroke-dashoffset={C * (1 - (ins?.progress ?? 0))} />
-				</svg>
-				<button type="button" class="orb" disabled={phase !== 'ready' || hall.busy} onclick={ngoDao} aria-describedby="orb-hint">
-					<span class="orb-title">Ngộ Đạo</span>
-					<span id="orb-hint" class="orb-sub tabular-nums">
-						{#if phase === 'ready'}{capped ? 'ghi vào sổ' : 'nhận tu vi'}{:else}{mmss(ins?.msToNext ?? 0)}{/if}
-					</span>
-				</button>
-			</div>
+			<HelpButton topic="hall" />
 		</section>
 
-		{#if !wide.current}
-			<div class="chat-dock min-h-0 flex-1"><ChatPanel compact /></div>
-		{/if}
+		<!-- scene slot: the hall painting covers it anchored centre-top (renderer); UI rides on top -->
+		<SceneSlot class="stage">
+			<div class="bar ui">
+				<p class="eyebrow hidden sm:block">Tử Tiêu Cung · Hồng Quân giảng đạo</p>
+				<div class="ml-auto flex gap-2">
+					<button type="button" class="btn btn-ghost !px-3 !py-1.5 text-sm" onclick={openNotebook} aria-label="Sổ Đạo Ngộ">
+						<Icon name="scroll" size={16} /> <span class="hidden sm:inline">Sổ Đạo Ngộ</span>
+					</button>
+					<a href={screens.timeline.href} class="btn btn-ghost hidden !px-3 !py-1.5 text-sm md:inline-flex"><Icon name="clock" size={16} /> Thiên Đạo Sử</a>
+				</div>
+			</div>
+			{#if outside > 0}<p class="outside">+{outside} đạo hữu nghe ngoài điện</p>{/if}
+			{#if !phone.current}<div class="subtitles" aria-live="polite">{@render subtitle()}</div>{/if}
+		</SceneSlot>
+
+		{#if phone.current}<div class="subtitles is-below ui" aria-live="polite">{@render subtitle()}</div>{/if}
+
 	</div>
-</ScreenFrame>
+
+<!-- the ngộ đạo moment opened: a gold pulse runs around the screen edge (decorative; the status band says it) -->
+{#if phase === 'ready'}
+	{#key ins?.slot}<div class="edge-pulse" aria-hidden="true" data-edge-pulse></div>{/key}
+{/if}
 
 <!-- ngộ đạo reveal -->
-{#if reveal}
-	<div class="overlay" transition:fade={{ duration: 200 }} role="presentation" onclick={() => (reveal = null)}>
-		<div
-			class="panel max-w-md p-6 text-center"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Ngộ đạo"
-			tabindex="-1"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.key === 'Escape' && (reveal = null)}
-		>
-			<p class="text-sm font-semibold text-gold-500">Ngộ đạo</p>
-			{#if reveal.takeaway}<p class="mt-3 font-display text-2xl leading-snug text-gold-300">“{reveal.takeaway}”</p>{/if}
+<GameWindow local open={!!reveal} title="Ngộ đạo" icon="spark" onclose={() => (reveal = null)}>
+	{#if reveal}
+		<div class="text-center">
+			{#if reveal.takeaway}
+				<div class="teaching" data-teaching>
+					<span class="rod" aria-hidden="true"></span>
+					<p class="font-display text-2xl leading-snug">“{reveal.takeaway}”</p>
+					<span class="rod" aria-hidden="true"></span>
+				</div>
+			{/if}
 			<p class="mt-4 text-sm text-mist-300">
 				Nghe giảng {mmss(reveal.presenceSeconds * 1000)} ·
 				{#if reveal.earnedMilli > 0}<strong class="text-jade-300">+{formatPoints(reveal.earnedMilli)} tu vi</strong>{:else}tu vi hôm nay từ giảng đạo đã đủ{/if}
@@ -283,260 +192,54 @@
 			{/if}
 			<button type="button" class="btn btn-jade mt-5" onclick={() => (reveal = null)}>Ghi nhớ lời dạy</button>
 		</div>
-	</div>
-{/if}
+	{/if}
+</GameWindow>
 
 <!-- Sổ Đạo Ngộ -->
-{#if notebookOpen}
-	<div class="overlay" transition:fade={{ duration: 200 }} role="presentation" onclick={() => (notebookOpen = false)}>
-		<div
-			class="panel w-full max-w-lg p-5"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Sổ Đạo Ngộ"
-			tabindex="-1"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.key === 'Escape' && (notebookOpen = false)}
-		>
-			<div class="flex items-center justify-between">
-				<h2 class="font-display text-2xl font-bold text-gold-300">Sổ Đạo Ngộ</h2>
-				<button type="button" class="btn btn-ghost !px-2.5" onclick={() => (notebookOpen = false)} aria-label="Đóng"><Icon name="cross" size={16} /></button>
-			</div>
-			<p class="mt-1 text-xs text-mist-300">Những bài giảng bạn đã ngộ, theo thứ tự lần đầu.</p>
-			<ol class="mt-4 max-h-[60vh] space-y-3 overflow-y-auto">
-				{#if hall.notebook === null}
-					<li class="text-mist-300">Đang mở sổ…</li>
-				{:else}
-					{#each hall.notebook as n (n.lectureId)}
-						<li class="note p-3">
-							<p class="font-display text-lg text-mist-100">{n.title} <span class="text-xs text-mist-300">· {n.theme} · {n.times} lần</span></p>
-							<p class="mt-1 text-sm text-gold-300">“{n.takeaway}”</p>
-						</li>
-					{:else}
-						<li class="text-mist-300">Chưa có lời dạy nào. Ngồi nghe giảng và ngộ đạo khi Hồng Quân đặt câu hỏi.</li>
-					{/each}
-				{/if}
-			</ol>
-		</div>
-	</div>
-{/if}
+<GameWindow local open={notebookOpen} title="Sổ Đạo Ngộ" icon="scroll" onclose={() => (notebookOpen = false)}>
+	<ol class="stagger space-y-3">
+		{#if hall.notebook === null}
+			<li class="text-mist-300">Đang mở sổ…</li>
+		{:else}
+			{#each hall.notebook as n (n.lectureId)}
+				<li class="note p-3">
+					<p class="font-display text-lg text-mist-100">{n.title} <span class="text-xs text-mist-300">· {n.theme} · {n.times} lần</span></p>
+					<p class="mt-1 text-sm text-gold-300">“{n.takeaway}”</p>
+				</li>
+			{:else}
+				<li><EmptyState icon="scroll" title="Sổ còn trống" hint="Ngồi nghe giảng và ngộ đạo khi Hồng Quân đặt câu hỏi." /></li>
+			{/each}
+		{/if}
+	</ol>
+</GameWindow>
 
 <style>
-	/* ── scene ── */
-	.stage {
-		position: relative;
+	/* ── scene slot ── */
+	.hall-page :global(.stage) {
 		flex: 1 1 0;
 		min-height: 12rem;
-		overflow: hidden;
 		container-type: size;
-		background: radial-gradient(ellipse at 50% 20%, color-mix(in oklab, var(--color-spirit-violet) 30%, var(--color-ink-900)), var(--color-ink-950) 70%);
 	}
-	/* The 16:9 painting covers the box (= object-fit: cover; object-position: center top) and carries the seats. */
-	.art {
+	.ui {
+		pointer-events: auto;
+	}
+	.bar {
 		position: absolute;
-		left: 50%;
+		inset-inline: 0;
 		top: 0;
-		width: max(100cqw, 177.78cqh);
-		aspect-ratio: 16 / 9;
-		transform: translateX(-50%);
-		container-type: inline-size;
-	}
-	.bg {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		object-position: center top;
-	}
-	.sage {
-		position: absolute;
-		left: 50%;
-		bottom: 73%;
-		width: 13cqw;
-		transform: translateX(-50%);
-		z-index: 30;
-	}
-	.sage img {
-		position: relative;
-		width: 100%;
-		filter: drop-shadow(0 0 1.2cqw color-mix(in oklab, var(--color-spirit-violet) 60%, transparent));
-	}
-	.aura {
-		position: absolute;
-		inset: -12% -18% 0;
-		border-radius: 50%;
-		background: radial-gradient(
-			circle at 50% 55%,
-			color-mix(in oklab, var(--color-gold-300) 35%, transparent),
-			color-mix(in oklab, var(--color-spirit-violet) 25%, transparent) 45%,
-			transparent 70%
-		);
-		animation: breathe 6s var(--ease-qi) infinite;
-	}
-	.sage-fallback {
-		display: grid;
-		place-items: center;
-		aspect-ratio: 1;
-		color: var(--color-gold-300);
-	}
-
-	/* linh khí motes: start on the dais, drift to the player's cushion */
-	.qi-stream {
-		position: absolute;
-		left: 50%;
-		top: 24%;
-		z-index: 25;
-	}
-	.mote {
-		position: absolute;
-		left: -0.25cqw;
-		top: -0.25cqw;
-		width: 0.5cqw;
-		height: 0.5cqw;
-		border-radius: 50%;
-		background: var(--color-spirit-cyan);
-		box-shadow: 0 0 0.8cqw var(--color-spirit-cyan);
-		opacity: 0;
-		animation: drift 3.2s linear var(--delay) infinite;
-	}
-	@keyframes drift {
-		0% {
-			opacity: 0;
-			transform: translate(0, 0) scale(0.6);
-		}
-		15% {
-			opacity: 0.9;
-		}
-		50% {
-			transform: translate(calc(var(--dx) * 0.5 + var(--wobble)), calc(var(--dy) * 0.45)) scale(1);
-		}
-		85% {
-			opacity: 0.7;
-		}
-		100% {
-			opacity: 0;
-			transform: translate(var(--dx), var(--dy)) scale(0.4);
-		}
-	}
-	@media (prefers-reduced-motion: reduce) {
-		.qi-stream {
-			display: none;
-		}
-	}
-
-	/* seats */
-	.seats {
-		position: absolute;
-		inset: 0;
-	}
-	.seat {
-		position: absolute;
-		width: calc(6.2cqw * var(--s));
-		aspect-ratio: 1;
-		transform: translate(-50%, -88%);
-	}
-	.cushion {
-		position: absolute;
-		left: 8%;
-		right: 8%;
-		bottom: 2%;
-		height: 26%;
-		border-radius: 50%;
-		background: radial-gradient(ellipse at 50% 35%, color-mix(in oklab, var(--color-spirit-violet) 45%, var(--color-ink-800)), var(--color-ink-950));
-		box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-gold-500) 30%, transparent);
-	}
-	.seat.is-empty .cushion {
-		opacity: 0.5;
-	}
-	.halo {
-		position: absolute;
-		left: -20%;
-		right: -20%;
-		bottom: -8%;
-		height: 42%;
-		border-radius: 50%;
-		background: radial-gradient(ellipse, color-mix(in oklab, var(--color-gold-300) 65%, transparent), transparent 70%);
-		animation: breathe 3s var(--ease-qi) infinite;
-	}
-	.sitter,
-	.sitter-fallback {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		filter: drop-shadow(0 0 2px color-mix(in oklab, var(--color-mist-100) 35%, transparent));
-	}
-	.sitter-fallback {
-		inset: 25% 25% 10%;
-		width: auto;
-		border-radius: 50% 50% 35% 35%;
-		background: var(--color-ink-800);
-	}
-	.seat.is-mine .sitter {
-		filter: drop-shadow(0 0 5px var(--color-gold-300));
-	}
-	.me-tag {
-		position: absolute;
-		left: 50%;
-		top: 100%;
-		margin-top: 0.15rem;
-		transform: translateX(-50%);
-		padding: 0.05rem 0.5rem;
-		font-size: clamp(0.65rem, 1cqw, 0.85rem);
-		font-weight: 700;
-		white-space: nowrap;
-		color: var(--color-ink-950);
-		border-radius: 9999px;
-		background: linear-gradient(180deg, var(--color-gold-300), var(--color-gold-500));
-		box-shadow: 0 0 10px color-mix(in oklab, var(--color-gold-300) 50%, transparent);
-	}
-	.card {
-		position: absolute;
-		left: 50%;
-		bottom: 100%;
+		z-index: 5;
 		display: flex;
-		flex-direction: column;
-		margin-bottom: 0.2rem;
-		padding: 0.2rem 0.5rem;
-		font-size: 0.72rem;
-		line-height: 1.3;
-		white-space: nowrap;
-		color: var(--color-mist-300);
-		border: 1px solid color-mix(in oklab, var(--color-gold-500) 35%, transparent);
-		background: color-mix(in oklab, var(--color-ink-950) 92%, transparent);
-		transform: translateX(-50%);
-		opacity: 0;
-		pointer-events: none;
-		transition: opacity 150ms;
-		z-index: 120;
-	}
-	.card strong {
-		color: var(--color-mist-100);
-	}
-	.seat:hover .card {
-		opacity: 1;
-	}
-	.bubble {
-		position: absolute;
-		left: 50%;
-		bottom: 100%;
-		width: max-content;
-		max-width: min(16rem, 26cqw);
-		margin-bottom: 0.25rem;
-		padding: 0.3rem 0.55rem;
-		font-size: clamp(0.68rem, 0.95cqw, 0.85rem);
-		line-height: 1.3;
-		color: var(--color-mist-100);
-		border: 1px solid color-mix(in oklab, var(--color-gold-500) 45%, transparent);
-		border-radius: 10px;
-		background: color-mix(in oklab, var(--color-ink-950) 90%, transparent);
-		transform: translateX(-50%);
-		z-index: 110;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		flex-wrap: wrap;
+		background: linear-gradient(180deg, color-mix(in oklab, var(--color-ink-950) 70%, transparent), transparent);
 	}
 	.outside {
 		position: absolute;
 		left: 0.5rem;
-		top: 0.5rem;
+		top: 3.25rem;
 		padding: 0.1rem 0.6rem;
 		font-size: 0.75rem;
 		color: var(--color-mist-300);
@@ -585,7 +288,7 @@
 		align-items: center;
 		gap: 1rem;
 		padding: 0.75rem 1rem;
-		border-top: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
+		border-bottom: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
 		background: linear-gradient(180deg, var(--color-ink-900), var(--color-ink-950));
 	}
 	.cta[data-phase='ready'] {
@@ -615,122 +318,18 @@
 		font-weight: 600;
 		color: var(--color-mist-100);
 	}
-	.orb-wrap {
-		position: relative;
-		width: 6rem;
-		height: 6rem;
-		flex-shrink: 0;
-	}
-	.progress-ring {
-		position: absolute;
-		inset: 0;
-		transform: rotate(-90deg);
-	}
-	.progress-ring circle {
-		fill: none;
-		stroke-width: 5;
-	}
-	.prog-track {
-		stroke: var(--color-ink-700);
-	}
-	.prog-fill {
-		stroke: var(--color-jade-500);
-		stroke-linecap: round;
-		transition: stroke-dashoffset 1s linear;
-	}
-	.cta[data-phase='ready'] .prog-fill {
-		stroke: var(--color-gold-300);
-	}
-	.cta[data-phase='cooldown'] .prog-fill {
-		stroke: var(--color-ink-600);
-	}
-	.orb {
-		position: absolute;
-		inset: 9px;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		border-radius: 50%;
-		color: var(--color-mist-300);
-		border: 1px solid var(--color-ink-600);
-		background: radial-gradient(circle at 50% 35%, var(--color-ink-700), var(--color-ink-900));
-		transition:
-			transform 200ms var(--ease-qi),
-			color 200ms;
-	}
-	.orb-title {
-		font-family: var(--font-display);
-		font-size: 1.15rem;
-		font-weight: 700;
-		line-height: 1.1;
-	}
-	.orb-sub {
-		font-size: 0.72rem;
-		font-weight: 600;
-	}
-	.cta[data-phase='ready'] .orb {
-		color: var(--color-ink-950);
-		border-color: var(--color-gold-300);
-		background: radial-gradient(circle at 50% 30%, var(--color-gold-300), var(--color-gold-500) 70%, var(--color-gold-700));
-		box-shadow:
-			0 0 18px color-mix(in oklab, var(--color-gold-300) 70%, transparent),
-			0 0 42px color-mix(in oklab, var(--color-jade-300) 35%, transparent);
-		animation: pulse 2.2s var(--ease-qi) infinite;
-		cursor: pointer;
-	}
-	.cta[data-phase='ready'] .orb:hover {
-		transform: scale(1.04);
-	}
-	.cta[data-phase='cooldown'] .orb {
-		opacity: 0.7;
-	}
-	@keyframes pulse {
-		0%,
-		100% {
-			transform: scale(1);
-		}
-		50% {
-			transform: scale(1.05);
-		}
-	}
-	@keyframes breathe {
-		0%,
-		100% {
-			opacity: 0.7;
-			transform: scale(1);
-		}
-		50% {
-			opacity: 1;
-			transform: scale(1.04);
-		}
-	}
 
-	.chat-dock {
-		min-height: 9rem;
-		border-top: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
+	/* desktop: the floating chat sits above the subtitle band, not over Hồng Quân's words */
+	@media (min-width: 640px) {
+		:global(.main:has(.hall-page)) {
+			--chat-lift: 6.5rem;
+		}
 	}
-
-	/* ── phones: scene keeps 16:9 at full width, subtitles under it, CTA then chat fill the rest ── */
+	/* ── phones: status band, the scene fills the rest, subtitles under it ── */
 	@media (max-width: 639px) {
-		.stage {
-			flex: none;
-			min-height: 0;
-			aspect-ratio: 16 / 9;
-		}
-		.sage {
-			width: 15cqw;
-		}
 		.cta {
 			gap: 0.75rem;
-			padding: 0.6rem 0.75rem;
-		}
-		.orb-wrap {
-			width: 5rem;
-			height: 5rem;
-		}
-		.orb-title {
-			font-size: 1rem;
+			padding: 0.5rem 0.75rem;
 		}
 		.facts {
 			gap: 0.1rem 0.9rem;
@@ -739,22 +338,65 @@
 			font-size: 0.85rem;
 		}
 	}
-	/* tablets: give the scene room, the chat a fixed band */
-	@media (min-width: 640px) and (max-width: 1023px) {
-		.chat-dock {
-			flex: none;
-			height: 15rem;
-		}
-	}
-
-	.overlay {
+	/* ── ngộ đạo: edge pulse + the teaching on an unrolling scroll ── */
+	.edge-pulse {
 		position: fixed;
 		inset: 0;
-		z-index: 80;
-		display: grid;
-		place-items: center;
-		padding: 1rem;
-		background: color-mix(in oklab, var(--color-ink-950) 70%, transparent);
+		z-index: 40;
+		pointer-events: none;
+		box-shadow:
+			inset 0 0 0 2px color-mix(in oklab, var(--color-gold-300) 70%, transparent),
+			inset 0 0 60px 6px color-mix(in oklab, var(--color-gold-300) 35%, transparent);
+		opacity: 0;
+	}
+	:global(:root[data-fx='full']) .edge-pulse {
+		animation: edge 1.4s var(--ease-in-out-sine) 3;
+	}
+	:global(:root[data-fx='lite']) .edge-pulse {
+		animation: edge 1.4s var(--ease-in-out-sine) 1;
+	}
+	@keyframes edge {
+		50% {
+			opacity: 1;
+		}
+	}
+	.teaching {
+		display: flex;
+		align-items: stretch;
+		margin-inline: auto;
+		max-width: 32rem;
+		transform-origin: 50% 50%;
+		color: var(--color-ink-950);
+		filter: drop-shadow(0 8px 18px var(--color-ink-950));
+	}
+	.teaching p {
+		flex: 1;
+		padding: 1rem 1.25rem;
+		background:
+			var(--grain),
+			radial-gradient(ellipse at 50% 50%, var(--color-mist-100), color-mix(in oklab, var(--color-mist-300) 85%, var(--color-gold-300)));
+	}
+	.teaching .rod {
+		flex: none;
+		width: 0.75rem;
+		border-radius: 9999px;
+		background: linear-gradient(90deg, var(--color-gold-700), var(--color-gold-300), var(--color-gold-700));
+	}
+	:global(:root[data-fx='full']) .teaching {
+		animation: unroll 700ms var(--ease-qi) both;
+	}
+	:global(:root[data-fx='lite']) .teaching {
+		animation: fade-in var(--dur-base) linear both;
+	}
+	@keyframes unroll {
+		from {
+			opacity: 0;
+			transform: scaleX(0.06);
+		}
+		12% {
+			opacity: 1;
+			transform: scaleX(0.06);
+		}
 	}
 	.note {
 		border: 1px solid color-mix(in oklab, var(--color-gold-500) 20%, transparent);

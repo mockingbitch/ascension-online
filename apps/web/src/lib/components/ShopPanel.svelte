@@ -3,6 +3,7 @@
 	availability come from the server; the confirmation total is lots × the server price, display only.
 -->
 <script lang="ts">
+	import { fxBus } from '$lib/engine/fx/bus';
 	import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
 	import { art } from '$lib/game/art';
 	import { game } from '$lib/game/store.svelte';
@@ -56,6 +57,10 @@
 			const r = await api.shopBuy(pick.id, lots, buyKey);
 			buyKey = null;
 			shop = r.shop;
+			if (!r.replayed) {
+				fxBus.emit('purchase', { itemId: r.item.itemId });
+				fxBus.emit('reward', { items: [{ itemId: r.item.itemId, quantity: r.item.quantity }], currencies: [], source: 'shop' });
+			}
 			toast('ok', `Đã mua ${pick.name} ×${r.lots * pick.lotSize} (−${r.totalPrice.toLocaleString('vi-VN')} linh thạch).`);
 			pick = null;
 			await game.reload();
@@ -79,7 +84,7 @@
 		<span class="flex items-center gap-1.5"><Icon name="stone" size={16} /> <strong class="text-mist-100 tabular-nums">{s.balance.toLocaleString('vi-VN')}</strong> linh thạch</span>
 		<span class="text-xs text-mist-500">Giới hạn ngày làm mới lúc {resetTime(s.resetsAt)}</span>
 	</p>
-	<ul class="grid gap-2 sm:grid-cols-2">
+	<ul class="stagger grid gap-2 sm:grid-cols-2">
 		{#each s.listings as l (l.id)}
 			{@const a = art(`items/${l.itemId}`)}
 			<li class="row" style:--r="var(--color-rarity-{l.rarity})">

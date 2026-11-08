@@ -3,6 +3,7 @@
 //  - heartbeats while the hall screen is open (one interval per open tab — the server measures time itself),
 //  - mirrors seats from GET /lecture/state + WS `lecture.enter/leave`, and hall chat as speech bubbles.
 import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
+import { fxBus } from '$lib/engine/fx/bus';
 import type {
 	ChatChannel,
 	ChatMessage,
@@ -224,6 +225,7 @@ class Hall {
 			const slot = this.insight?.slot;
 			if (slot !== undefined && !this.claimed.includes(slot)) this.claimed = [...this.claimed, slot];
 			this.lastInsight = r;
+			fxBus.emit('insight', { earnedMilli: r.earnedMilli, takeaway: r.takeaway });
 			if (this.state)
 				this.state = {
 					...this.state,

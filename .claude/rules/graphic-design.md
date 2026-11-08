@@ -18,7 +18,9 @@ cinnabar (chu sa) for danger/failure. Calm, spacious, readable; effects are subt
 - Rarity: `--color-rarity-<rarity>` (pham → linh → huyen → dia → thien → tien).
 - Fonts: `font-display` (Cormorant Garamond) for titles & realm names; `font-sans` (Be Vietnam Pro) for UI & numbers
   (`tabular-nums` for counters). Both fully support Vietnamese diacritics — check any new font does too.
-- **No raw hex/rgb in components.** Add a token first. Inline `style:` may reference `var(--color-…)`.
+- **No raw hex/rgb in components.** Add a token first. Inline `style:` may reference `var(--color-…)`. Sole exception:
+  `static/manifest.webmanifest`, `<meta name="theme-color">` and the generated PWA icons (they cannot read CSS
+  variables) mirror `--color-ink-950` — a test keeps them equal.
 
 ## Components
 - Reuse `RealmBadge`, `QiBar`; new primitives go to `src/lib/components/` with typed `Props`.
@@ -27,10 +29,38 @@ cinnabar (chu sa) for danger/failure. Calm, spacious, readable; effects are subt
 - Numbers: format via `format.ts` (vạn/ức, %); never show raw milli/bp values.
 
 ## Motion
+- Tokens (app.css): `--dur-instant` 90ms (press), `--dur-fast` 160ms (tab/hover), `--dur-base` 240ms (window),
+  `--dur-slow` 420ms (reward fly, count-up), `--dur-scene` 650ms (scene transition), `--dur-window` 220ms (window
+  open), `--stagger-step` 30ms (list stagger, max 10 — put `.stagger` on the list); easings `--ease-qi` (default),
+  `--ease-out-back` (pop/overshoot: badges), `--ease-in-out-sine` (camera, breathing). Use tokens, not literal ms.
+- Every effect has three levels from Cài đặt (`settings.fx`): **Đầy đủ** (full), **Nhẹ** (lite: fewer particles,
+  shorter/smaller motion), **Tắt** (off: static end state, no decorative motion). Default = Tắt under
+  `prefers-reduced-motion`, else Đầy đủ. Information must never depend on an animation playing.
+- Particles/auras: Canvas2D `ParticleSystem` only, colours from tokens (`var(--color-aura-*)`, `--color-rarity-*`,
+  jade/cyan for qi), additive blend, ≤ 300 live (≤ 80 Nhẹ); counts scale with log of the server value (e.g.
+  `motesForEarned`), never with client-computed amounts. Aura colour follows the realm `visual.aura`.
 - Durations 150–700ms, easing `--ease-qi`. Ambient loops (`animate-qi-breathe`) only on 1–3 focal elements.
-- Major breakthrough celebration ≤ 3s, skippable, then settle to static state.
+- Major breakthrough celebration ≤ 3s, skippable, then settle to static state. Breakthrough / lôi kiếp beats come
+  from `engine/fx/breakthrough.ts` (minor: gather 0.8 s → flash → aura + stage; major: formation spin 1.2 s → pillar →
+  calligraphy name → clouds part; lôi kiếp: darken → 3 strikes with flash + light shake; failure: frosted crack +
+  200 ms shake + the server's loss text). Lite = ×0.6 time, fewer particles, no shake; off = static card; reduced
+  motion = never flash/shake. Mode results carry a badge with icon + text (never colour alone).
 - All motion disabled under `prefers-reduced-motion` (global rule in app.css — don't override).
 - Animate `transform`/`opacity` only; avoid animating layout/box-shadow on many nodes.
+- Interaction: press = scale 0.96 (`.btn`, `.press`), desktop hover = lift 2px + faint gold border, disabled never
+  animates. CSS that depends on the effects level reads `:root[data-fx='full'|'lite'|'off']` (set by the shell).
+- `data-fx='off'` has a global rule in app.css (like reduced motion): every CSS animation/transition jumps to its end
+  state. So write animations whose **end state is the information** (never base `opacity: 0` revealed only by an
+  animation), and still gate loops per level (`:global(:root[data-fx='full']) .x { animation: … }`).
+- New badges: `.badge-pop` (0.6 → 1.1 → 1 + glint), re-keyed (`{#key count}`) to replay. Number changes: `CountUp`
+  (jade flash on increase = a jade copy fading, opacity only). Reward/announcement/float visuals live in
+  `engine/fx/FxOverlay.svelte`; colours of canvas particles are token strings in `engine/fx/presets.ts`.
+
+## Sound
+- Sound mirrors the visuals: cues come from the same event and timeline (thunder on each lôi kiếp strike, the outcome
+  on the reveal). One cue per event (a reward = its rarest item), never one per particle. Calm and soft by default —
+  bells, jade, wood, wind; no harsh alarms. Information never depends on sound (audio is off until a tap, and muted
+  players see everything). Original/licensed only (`lib/assets/audio/README.md`).
 
 ## Accessibility
 - Contrast ≥ 4.5:1 for text (mist-100/300 on ink-900/950 OK; check gold on ink for small text).

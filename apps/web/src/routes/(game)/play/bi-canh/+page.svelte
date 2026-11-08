@@ -2,12 +2,20 @@
      run, replays the movement log, judges and grants the capped loot; this page only plays, records and shows the
      server's verdict and loot card. Practice mode is local and never sent. -->
 <script lang="ts">
+	import { onDestroy, tick } from 'svelte';
 	import { ApiError, api, newIdempotencyKey } from '$lib/api/client';
 	import Icon from '$lib/components/Icon.svelte';
-	import ScreenFrame from '$lib/components/ScreenFrame.svelte';
+	import { leaveRoute } from '$lib/game/windows';
 	import { formatBp } from '$lib/game/format';
 	import type { BiCanhParams, SecretRealmClaim, SecretRealmLoot, SecretRealmStatus, SecretRealmSubmit } from '$lib/game/types';
 	import { game } from '$lib/game/store.svelte';
+	import { InFlight, TimeoutError } from '$lib/game/inflight';
+	import { fxBus } from '$lib/engine/fx/bus';
+	import { countdownMs, RESPONSE_TIMEOUT_MS } from '$lib/engine/mode/machine';
+	import { ModeController } from '$lib/engine/mode/mode.svelte';
+	import ModeResult from '$lib/engine/mode/ModeResult.svelte';
+	import ModeShell from '$lib/engine/mode/ModeShell.svelte';
+	import { settings } from '$lib/engine/settings.svelte';
 	import { toast } from '$lib/game/toasts.svelte';
 	import BiCanhBoard from '$lib/minigames/bi-canh/BiCanhBoard.svelte';
 	import type { EndReason } from '$lib/minigames/bi-canh/sim';
@@ -18,15 +26,17 @@
 	let realm = $state<SecretRealmStatus | null>(data.status?.realms[0] ?? null);
 	// svelte-ignore state_referenced_locally
 	let recent = $state(data.status?.recent ?? []);
-	type Phase = 'intro' | 'play' | 'judging' | 'verdict';
-	let phase = $state<Phase>('intro');
 	let run = $state<{ params: BiCanhParams; seed: number; runId: string | null; key: string; nonce: number } | null>(null);
 	let claim = $state<SecretRealmClaim | null>(null);
 	let local = $state<{ won: boolean; reason: EndReason; score: number; kills: number; qi: number } | null>(null);
 	let verdict = $state<SecretRealmSubmit | null>(null);
 	let busy = $state(false);
-	let sendError = $state(false);
 	let board = $state<{ giveUp: () => void }>();
+	const submitting = new InFlight<SecretRealmSubmit>();
+
+	// Full-screen mode (lobby → 3-2-1 → play → the server judges → result); Esc/Back pause first, then confirm.
+	const mode = new ModeController({ exit: leaveRoute, giveUp: () => board?.giveUp() });
+	onDestroy(() => mode.dispose());
 
 	const cat = $derived(game.catalogue);
 	const itemName = (id: string) => cat?.itemName(id) ?? id;
@@ -57,6 +67,13 @@
 		}
 	}
 
+	function begin(r: NonNullable<typeof run>) {
+		run = r;
+		claim = null;
+		verdict = null;
+		mode.send({ type: 'start', countdownMs: countdownMs(settings.fx) });
+	}
+
 	async function start() {
 		if (!realm || busy) return;
 		busy = true;
@@ -64,10 +81,7 @@
 			const r = await api.secretRealmStart(fetch, realm.realmId);
 			realm = r.status;
 			if (r.resumed) toast('warn', 'Phiên đang mở được tiếp tục: thế cục như cũ, ván chơi bắt đầu lại từ đầu.');
-			run = { params: r.params, seed: r.seed, runId: r.runId, key: newIdempotencyKey(), nonce: Date.now() };
-			claim = null;
-			verdict = null;
-			phase = 'play';
+			begin({ params: r.params, seed: r.seed, runId: r.runId, key: newIdempotencyKey(), nonce: Date.now() });
 		} catch (e) {
 			if (e instanceof ApiError && e.details) realm = e.details as SecretRealmStatus;
 			toast('err', e instanceof ApiError ? e.message : 'Không mở được bí cảnh, thử lại sau.');
@@ -80,53 +94,69 @@
 		if (!realm) return;
 		const buf = new Uint32Array(1);
 		crypto.getRandomValues(buf);
-		run = { params: realm.params, seed: buf[0]! || 1, runId: null, key: '', nonce: Date.now() };
-		claim = null;
-		verdict = null;
-		phase = 'play';
+		begin({ params: realm.params, seed: buf[0]! || 1, runId: null, key: '', nonce: Date.now() });
 	}
 
 	function onend(c: SecretRealmClaim, l: { won: boolean; reason: EndReason; score: number; kills: number; qi: number }) {
 		claim = c;
 		local = l;
-		if (!run?.runId) {
-			phase = 'verdict';
-			return;
+		mode.send({ type: 'ended', local: !run?.runId });
+		if (run?.runId) void submit();
+	}
+
+	/** The server's verdict and loot (once per run, even if a retry and a late answer both deliver it). */
+	async function apply(v: SecretRealmSubmit, key: string) {
+		if (!run || run.key !== key || verdict) return;
+		verdict = v;
+		realm = v.status;
+		mode.send({ type: 'verdict' });
+		await tick(); // the result card (the rewards' origin, with its bag) is on screen before they fly
+		if (v.verdict === 'pass' || v.verdict === 'fail') fxBus.emit('trialResult', { verdict: v.verdict });
+		// effects: the loot the SERVER granted flies into the bag (fresh results only, not a replay)
+		if (v.loot && !v.replayed) {
+			const l = v.loot;
+			fxBus.emit('reward', {
+				items: [...l.items.map((g) => ({ itemId: g.itemId, quantity: g.quantity })), ...(l.artifact ? [{ itemId: l.artifact, quantity: 1 }] : [])],
+				currencies: l.spiritStone > 0 ? [{ currency: 'spirit_stone', amount: l.spiritStone }] : [],
+				source: 'trial',
+				vipPoints: v.vipPoints
+			});
 		}
-		void submit();
+		void refreshStatus();
+		if (v.loot) void game.refreshSide();
 	}
 
 	async function submit() {
 		if (!run?.runId || !claim) return;
-		phase = 'judging';
-		sendError = false;
+		const { runId, key } = run;
+		const c = claim;
+		if (mode.phase === 'error') mode.send({ type: 'retry' });
 		try {
-			// Same Idempotency-Key on retry: a lost response never turns into a second submission or a second loot.
-			verdict = await api.secretRealmSubmit(fetch, run.runId, claim, run.key);
-			realm = verdict.status;
-			phase = 'verdict';
-			void refreshStatus();
-			if (verdict.loot) void game.refreshSide();
+			// Same Idempotency-Key on retry (and a retry joins a request still in flight): never a second loot.
+			const v = await submitting.run(() => api.secretRealmSubmit(fetch, runId, c, key), RESPONSE_TIMEOUT_MS);
+			await apply(v, key);
 		} catch (e) {
+			if (e instanceof TimeoutError) {
+				mode.send({ type: 'fail' });
+				submitting.late((v) => void apply(v, key));
+				return;
+			}
 			if (e instanceof ApiError && e.code === 'already_submitted') {
 				await refreshStatus();
-				phase = 'intro';
+				backToIntro();
 				toast('warn', 'Phiên này đã được phán định trước đó.');
 				return;
 			}
-			sendError = true;
+			mode.send({ type: 'fail' });
 		}
 	}
 
-	function giveUp() {
-		if (confirm(run?.runId ? 'Rời bí cảnh? Phần thưởng tính theo điểm hiện có (nếu đủ thời gian tối thiểu).' : 'Dừng ván luyện tập?')) board?.giveUp();
-	}
-
 	function backToIntro() {
-		phase = 'intro';
+		mode.send({ type: 'reset' });
 		run = null;
 		void refreshStatus();
 	}
+	const replay = () => (run && !run.runId ? practice() : backToIntro());
 
 	function lootLines(l: SecretRealmLoot) {
 		const out: { label: string; rarity?: string; artifact?: boolean }[] = [];
@@ -139,111 +169,91 @@
 
 <svelte:head><title>Bí Cảnh · Tiên Đạo</title></svelte:head>
 
-<ScreenFrame title={realm?.name ?? 'Bí Cảnh'} subtitle={phase === 'play' && run && !run.runId ? 'Luyện tập — không tính, không gửi máy chủ' : 'Thử luyện kiếm tài nguyên'} icon="portal" bleed>
-	{#snippet actions()}
-		{#if phase === 'play'}
-			<button type="button" class="btn btn-ghost h-10 px-3 text-sm" onclick={giveUp}><Icon name="exit" size={16} /> Rời</button>
-		{:else}
-			<a href="/play/tui-do" class="btn btn-ghost h-10 px-3 text-sm"><Icon name="bag" size={16} /> Túi Đồ</a>
-		{/if}
-	{/snippet}
-
-	{#if phase === 'play' && run}
+<ModeShell
+	{mode}
+	title={realm?.name ?? 'Bí Cảnh'}
+	subtitle={run && !run.runId && mode.phase !== 'lobby' ? 'Luyện tập — không tính, không gửi máy chủ' : 'Thử luyện kiếm tài nguyên'}
+	icon="portal"
+	waitingText="Thiên đạo đang phát lại từng bước chân…"
+	confirmText={run?.runId ? 'Rời bí cảnh: phần thưởng tính theo điểm hiện có (nếu đủ thời gian tối thiểu).' : 'Dừng ván luyện tập?'}
+	onretry={() => void submit()}
+>
+	{#if (mode.phase === 'countdown' || mode.phase === 'play') && run}
 		<div class="h-full p-3 sm:p-4">
 			{#key run.nonce}
-				<BiCanhBoard bind:this={board} params={run.params} seed={run.seed} practice={!run.runId} {onend} />
+				<BiCanhBoard
+					bind:this={board}
+					bind:paused={() => mode.paused, (v) => mode.send({ type: v ? 'pause' : 'resume' })}
+					hold={mode.phase === 'countdown'}
+					countdownMs={0}
+					params={run.params}
+					seed={run.seed}
+					practice={!run.runId}
+					{onend}
+				/>
 			{/key}
 		</div>
-	{:else if phase === 'judging'}
-		<div class="grid h-full place-items-center p-6 text-center">
-			<div>
-				<div class="seal mx-auto grid size-24 place-items-center rounded-full text-gold-300" class:animate-qi-breathe={!sendError}>
-					<Icon name="portal" size={36} />
-				</div>
-				{#if sendError}
-					<p class="mt-5 text-mist-100">Chưa gửi được kết quả về máy chủ.</p>
-					<p class="mt-1 text-sm text-mist-500">Ván chơi đã được lưu tạm trên trang này. Gửi lại trước khi phiên hết hạn.</p>
-					<button type="button" class="btn btn-jade mt-4" onclick={() => void submit()}>Gửi lại</button>
-				{:else}
-					<p class="mt-5 font-display text-2xl text-gold-300">Thiên đạo đang phát lại từng bước chân…</p>
-					<p class="mt-1 text-sm text-mist-500">Kết quả và phần thưởng chỉ do máy chủ phán định.</p>
-				{/if}
-			</div>
-		</div>
-	{:else if phase === 'verdict'}
-		<div class="grid h-full place-items-center overflow-y-auto p-4">
-			<div class="panel w-full max-w-md p-5 text-center">
-				{#if !run?.runId && claim && local}
-					<p class="eyebrow">Luyện tập — không tính</p>
-					<p class="mt-2 font-display text-3xl font-bold" class:text-jade-300={local.won} class:text-mist-100={!local.won}>
-						{local.won ? 'Trụ vững tới cuối' : 'Bị đẩy khỏi bí cảnh'}
-					</p>
-					<p class="mt-2 text-mist-300">
-						{reasonText[local.reason] ?? ''} Được <span class="text-mist-100 tabular-nums">{local.score}</span> điểm, hạ
-						<span class="text-mist-100 tabular-nums">{local.kills}</span> tà khí.
-					</p>
-					<p class="mt-1 text-xs text-mist-500">Ván luyện tập không gửi máy chủ nên không có phần thưởng.</p>
-				{:else if verdict}
-					{#if verdict.verdict === 'pass' || verdict.verdict === 'fail'}
-						<div class="seal mx-auto grid size-20 place-items-center rounded-full" class:pass={verdict.verdict === 'pass'} class:text-gold-300={verdict.verdict === 'pass'} class:text-mist-300={verdict.verdict !== 'pass'}>
-							<Icon name={verdict.verdict === 'pass' ? 'check' : 'portal'} size={32} />
-						</div>
-						<p class="mt-4 font-display text-3xl font-bold" class:text-gold-300={verdict.verdict === 'pass'} class:text-mist-100={verdict.verdict !== 'pass'}>
-							{verdict.verdict === 'pass' ? 'Vượt bí cảnh' : 'Rời bí cảnh'}
-						</p>
-						<p class="mt-2 text-mist-300">{reasonText[verdict.reason] ?? ''}</p>
-						{#if verdict.outcome}
-							<p class="mt-1 text-sm text-mist-500">
-								Thiên đạo ghi nhận {verdict.outcome.score} điểm · {verdict.outcome.kills} tà khí · kiếm ý {verdict.outcome.level + 1}
-							</p>
+	{:else if mode.phase === 'result'}
+		{#if !run?.runId && claim && local}
+			<ModeResult
+				verdict="practice"
+				heading={local.won ? 'Trụ vững tới cuối' : 'Bị đẩy khỏi bí cảnh'}
+				reason={reasonText[local.reason] ?? ''}
+				stats={[
+					{ label: 'Điểm', value: String(local.score) },
+					{ label: 'Tà khí', value: String(local.kills) },
+					{ label: 'Linh khí', value: String(local.qi) }
+				]}
+				replayLabel="Luyện lại"
+				onreplay={replay}
+				onback={leaveRoute}
+			>
+				<p class="text-xs text-mist-500">Ván luyện tập không gửi máy chủ nên không có phần thưởng.</p>
+			</ModeResult>
+		{:else if verdict}
+			{@const judged = verdict.verdict === 'pass' || verdict.verdict === 'fail'}
+			<ModeResult
+				verdict={verdict.verdict === 'pass' ? 'pass' : verdict.verdict === 'fail' ? 'fail' : 'void'}
+				heading={verdict.verdict === 'pass'
+					? 'Vượt bí cảnh'
+					: verdict.verdict === 'fail'
+						? 'Rời bí cảnh'
+						: verdict.verdict === 'expired'
+							? 'Phiên đã hết hạn'
+							: 'Kết quả không được ghi nhận'}
+				reason={reasonText[verdict.reason] ?? ''}
+				stats={verdict.outcome
+					? [
+							{ label: 'Điểm', value: String(verdict.outcome.score) },
+							{ label: 'Tà khí', value: String(verdict.outcome.kills) },
+							{ label: 'Kiếm ý', value: String(verdict.outcome.level + 1) }
+						]
+					: []}
+				rewards={judged && verdict.band && verdict.loot ? lootLines(verdict.loot) : undefined}
+				onreplay={replay}
+				onback={leaveRoute}
+			>
+				{#if judged}
+					{#if verdict.band && verdict.loot}
+						<p class="text-mist-500">Phẩm thưởng: {verdict.band.name}. Cơ hội pháp bảo của lượt này: {formatBp(verdict.loot.artifactChanceBp)}.</p>
+						{#if verdict.loot.duplicateOf}<p class="text-xs text-mist-500">Gặp lại {itemName(verdict.loot.duplicateOf)} đã có — hóa thành linh thạch.</p>{/if}
+						{#if verdict.loot.clipped}
+							<p class="text-xs text-mist-500">Một phần phần thưởng vượt hạn mức ngày nên không được nhận{verdict.loot.artifactCapped ? ' (kể cả một pháp bảo)' : ''}.</p>
 						{/if}
-						<div class="loot mt-4 p-3 text-left">
-							{#if verdict.band && verdict.loot}
-								<p class="eyebrow">Phần thưởng · {verdict.band.name}</p>
-								<ul class="mt-2 space-y-1.5">
-									{#each lootLines(verdict.loot) as line (line.label)}
-										<li class="flex items-center gap-2" class:artifact={line.artifact}>
-											<span class="gem" style:--r="var(--color-rarity-{line.rarity ?? 'linh'})" aria-hidden="true"></span>
-											<span class:text-gold-300={line.artifact} class:font-semibold={line.artifact}>{line.label}</span>
-											{#if line.artifact}<span class="ml-auto text-xs text-gold-300">Pháp bảo mới</span>{/if}
-										</li>
-									{:else}
-										<li class="text-sm text-mist-500">Hôm nay đã nhận đủ phần thưởng bí cảnh.</li>
-									{/each}
-								</ul>
-								{#if verdict.loot.duplicateOf}
-									<p class="mt-2 text-xs text-mist-500">Gặp lại {itemName(verdict.loot.duplicateOf)} đã có — hóa thành linh thạch.</p>
-								{/if}
-								{#if verdict.loot.clipped}
-									<p class="mt-2 text-xs text-mist-500">
-										Một phần phần thưởng vượt hạn mức ngày nên không được nhận{verdict.loot.artifactCapped ? ' (kể cả một pháp bảo)' : ''}.
-									</p>
-								{/if}
-								<p class="mt-2 text-xs text-mist-500">Cơ hội pháp bảo của lượt này: {formatBp(verdict.loot.artifactChanceBp)}.</p>
-							{:else}
-								<p class="text-sm text-mist-300">
-									Chưa đủ để nhận thưởng: cần trụ ít nhất {p ? seconds(realm?.minRewardTicks ?? 0, p.tickMs) : 0} giây, đạt
-									{realm?.bands[0]?.minScore ?? 0} điểm, gom {realm?.bands[0]?.minQi ?? 0} linh khí và hạ {realm?.bands[0]?.minKills ?? 0} tà khí.
-								</p>
-							{/if}
-						</div>
-						{#if verdict.vipPoints > 0}<p class="mt-2 text-sm text-mist-500">+{verdict.vipPoints} điểm duyên</p>{/if}
+						{#if !lootLines(verdict.loot).length}<p class="text-xs text-mist-500">Hôm nay đã nhận đủ phần thưởng bí cảnh.</p>{/if}
 					{:else}
-						<div class="seal mx-auto grid size-20 place-items-center rounded-full text-cinnabar-300"><Icon name="cross" size={30} /></div>
-						<p class="mt-4 font-display text-3xl font-bold text-mist-100">
-							{verdict.verdict === 'expired' ? 'Phiên đã hết hạn' : 'Kết quả không được ghi nhận'}
+						<p>
+							Chưa đủ để nhận thưởng: cần trụ ít nhất {p ? seconds(realm?.minRewardTicks ?? 0, p.tickMs) : 0} giây, đạt
+							{realm?.bands[0]?.minScore ?? 0} điểm, gom {realm?.bands[0]?.minQi ?? 0} linh khí và hạ {realm?.bands[0]?.minKills ?? 0} tà khí.
 						</p>
-						<p class="mt-2 text-mist-300">{reasonText[verdict.reason] ?? ''}</p>
-						<p class="mt-1 text-sm text-mist-500">Lượt này đã tính vào số lượt hôm nay và không có phần thưởng.</p>
 					{/if}
+					{#if verdict.vipPoints > 0}<p class="text-mist-500">+{verdict.vipPoints} điểm duyên</p>{/if}
+				{:else}
+					<p class="text-mist-500">Lượt này đã tính vào số lượt hôm nay và không có phần thưởng.</p>
 				{/if}
-				<div class="mt-4 grid gap-2 sm:grid-cols-2">
-					<button type="button" class="btn btn-ghost" onclick={backToIntro}>Về bí cảnh</button>
-					<button type="button" class="btn btn-ghost" onclick={practice}><Icon name="lotus" size={16} /> Luyện tập</button>
-				</div>
-			</div>
-		</div>
-	{:else}
+			</ModeResult>
+		{/if}
+	{:else if mode.phase === 'lobby'}
 		<div class="grid h-full min-h-0 grid-cols-[minmax(0,1fr)] content-start overflow-y-auto lg:grid-cols-[minmax(0,1fr)_380px] lg:content-stretch">
 			<section class="intro relative flex flex-col items-center justify-center gap-4 px-4 py-6 text-center">
 				<div class="mist absolute inset-0" aria-hidden="true"></div>
@@ -346,7 +356,7 @@
 			</aside>
 		</div>
 	{/if}
-</ScreenFrame>
+</ModeShell>
 
 <style>
 	.mist {
@@ -378,8 +388,7 @@
 		background: var(--color-jade-300);
 		box-shadow: 0 0 18px -2px var(--color-gold-300);
 	}
-	.state,
-	.loot {
+	.state {
 		border: 1px solid color-mix(in oklab, var(--color-gold-500) 25%, transparent);
 		background: color-mix(in oklab, var(--color-ink-950) 50%, transparent);
 	}
@@ -390,23 +399,5 @@
 		transform: rotate(45deg);
 		background: var(--r);
 		flex-shrink: 0;
-	}
-	.artifact {
-		padding: 4px 6px;
-		margin: 0 -6px;
-		background: color-mix(in oklab, var(--color-gold-500) 10%, transparent);
-	}
-	.seal {
-		background: radial-gradient(circle, color-mix(in oklab, var(--color-gold-500) 14%, var(--color-ink-800)), var(--color-ink-950));
-		box-shadow:
-			0 0 0 1px var(--color-gold-500),
-			0 0 0 6px var(--color-ink-950),
-			0 0 0 7px color-mix(in oklab, var(--color-gold-500) 40%, transparent);
-	}
-	.seal.pass {
-		box-shadow:
-			0 0 0 1px var(--color-gold-300),
-			0 0 0 6px var(--color-ink-950),
-			0 0 30px -4px color-mix(in oklab, var(--color-gold-300) 50%, transparent);
 	}
 </style>
