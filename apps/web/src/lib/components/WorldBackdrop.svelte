@@ -83,7 +83,7 @@
 	.backdrop {
 		position: fixed;
 		inset: 0;
-		z-index: -10;
+		z-index: var(--z-under);
 		pointer-events: none;
 	}
 	.mist {

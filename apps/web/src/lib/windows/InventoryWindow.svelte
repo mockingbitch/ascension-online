@@ -191,7 +191,7 @@
 <style>
 	.worn {
 		position: absolute;
-		z-index: 1;
+		z-index: var(--z-local-1);
 		left: 4px;
 		top: 4px;
 		padding: 0 4px;

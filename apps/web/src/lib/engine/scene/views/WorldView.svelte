@@ -13,6 +13,8 @@
 	import { mapLocations, screens } from '$lib/game/nav';
 	import { WORLD_LANTERNS } from '../defs/world';
 	import { petal } from '$lib/engine/fx/presets';
+	import { regions } from '$lib/engine/layout/regions.svelte';
+	import { relaxLabels } from '$lib/engine/layout/regions';
 	import { game } from '$lib/game/store.svelte';
 	import { every, type SceneViewProps } from '../view.svelte';
 
@@ -31,6 +33,30 @@
 		if (game.preview?.ready) return 'cultivate';
 		if (ch && Date.now() - Date.parse(ch.lastCultivatedAt) >= ch.offlineCapSeconds * 1000) return 'cultivate';
 		return null;
+	});
+	// plaques stay inside the stage (clear of HUD / rail / the chat dock) and never on top of each other (UI polish U2):
+	// anchors are projected by the renderer, then nudged apart with the measured plaque sizes (pure relaxLabels).
+	let root = $state<HTMLDivElement>();
+	const dense = $derived(scene.unit < 9); // map narrower than ~900 px: title-only plaques
+	const sizes = $state<Record<string, { w: number; h: number }>>({});
+	const plaqueAt = $derived.by(() => {
+		const pts = mapLocations.map((l) => ({ id: l.screen, p: scene.at(`loc.${l.screen}`) }));
+		const el = root;
+		if (!el) return new Map<string, { x: number; y: number }>();
+		const o = el.getBoundingClientRect();
+		const st = regions.stage;
+		const local = (r: { left: number; right: number; top: number; bottom: number }) => ({ left: r.left - o.left, right: r.right - o.left, top: r.top - o.top, bottom: r.bottom - o.top });
+		const bounds = st.right > st.left ? local(st) : { left: 0, top: 0, right: o.width, bottom: o.height };
+		const placed = pts.filter((x) => x.p && sizes[x.id]);
+		const out = relaxLabels(
+			placed.map((x) => ({ x: x.p!.x, y: x.p!.y, w: sizes[x.id]!.w, h: sizes[x.id]!.h })),
+			{ left: Math.max(bounds.left, 0), top: Math.max(bounds.top, 0), right: Math.min(bounds.right, o.width), bottom: Math.min(bounds.bottom, o.height) },
+			{ avoid: [...(regions.chat ? [regions.chat] : []), ...[...document.querySelectorAll('[data-scene-avoid]')].map((e) => e.getBoundingClientRect())].map(local) }
+		);
+		const m = new Map<string, { x: number; y: number }>();
+		placed.forEach((x, i) => m.set(x.id, out[i]!));
+		for (const x of pts) if (x.p && !m.has(x.id)) m.set(x.id, x.p);
+		return m;
 	});
 	const hallAt = $derived(scene.at('loc.hall'));
 	const garden = $derived(scene.at('loc.companion'));
@@ -51,7 +77,7 @@
 	);
 </script>
 
-<div class="world" data-quality={quality} class:is-moving={!settled} style:--u="{scene.unit}px">
+<div bind:this={root} class="world" data-quality={quality} class:is-moving={!settled} style:--u="{scene.unit}px">
 	{#if !hasArt && tl && br}
 		<div class="fallback" style:left="{tl.x}px" style:top="{tl.y}px" style:width="{br.x - tl.x}px" style:height="{br.y - tl.y}px">
 			<WorldMap />
@@ -105,11 +131,18 @@
 
 	<ul class="plaques anchored" aria-label="Địa điểm trên bản đồ">
 		{#each mapLocations as l (l.screen)}
-			{@const p = scene.at(`loc.${l.screen}`)}
+			{@const p = plaqueAt.get(l.screen)}
 			{#if p}
-				<li style:left="{p.x}px" style:top="{p.y}px" class:is-suggested={suggested === l.screen} data-place={l.screen}>
+				<li
+					style:left="{p.x}px"
+					style:top="{p.y}px"
+					class:is-suggested={suggested === l.screen}
+					data-place={l.screen}
+					bind:clientWidth={() => sizes[l.screen]?.w ?? 0, (w) => (sizes[l.screen] = { w, h: sizes[l.screen]?.h ?? 0 })}
+					bind:clientHeight={() => sizes[l.screen]?.h ?? 0, (h) => (sizes[l.screen] = { w: sizes[l.screen]?.w ?? 0, h })}
+				>
 					<span class="spot" aria-hidden="true"></span>
-					<MapPlaque screen={l.screen} title={l.title} subtitle={l.subtitle} />
+					<MapPlaque screen={l.screen} title={l.title} subtitle={l.subtitle} {dense} />
 				</li>
 			{/if}
 		{/each}
@@ -162,7 +195,7 @@
 		transition:
 			opacity var(--dur-fast) var(--ease-qi),
 			transform var(--dur-fast) var(--ease-qi);
-		z-index: -1;
+		z-index: var(--z-under);
 	}
 	.plaques li:hover .spot,
 	.plaques li:focus-within .spot {

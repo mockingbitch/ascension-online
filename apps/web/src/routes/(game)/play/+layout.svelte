@@ -2,8 +2,10 @@
 	GameRoot (spec §3.1): a fixed screen that never scrolls, in four layers —
 	  SceneLayer  always mounted, renders the current scene (world / Động Phủ / Tử Tiêu Cung) behind everything;
 	  FxLayer     one effects canvas + DOM overlay host (effects arrive in GĐ4);
-	  UiLayer     HUD, action bar (right rail ≥ 640px, bottom row on phones), floating chat (bottom-left), the route's
-	              page (scene UI), the window stack (WindowHost), toasts;
+	  UiLayer     a grid of regions (UI polish U2, lib/engine/layout/regions.ts): HUD (+ ticker), STAGE (the route's
+	              page = scene UI, one scroller), CHAT DOCK (phones: its own row above the bar; wide: a fixed box in
+	              the stage's bottom-left) and BAR (bottom row on phones, right rail ≥ 640px); then the window stack
+	              (WindowHost) and toasts. Layers come from the --z-* scale in app.css; regions are stacking contexts;
 	  ModeLayer   full-screen modes: the mini-game routes (Tâm Ma, Hóa Phàm, Bí cảnh) render here instead of the page cell,
 	              and the breakthrough / lôi kiếp sequence (lazy BreakthroughMode, driven by fxBus via the director).
 	              While a mode is up the HUD, action bar, chat and windows are hidden (visibility + inert, boxes kept so
@@ -30,6 +32,7 @@
 	import { audioManifest } from '$lib/engine/audio/manifest';
 	import { fullscreen } from '$lib/engine/fullscreen.svelte';
 	import { installHint } from '$lib/engine/install.svelte';
+	import { regions } from '$lib/engine/layout/regions.svelte';
 	import { loadSceneDef } from '$lib/engine/scene/defs';
 	import FpsOverlay from '$lib/engine/FpsOverlay.svelte';
 	import FxLayer from '$lib/engine/fx/FxLayer.svelte';
@@ -45,7 +48,7 @@
 	import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
 	import { startPresence } from '$lib/game/presence';
 	import { game } from '$lib/game/store.svelte';
-	import { markInAppNavigation, openWindow } from '$lib/game/windows';
+	import { markInAppNavigation, openWindow, prefetchWindow } from '$lib/game/windows';
 	import { WINDOW_PARAMS, windowFromPath, windowFromSearch } from '$lib/game/windowStack';
 	import WindowHost from '$lib/windows/WindowHost.svelte';
 
@@ -185,21 +188,61 @@
 	});
 
 	const wide = new MediaQuery('min-width: 640px'); // action bar: right rail vs bottom row
+
+	// U4: once booted and idle, warm the windows players open most (their chunks; opening then renders at once)
+	$effect(() => {
+		if (booting) return;
+		const warm = () => (['inventory', 'tasks', 'character', 'breakthrough', 'menu'] as const).forEach((k) => prefetchWindow(k));
+		if (!('requestIdleCallback' in window)) {
+			const t = setTimeout(warm, 1500);
+			return () => clearTimeout(t);
+		}
+		const id = requestIdleCallback(warm, { timeout: 4000 });
+		return () => cancelIdleCallback(id);
+	});
+
+	// ── regions: one ResizeObserver measures HUD / bar / chat dock and publishes --hud-h, --bar-h, --rail-w,
+	// --chat-w, --chat-reserve (regions.svelte.ts); pages, toasts and scene anchors lay out against them ──
+	let hudEl = $state<HTMLElement>();
+	let barEl = $state<HTMLElement>();
+	let chatEl = $state<HTMLElement>();
+	$effect(() => {
+		const els = { hud: hudEl, bar: barEl, chat: chatEl?.firstElementChild instanceof HTMLElement ? chatEl.firstElementChild : chatEl };
+		const isWide = wide.current;
+		if (!els.hud || !els.bar) return;
+		const measure = () => regions.measure(els, isWide);
+		measure();
+		const ro = new ResizeObserver(measure);
+		for (const el of Object.values(els)) if (el) ro.observe(el);
+		window.addEventListener('resize', measure);
+		return () => {
+			ro.disconnect();
+			window.removeEventListener('resize', measure);
+		};
+	});
+	$effect(() => () => regions.clear());
+	// a scene page whose SceneSlot asks for it lets empty stage space through to the scene's hotspots
+	const passthrough = $derived(isScene && stage.passthrough);
 </script>
 
 <SceneLayer {stage} />
 
-<div class="shell flex h-dvh flex-col overflow-hidden" class:is-hidden={inMode} inert={inMode}>
-	<GameHud />
-	{#if feed.items[0]}
-		<p class="ticker flex shrink-0 items-center gap-2 truncate px-3 py-1 text-sm text-gold-300" aria-live="polite" data-ticker>
-			<Icon name="bolt" size={14} class="shrink-0 text-gold-500" />
-			{#key feed.items[0].id}<span class="ticker-text truncate">{feed.items[0].data.text}</span>{/key}
-		</p>
-	{/if}
+<!-- regions (lib/engine/layout/regions.ts): hud / stage / chat / bar on phones, hud / stage+chat dock / rail when wide -->
+<div class="shell" class:is-wide={wide.current} class:is-hidden={inMode} inert={inMode} data-shell>
+	<div class="r-hud" bind:this={hudEl} data-region="hud">
+		<GameHud />
+		{#if feed.items[0]}
+			<p class="ticker flex items-center gap-2 truncate px-3 py-1 text-sm text-gold-300" aria-live="polite" data-ticker>
+				<Icon name="bolt" size={14} class="shrink-0 text-gold-500" />
+				{#key feed.items[0].id}<span class="ticker-text truncate">{feed.items[0].data.text}</span>{/key}
+			</p>
+		{/if}
+	</div>
 
-	<div class="main relative flex min-h-0 flex-1 gap-2 p-2 sm:gap-3 sm:p-3 sm:pr-1">
-		<div class="screen relative min-h-0 min-w-0 flex-1" bind:this={stage.cell}>
+	<!-- STAGE: the only place for a scene page's UI. Blocks the pointer except where the page lets the scene through
+	     (data-passthrough: <SceneSlot passthrough>; the page's UI blocks opt back in with .ui / data-ui). -->
+	<div class="r-stage" data-region="stage" data-passthrough={passthrough ? '' : undefined}>
+		<div class="screen" bind:this={stage.cell} data-stage>
 			{#if !modeRoute}
 				{#key page.url.pathname}
 					<!-- scene pages are transparent UI over the scene (the wipe covers their swap); other routes fade in -->
@@ -210,11 +253,10 @@
 			{/if}
 			<SceneWipe {stage} />
 		</div>
-		{#if wide.current}<ActionBar />{/if}
-		<FloatingChat />
 	</div>
 
-	{#if !wide.current}<ActionBar />{/if}
+	<div class="r-chat" bind:this={chatEl} data-region="chat" data-open={chatUi.open || undefined}><FloatingChat docked={!wide.current} /></div>
+	<div class="r-bar" bind:this={barEl} data-region="bar"><ActionBar /></div>
 </div>
 
 <FxLayer />
@@ -231,37 +273,92 @@
 <WindowHost />
 
 <style>
+	/* ── regions (U2/U3): the shell is a grid that owns where everything goes; region sizes are published as
+	   --hud-h / --bar-h / --rail-w / --chat-w / --chat-reserve (regions.svelte.ts). The shell itself is not a stacking
+	   context, so each region's --z-* token orders it against the scene (below) and modes/toasts (above). ── */
 	.shell {
 		position: relative;
-		z-index: 1;
+		display: grid;
+		height: 100dvh;
+		overflow: hidden;
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto minmax(0, 1fr) auto auto;
+		grid-template-areas: 'hud' 'stage' 'chat' 'bar';
 		overscroll-behavior: none;
 		user-select: none;
-		/* the scene lies behind the shell: only real UI takes the pointer, gaps fall through to scene hotspots */
+		/* the grid itself is not UI: only its regions take the pointer (the scene behind gets what no region takes) */
 		pointer-events: none;
 	}
-	.shell > :global(*),
-	.main > :global(*) {
+	.shell.is-wide {
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-rows: auto minmax(0, 1fr);
+		grid-template-areas: 'hud hud' 'stage rail';
+	}
+	.r-hud,
+	.r-stage,
+	.r-chat,
+	.r-bar {
+		position: relative;
+		isolation: isolate;
+		min-width: 0;
 		pointer-events: auto;
 	}
-	.shell > .main,
-	.main > .screen,
-	.main > :global(.floating-chat),
-	.page.is-scene {
+	.r-hud {
+		grid-area: hud;
+		z-index: var(--z-hud);
+	}
+	.r-stage {
+		grid-area: stage;
+		z-index: var(--z-stage);
+		min-height: 0;
+		padding: 0.5rem;
+	}
+	/* scene pages let empty stage space through to the scene (hotspots, hover cards); their UI blocks opt back in */
+	.r-stage[data-passthrough] {
 		pointer-events: none;
 	}
-	.page:not(.is-scene) {
+	.r-stage[data-passthrough] :global(:where(.ui, [data-ui])) {
 		pointer-events: auto;
 	}
-	/* phones: keep the floating chat button clear of the page's last controls */
-	@media (max-width: 639px) {
-		.screen {
-			margin-bottom: 3.25rem;
+	/* nothing a page draws leaves the stage (it scrolls inside instead) */
+	.screen {
+		position: relative;
+		height: 100%;
+		min-height: 0;
+		overflow: hidden;
+	}
+	.r-chat {
+		grid-area: chat;
+		z-index: var(--z-chat);
+		/* the dock box itself is a reservation, not a hit area: only its button / bubbles / panel take the pointer */
+		pointer-events: none;
+	}
+	.r-bar {
+		grid-area: bar;
+		z-index: var(--z-bar);
+		padding-bottom: env(safe-area-inset-bottom);
+	}
+	.is-wide .r-bar {
+		grid-area: rail;
+		padding-bottom: 0;
+	}
+	/* wide: the chat dock is a fixed box in the stage's bottom-left corner (pages keep their UI clear of
+	   --chat-w × --chat-reserve); it overlaps the stage cell by design, above it (--z-chat > --z-stage) */
+	.is-wide .r-chat {
+		grid-area: stage;
+		align-self: end;
+		justify-self: start;
+		margin: 0 0 0.5rem 0.5rem;
+	}
+	@media (min-width: 640px) {
+		.r-stage {
+			padding: 0.75rem 0.25rem 0.75rem 0.75rem;
 		}
 	}
 	.mode-layer {
 		position: fixed;
 		inset: 0;
-		z-index: 70;
+		z-index: var(--z-mode);
 		pointer-events: none;
 	}
 	/* a mode is up: the shell keeps its boxes (the scene behind stays measured) but is not seen nor reachable */

@@ -285,7 +285,7 @@
 	.bt-mode {
 		position: fixed;
 		inset: 0;
-		z-index: 2;
+		z-index: var(--z-local-2);
 		overflow: hidden;
 		pointer-events: auto;
 		background: radial-gradient(circle at 50% 45%, color-mix(in oklab, var(--color-ink-800) 94%, transparent), var(--color-ink-950));

@@ -1,5 +1,9 @@
 <!--
-	Floating chat, bottom-left of the shell (spec §3.4, §4.8) — replaces the fixed chat column.
+	Chat dock of the shell (spec §3.4, §4.8; UI polish U2: a reserved region, not a free-floating element).
+	  phones (docked)  its own fixed-height row above the action bar: the button + the 2 newest bubbles; expanded, the
+	                   row grows into the panel and the stage above shrinks (nothing is covered).
+	  wide             a fixed box (--chat-w × --chat-reserve) in the stage's bottom-left: the button + up to 3 bubbles;
+	                   pages keep their UI clear of it. Expanded, the panel grows upward out of the box.
 	Collapsed: a round chat button with the unread count and, above it, the 3 newest messages as bubbles that slide up,
 	fade in and fade away after 8 s (your own message flashes jade). Click a bubble or the button to expand into the
 	tabbed panel (ChatPanel: Luận Đạo while in Tử Tiêu Cung, Thế Giới). Esc or the chevron collapses it.
@@ -18,6 +22,7 @@
 	import Icon from './Icon.svelte';
 	import NameFx from './NameFx.svelte';
 
+	let { docked = false }: { docked?: boolean } = $props();
 	let bubbles = $state<Bubble[]>([]);
 	let toggle = $state<HTMLButtonElement>();
 	let panel = $state<HTMLElement>();
@@ -70,7 +75,7 @@
 	const auraOf = (stageId: string) => game.catalogue?.realmOf(stageId)?.visual.aura ?? 'none';
 </script>
 
-<div class="floating-chat" data-floating-chat data-open={chatUi.open}>
+<div class="floating-chat" class:is-row={docked} data-floating-chat data-open={chatUi.open}>
 	{#if chatUi.open}
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions (Esc collapses the panel from any control in it) -->
 		<section
@@ -114,17 +119,16 @@
 </div>
 
 <style>
+	/* the dock box (a reservation; only its controls take the pointer) */
 	.floating-chat {
-		position: absolute;
-		left: 0.5rem;
-		/* a page can lift it above its own bottom band (the hall subtitles) with --chat-lift */
-		bottom: calc(0.5rem + var(--chat-lift, 0px));
-		z-index: 20;
+		position: relative;
 		display: flex;
 		flex-direction: column;
+		justify-content: flex-end;
 		align-items: flex-start;
-		gap: 0.4rem;
-		max-width: min(22rem, calc(100% - 1rem));
+		gap: 0.3rem;
+		width: min(22rem, 40vw);
+		height: 8.5rem;
 		pointer-events: none;
 	}
 	.floating-chat > :global(*) {
@@ -132,13 +136,43 @@
 	}
 	.bubbles {
 		display: flex;
+		max-width: 100%;
+		min-height: 0;
 		flex-direction: column;
 		align-items: flex-start;
+		justify-content: flex-end;
 		gap: 0.3rem;
+		overflow: hidden;
 		pointer-events: none;
 	}
 	.bubbles li {
 		max-width: 100%;
+	}
+	/* phones: one row (button + the two newest bubbles), full width, fixed height */
+	.floating-chat.is-row {
+		width: 100%;
+		height: 3rem;
+		flex-direction: row-reverse;
+		justify-content: flex-end;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0 0.5rem;
+	}
+	.is-row .bubbles {
+		flex: 1;
+		gap: 2px;
+	}
+	.is-row .bubbles li:not(:nth-last-child(-n + 2)) {
+		display: none;
+	}
+	.is-row .bubble {
+		padding: 0.05rem 0.55rem;
+		font-size: 0.74rem;
+		border-radius: 9px 9px 9px 3px;
+	}
+	.floating-chat.is-row[data-open='true'] {
+		height: min(26rem, 50dvh);
+		padding: 0 0.5rem 0.25rem;
 	}
 	.bubble {
 		display: block;
@@ -166,8 +200,9 @@
 	.toggle {
 		position: relative;
 		display: grid;
-		width: 2.75rem;
-		height: 2.75rem;
+		flex-shrink: 0;
+		width: var(--tap);
+		height: var(--tap);
 		place-items: center;
 		border-radius: 9999px;
 		color: var(--color-gold-300);
@@ -196,15 +231,23 @@
 	}
 	.expanded {
 		display: flex;
-		width: min(22rem, calc(100vw - 1rem));
-		height: min(28rem, 58dvh);
+		width: 100%;
+		height: 100%;
 		flex-direction: column;
 		overflow: hidden;
 	}
+	/* wide: the panel grows upward out of the fixed dock box */
+	.floating-chat:not(.is-row) .expanded {
+		position: absolute;
+		left: 0;
+		bottom: 0;
+		width: min(22rem, calc(100vw - 1rem));
+		height: min(28rem, 58dvh);
+	}
 	.hbtn {
 		display: inline-grid;
-		width: 2.5rem;
-		height: 2.5rem;
+		width: var(--tap);
+		height: var(--tap);
 		place-items: center;
 		color: var(--color-mist-300);
 	}

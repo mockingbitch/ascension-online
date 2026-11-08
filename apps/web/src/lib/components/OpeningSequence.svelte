@@ -63,7 +63,7 @@
 
 <svelte:window onkeydown={onkey} />
 
-<section class="opening fixed inset-0 z-40 overflow-hidden bg-ink-950 text-mist-100" aria-roledescription="trình chiếu" aria-label="Mở đầu: lịch sử Hồng Hoang">
+<section class="opening fixed inset-0 z-(--z-mode) overflow-hidden bg-ink-950 text-mist-100" aria-roledescription="trình chiếu" aria-label="Mở đầu: lịch sử Hồng Hoang">
 	{#key index}
 		<div class="frame absolute inset-0" in:fade={{ duration: dur(700) }} out:fade={{ duration: dur(500) }} aria-hidden="true">
 			{#if scene.visual === 'chaos'}
@@ -115,9 +115,9 @@
 	{/key}
 
 	<!-- tap anywhere (outside the controls) = next scene -->
-	<button type="button" class="absolute inset-0 z-10 cursor-pointer" aria-label="Cảnh tiếp theo" onclick={next}></button>
+	<button type="button" class="absolute inset-0 z-(--z-local-1) cursor-pointer" aria-label="Cảnh tiếp theo" onclick={next}></button>
 
-	<header class="pointer-events-none absolute inset-x-0 top-0 z-20 px-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-8">
+	<header class="pointer-events-none absolute inset-x-0 top-0 z-(--z-local-2) px-4 pt-[max(1rem,env(safe-area-inset-top))] sm:px-8">
 		<ol class="flex gap-1.5" aria-label="Tiến trình">
 			{#each openingScenes as s, i (s.title)}
 				<li class="bar" aria-current={i === index ? 'step' : undefined}>
@@ -144,7 +144,7 @@
 		</div>
 	</header>
 
-	<footer class="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-10 sm:pb-10">
+	<footer class="pointer-events-none absolute inset-x-0 bottom-0 z-(--z-local-2) px-5 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-10 sm:pb-10">
 		{#key index}
 			<div class="mx-auto max-w-3xl" in:fade={{ duration: dur(600), delay: dur(250) }} aria-live="polite">
 				<p class="eyebrow">Cảnh {index + 1} / {total}</p>

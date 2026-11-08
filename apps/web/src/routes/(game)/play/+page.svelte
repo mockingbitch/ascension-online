@@ -21,6 +21,7 @@
 		hint: clock.isFull ? 'Đã đầy' : clock.elapsedLabel,
 		ready: !!ch && clock.shown > ch.cultivationMilli,
 		disabled: game.busy,
+		busy: game.busy,
 		progress: ratio,
 		tone: 'jade',
 		run: game.settle
@@ -29,18 +30,19 @@
 
 <svelte:head><title>Thế Giới · Tiên Đạo</title></svelte:head>
 
-<div class="world-page relative flex h-full flex-col overflow-y-auto sm:block sm:overflow-hidden">
-	<SceneSlot class="slot" />
+<!-- phones: map banner → place grid (rows share the height left, no dead space) → status card; one scroller -->
+<div class="world-page relative flex h-full flex-col overflow-y-auto overscroll-contain sm:block sm:overflow-hidden">
+	<SceneSlot class="slot" passthrough />
 
 	<!-- phones: the map is a banner, places are a list (thumb-friendly) -->
-	<ul class="ui mt-3 grid grid-cols-2 gap-2 sm:hidden">
+	<ul class="places ui mt-2 grid grid-cols-2 gap-2 sm:hidden">
 		{#each mapLocations as l (l.screen)}
 			<li><MapPlaque screen={l.screen} title={l.title} subtitle={l.subtitle} compact /></li>
 		{/each}
 	</ul>
 
 	{#if ch}
-		<aside class="ui status panel mt-3 flex items-center gap-3 p-3 sm:absolute sm:top-3 sm:left-3 sm:mt-0 sm:w-80">
+		<aside data-scene-avoid class="ui status panel mt-2 flex shrink-0 items-center gap-3 p-3 sm:absolute sm:top-3 sm:left-3 sm:mt-0 sm:w-80">
 			<div class="min-w-0 flex-1">
 				<p class="eyebrow">{clock.isFull ? 'Linh khí đã đầy' : 'Đang bế quan'}</p>
 				<p class="mt-0.5 truncate font-display text-lg font-bold text-mist-100">{game.catalogue?.stageLabel(ch.stageId)}</p>
@@ -67,10 +69,25 @@
 			aspect-ratio: auto;
 		}
 	}
-	.ui {
-		pointer-events: auto;
-	}
 	.status {
 		backdrop-filter: blur(4px);
+	}
+	/* landscape phones: a one-line card (the map needs the height for its plaques) */
+	@media (min-width: 640px) and (max-height: 560px) {
+		.status {
+			padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+			width: auto;
+			max-width: 18rem;
+		}
+		.status :global(.eyebrow) {
+			display: none;
+		}
+	}
+	.places {
+		flex: 1 0 auto;
+		grid-auto-rows: minmax(var(--tap), 1fr);
+	}
+	.places li > :global(.plaque) {
+		height: 100%;
 	}
 </style>

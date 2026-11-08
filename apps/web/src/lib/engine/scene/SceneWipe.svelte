@@ -71,7 +71,7 @@
 	.wipe {
 		position: absolute;
 		inset: 0;
-		z-index: 40;
+		z-index: var(--z-wipe);
 		overflow: hidden;
 		pointer-events: none;
 		visibility: hidden;

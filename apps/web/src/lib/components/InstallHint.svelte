@@ -53,8 +53,8 @@
 		position: fixed;
 		left: 0.75rem;
 		right: 0.75rem;
-		top: calc(4rem + env(safe-area-inset-top));
-		z-index: 45;
+		top: calc(var(--hud-h, 3.5rem) + 0.5rem + env(safe-area-inset-top));
+		z-index: var(--z-toast);
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;

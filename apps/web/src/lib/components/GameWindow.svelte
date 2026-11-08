@@ -181,8 +181,14 @@
 
 	// ── tabs ──
 	let dir = $state(1);
+	// desktop: switching tabs never makes the centred window jump — its height only grows while it is open (UI polish U4)
+	let lockH = $state(0);
+	$effect(() => {
+		if (!open) lockH = 0;
+	});
 	function pick(id: string) {
 		if (!tabs || id === tab) return;
+		if (!sheet.current && dialog) lockH = Math.max(lockH, dialog.offsetHeight);
 		dir = tabs.findIndex((t) => t.id === id) >= tabs.findIndex((t) => t.id === tab) ? 1 : -1;
 		tab = id;
 		ontab?.(id);
@@ -284,6 +290,7 @@
 		aria-labelledby="{uid}-title"
 		tabindex="-1"
 		style:--drag="{drag}px"
+		style:min-height={lockH ? `${lockH}px` : undefined}
 		oncancel={(e) => {
 			e.preventDefault(); // Esc: close through history like Back
 			requestClose();
@@ -318,9 +325,8 @@
 		border-bottom: 0;
 		border-radius: 10px 10px 0 0;
 		transform: translateY(var(--drag, 0px));
-		transition:
-			transform var(--dur-base) var(--ease-qi),
-			max-height var(--dur-base) var(--ease-qi);
+		/* transform only (the sheet follows the finger 1:1; no height animation) */
+		transition: transform var(--dur-base) var(--ease-qi);
 	}
 	dialog.window.is-dragging {
 		transition: none;
@@ -434,8 +440,8 @@
 	}
 	.hbtn {
 		display: inline-grid;
-		width: 2.5rem;
-		height: 2.5rem;
+		width: var(--tap);
+		height: var(--tap);
 		flex-shrink: 0;
 		place-items: center;
 		color: var(--color-mist-300);
@@ -464,7 +470,7 @@
 		flex-shrink: 0;
 		align-items: center;
 		gap: 0.35rem;
-		min-height: 2.5rem;
+		min-height: var(--tap);
 		padding: 0 0.85rem;
 		font-size: 0.875rem;
 		font-weight: 600;

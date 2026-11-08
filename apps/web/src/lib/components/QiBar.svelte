@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { formatPoints, progressRatio } from '$lib/game/format';
 	import type { Aura } from '$lib/game/types';
+	import { hudFx } from '$lib/engine/fx/hud.svelte';
+	import CountUp from './CountUp.svelte';
 	import Icon from './Icon.svelte';
 
 	interface Props {
@@ -23,7 +25,7 @@
 	<div class="mb-2 flex items-end justify-between gap-3">
 		<span class="eyebrow">{label}</span>
 		<span class="tabular-nums">
-			<span class="text-xl font-semibold text-mist-100">{formatPoints(current)}</span>
+			<CountUp value={current} format={formatPoints} hold={hudFx.held('qi')} class="text-xl font-semibold text-mist-100" />
 			<span class="text-sm text-mist-500"> / {formatPoints(required)}</span>
 		</span>
 	</div>

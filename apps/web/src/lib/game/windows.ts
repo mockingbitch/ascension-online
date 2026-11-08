@@ -4,7 +4,8 @@
 // never unmounts.
 import { goto, pushState, replaceState } from '$app/navigation';
 import { page } from '$app/state';
-import { pushWindow, updateTop, type WindowState } from './windowStack';
+import { windowContent } from '$lib/windows/registry';
+import { pushWindow, updateTop, type WindowKind, type WindowState } from './windowStack';
 
 export type { WindowKind, WindowState } from './windowStack';
 
@@ -16,6 +17,16 @@ export function openWindow(w: WindowState) {
 	const { stack, mode } = pushWindow(openWindows(), w);
 	if (mode === 'push') pushState('', { wins: stack });
 	else replaceState('', { wins: stack });
+}
+
+// UI polish U4: a window's content chunk is fetched (and its module evaluated) before the click lands — on hover,
+// focus or pointerdown of whatever opens it, and for the common ones once the shell is idle after boot — so opening
+// a window renders at once instead of waiting for a lazy import. Each kind loads once.
+const warmed = new Set<WindowKind>();
+export function prefetchWindow(kind: WindowKind | undefined) {
+	if (!kind || warmed.has(kind)) return;
+	warmed.add(kind);
+	windowContent[kind]().catch(() => warmed.delete(kind));
 }
 
 /** Change the top window's state in place (its tab) — same history entry. */

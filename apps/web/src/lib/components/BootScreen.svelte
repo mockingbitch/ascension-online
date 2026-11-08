@@ -88,7 +88,7 @@
 	.boot {
 		position: fixed;
 		inset: 0;
-		z-index: 100;
+		z-index: var(--z-boot);
 		display: flex;
 		flex-direction: column;
 		align-items: center;

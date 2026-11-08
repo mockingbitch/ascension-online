@@ -228,6 +228,33 @@
 	}
 }
 
+/* Layer scale (UI polish U1): the ONLY place with literal z-index numbers (src/lib/zindex.test.ts enforces it).
+   Root level, in paint order: scene → scene UI → stage (page UI) → chat dock → action bar/rail → HUD → scene wipe →
+   ModeLayer → toasts → boot. Above all of them sits the browser's top layer, used only by GameWindow (<dialog>), the
+   HUD menu and FxLayer (popovers) and FpsOverlay — top-layer order = opening order (FxLayer re-raises itself).
+   Each region is its own stacking context (isolation: isolate), so z inside a region is local: use --z-local-*.
+   Region sizes (--hud-h, --bar-h, --rail-w, --chat-w, --chat-reserve, --safe-b) are set by the /play shell. */
+:root {
+	--z-scene: 0;
+	--z-scene-ui: 10;
+	--z-stage: 20;
+	--z-chat: 30;
+	--z-bar: 40;
+	--z-hud: 50;
+	--z-wipe: 60;
+	--z-mode: 70;
+	--z-toast: 80;
+	--z-boot: 90;
+	/* inside a stacking context (a region, a seat, a window body) */
+	--z-under: -1;
+	--z-local-1: 1;
+	--z-local-2: 2;
+	--z-local-3: 3;
+	/* tap targets (graphic-design.md): ≥ 44 px on touch, ≥ 8 px apart */
+	--tap: 2.75rem;
+	--tap-gap: 0.5rem;
+}
+
 :root {
 	/* Subtle paper grain (alpha-only noise, colour-neutral). */
 	--grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");

@@ -36,6 +36,8 @@ export class SceneStage {
 	/** the page's SceneSlot (the box the scene fills), else the shell's stage cell */
 	slot = $state<HTMLElement | null>(null);
 	cell = $state<HTMLElement | null>(null);
+	/** the page lets empty stage space through to the scene (its SceneSlot asked for it: map hotspots, seat cards) */
+	passthrough = $state(false);
 
 	/** set by the SceneLayer once a scene is mounted */
 	renderer: SceneRenderer | null = null;

@@ -67,7 +67,8 @@
 		pointer-events: none;
 	}
 	.fx-layer {
-		z-index: 60;
+		/* top layer when popovers work; the fallback still stacks above modes and toasts' level */
+		z-index: var(--z-toast);
 		display: block;
 		width: auto;
 		height: auto;

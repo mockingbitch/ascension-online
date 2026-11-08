@@ -14,8 +14,8 @@
 <style>
 	.help {
 		display: inline-grid;
-		width: 2.5rem;
-		height: 2.5rem;
+		width: var(--tap);
+		height: var(--tap);
 		flex-shrink: 0;
 		place-items: center;
 		border-radius: 9999px;

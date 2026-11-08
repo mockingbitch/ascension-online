@@ -12,6 +12,8 @@ export interface PrimaryAction {
 	/** something is waiting: the button sweeps (decorative; the hint/label say it in text) */
 	ready: boolean;
 	disabled: boolean;
+	/** its request is in flight: the bar shows "đang gửi" at once (spinner, aria-busy) — the result waits for the server */
+	busy?: boolean;
 	/** 0..1 ring around the button (display-only clock), omitted = no ring */
 	progress?: number;
 	tone: 'jade' | 'gold';

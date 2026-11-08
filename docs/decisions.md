@@ -3,6 +3,37 @@
 Product/architecture decisions that refine or deviate from the GDD
 ([design/tien-dao-online-gdd-architecture.md](design/tien-dao-online-gdd-architecture.md)). Newest first.
 
+## 2026-11-09 — UI regions & layers (UI polish U0–U5)
+Spec: [design/ui-polish-refactor-prompt.md](design/ui-polish-refactor-prompt.md). No game rules, API or catalogue
+changed — layout, layers and interaction only. Audit (2026-11-08) found Đột phá unreachable on phones (A1), chat
+over cards/subtitles (A2/A3), labels over art (A4), 14 unrelated z-index values (A6), pages patching margins (A7), a
+`<details>` HUD menu (A8) and two tu vi interpolations (A9).
+- **Regions.** The `/play` shell owns a grid: HUD / STAGE / CHAT DOCK / BAR (phones: four rows, the chat dock a fixed
+  48 px row above the bar — 2 newest bubbles — that grows into the panel and shrinks the stage when opened; ≥ 640: hud
+  over stage + right rail, the dock a fixed `--chat-w` × `--chat-reserve` box in the stage's bottom-left, the panel
+  growing upward out of it). Measured once per resize, published as CSS variables. Pages draw only in the stage, with
+  one scroller; must-reach actions are sticky. Mobile primary sits flush in the bar (the raised orb overlapped the
+  stage — A1's cause). Landscape phones get a compact rail (scenes + primary + Thêm) and side-by-side Động Phủ.
+- **Why a grid, not offsets.** Every page used to compensate on its own (`margin-bottom: 3.25rem`, `--chat-lift`), so
+  each screen fixed one overlap and kept another. With regions, an overlap is impossible by construction and the
+  probe (centre + 4 inner points per control) proves it at 8 sizes.
+- **Layers.** z scale in `app.css`: scene 0 · scene-ui 10 · stage 20 · chat 30 · bar 40 · hud 50 · wipe 60 · mode 70 ·
+  toast 80 · boot 90; regions are stacking contexts (inner z = `--z-local-*`); top layer = windows, HUD menu
+  (`popover="auto"`: outside press / Esc / a window opening close it, focus returns to the gear), FxLayer and the
+  toaster (manual popovers re-raised on use, so rewards fly and toasts show above an open window), FPS overlay.
+  Literal z numbers fail `src/lib/zindex.test.ts`.
+- **Pointer.** Regions take the pointer; empty stage space passes to the scene only for `<SceneSlot passthrough>`
+  (world map hotspots, hall seat cards). Động Phủ keeps it, so its stage scrolls from anywhere.
+- **Budgets.** INP ≤ 200 ms (p75, 4× CPU on mobile), no long task > 50 ms on open/close window, tab, chat, scene
+  change, Thu nhận, Ngộ đạo; CLS ≈ 0 in `/play`. Measured after: INP ≤ 128 ms everywhere, 0 long tasks, scene-change
+  CLS 0.17 → 0 (the scene box hides while it moves under the transition cover). Initial `/play` JS +6.5 kB gz.
+- **One tu vi.** `idleClock` (shared 1 s tick, pure `game/qi.ts`) feeds the HUD bar, the Động Phủ card and the world
+  card through `CountUp` — display only, replaced by every server response.
+- **Choices made without the owner** (revisit if wanted): Tiên Duyên chip hidden in the phone HUD (reachable in
+  "Thêm"; an 18 px chip can't be a 44 px target); map plaques on small maps are title-only and nudged apart (can sit
+  a little off their landmark); the expanded chat on wide screens may cover non-interactive text of the page above
+  the dock (it is not modal).
+
 ## 2026-11-08 — GĐ7 spike result: 3D Tử Tiêu Cung — go for continuing behind the flag, no-go for default
 Spike per `apps/web/src/lib/engine/render/render3d/README.md`: plain Three.js r187 (not Threlte: the contract is an
 imperative class on the shared loop; Threlte adds its own scheduler and bytes for no gain), procedural hall from

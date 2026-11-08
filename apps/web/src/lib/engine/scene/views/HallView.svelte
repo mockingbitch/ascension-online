@@ -34,6 +34,9 @@
 	const mySeat = $derived(hall.state?.me.inHall && hall.state.me.seat >= 0 ? placed[hall.state.me.seat] : undefined);
 	const listening = $derived((hall.insight?.phase ?? 'listening') === 'listening');
 	const sageAt = $derived(scene.at('hong_quan'));
+	// depth order inside the hall's own stacking context: lower on the floor = in front (normalised scene y × 100)
+	const depth = (y: number, mine = false) => Math.round(y * 100) + (mine ? 50 : 0);
+	const sageDepth = $derived(depth(scene.def.anchors['hong_quan']?.y ?? 0));
 	const dais = $derived(scene.at('dais'));
 	const stream = $derived(listening && mySeat?.p && dais ? { from: dais, to: mySeat.p } : null);
 	const qiMote = { ...mote, size: [1.4, 2.6] as [number, number] };
@@ -86,7 +89,7 @@
 
 <div class="hall" data-quality={quality} data-renderer={is3d ? '3d' : undefined} style:--u="{scene.unit}px">
 	{#if sageAt}
-		<div class="sage" class:is-phone={phone.current} class:is-3d={is3d} style:left="{sageAt.x}px" style:top="{sageAt.y}px" aria-hidden="true">
+		<div class="sage" class:is-phone={phone.current} class:is-3d={is3d} style:left="{sageAt.x}px" style:top="{sageAt.y}px" style:z-index={sageDepth} aria-hidden="true">
 			<span class="aura"></span>
 			{#if sage}
 				<img src={sage.src} srcset={sage.srcset} alt="" draggable="false" />
@@ -115,7 +118,7 @@
 					style:left="{s.p.x}px"
 					style:top="{s.p.y}px"
 					style:--s={mine ? s.scale * 1.3 : s.scale}
-					style:z-index={Math.round(s.y * 100) + (mine ? 50 : 0)}
+					style:z-index={depth(s.y, mine)}
 				>
 					{#if mine}<span class="halo" aria-hidden="true"></span>{/if}
 					{#if !is3d || !scene.def.anchors[`seat.${s.seat}`]}<span class="cushion" aria-hidden="true"></span>{/if}
@@ -160,7 +163,6 @@
 		position: absolute;
 		width: calc(var(--u) * 13);
 		transform: translate(-50%, -100%);
-		z-index: 30;
 	}
 	/* 3D: the 3D hall draws Hồng Quân; the element stays (invisible) as the anchor's measurable point */
 	.sage.is-3d,
@@ -286,7 +288,7 @@
 		opacity: 0;
 		pointer-events: none;
 		transition: opacity var(--dur-fast);
-		z-index: 120;
+		z-index: var(--z-local-3);
 	}
 	.card strong {
 		color: var(--color-mist-100);
@@ -309,7 +311,7 @@
 		border-radius: 10px;
 		background: color-mix(in oklab, var(--color-ink-950) 90%, transparent);
 		transform: translateX(-50%);
-		z-index: 110;
+		z-index: var(--z-local-2);
 	}
 	@keyframes breathe {
 		0%, 100% { opacity: 0.7; transform: scale(1); }

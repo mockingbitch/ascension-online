@@ -68,6 +68,7 @@
 		hint: phase === 'ready' ? `còn ${mmss(ins?.msToClose ?? 0)}` : phase === 'cooldown' ? `sau ${mmss(ins?.msToNext ?? 0)}` : `${Math.round((ins?.progress ?? 0) * 100)}%`,
 		ready: phase === 'ready',
 		disabled: phase !== 'ready' || hall.busy,
+		busy: hall.busy,
 		progress: ins?.progress ?? 0,
 		tone: 'gold',
 		run: () => void ngoDao()
@@ -103,10 +104,11 @@
 	{/if}
 {/snippet}
 
-	<div class="hall-page flex h-full min-h-0 flex-col">
+	<div class="hall-page flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain">
 		<!-- ngộ đạo status (the button itself is the action bar's primary) -->
 		<section class="cta ui" data-phase={phase} aria-label="Ngộ đạo">
 			<div class="min-w-0 flex-1">
+				<p class="eyebrow hidden sm:block">Tử Tiêu Cung · Hồng Quân giảng đạo</p>
 				<p class="status">
 					{#if phase === 'ready'}
 						<Icon name="spark" size={16} class="text-gold-300" /> Thời khắc ngộ đạo — còn
@@ -148,9 +150,8 @@
 		</section>
 
 		<!-- scene slot: the hall painting covers it anchored centre-top (renderer); UI rides on top -->
-		<SceneSlot class="stage">
+		<SceneSlot class="stage" passthrough>
 			<div class="bar ui">
-				<p class="eyebrow hidden sm:block">Tử Tiêu Cung · Hồng Quân giảng đạo</p>
 				<div class="ml-auto flex gap-2">
 					<button type="button" class="btn btn-ghost !px-3 !py-1.5 text-sm" onclick={openNotebook} aria-label="Sổ Đạo Ngộ">
 						<Icon name="scroll" size={16} /> <span class="hidden sm:inline">Sổ Đạo Ngộ</span>
@@ -220,21 +221,17 @@
 		min-height: 12rem;
 		container-type: size;
 	}
-	.ui {
-		pointer-events: auto;
-	}
 	.bar {
 		position: absolute;
-		inset-inline: 0;
+		right: 0;
 		top: 0;
-		z-index: 5;
+		z-index: var(--z-local-1);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
 		padding: 0.5rem 0.75rem;
 		flex-wrap: wrap;
-		background: linear-gradient(180deg, color-mix(in oklab, var(--color-ink-950) 70%, transparent), transparent);
 	}
 	.outside {
 		position: absolute;
@@ -249,15 +246,18 @@
 	/* ── subtitles: bottom band of the scene (below the scene on phones) ── */
 	.subtitles {
 		position: absolute;
-		inset-inline: 0;
+		/* the chat dock owns the stage's bottom-left corner (--chat-w): the band starts right of it */
+		left: calc(var(--chat-w, 0px) + 0.5rem);
+		right: 0;
 		bottom: 0;
-		z-index: 200;
+		z-index: var(--z-local-2);
 		min-height: 5.5rem;
-		padding: 2.5rem 1.25rem 0.85rem;
+		padding: 2.5rem 1.25rem 0.85rem 0.75rem;
 		background: linear-gradient(0deg, color-mix(in oklab, var(--color-ink-950) 94%, transparent) 35%, transparent);
 	}
 	.subtitles.is-below {
 		position: static;
+		left: auto;
 		min-height: 4.75rem;
 		padding: 0.6rem 0.9rem;
 		background: var(--color-ink-950);
@@ -319,12 +319,6 @@
 		color: var(--color-mist-100);
 	}
 
-	/* desktop: the floating chat sits above the subtitle band, not over Hồng Quân's words */
-	@media (min-width: 640px) {
-		:global(.main:has(.hall-page)) {
-			--chat-lift: 6.5rem;
-		}
-	}
 	/* ── phones: status band, the scene fills the rest, subtitles under it ── */
 	@media (max-width: 639px) {
 		.cta {
@@ -342,7 +336,7 @@
 	.edge-pulse {
 		position: fixed;
 		inset: 0;
-		z-index: 40;
+		z-index: var(--z-local-3);
 		pointer-events: none;
 		box-shadow:
 			inset 0 0 0 2px color-mix(in oklab, var(--color-gold-300) 70%, transparent),

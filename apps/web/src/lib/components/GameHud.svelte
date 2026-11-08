@@ -2,13 +2,17 @@
      icon + number and open the related window (Linh thạch → Túi Đồ › Cửa hàng, Tụ Linh Phù → Túi Đồ).
      GĐ4 (§4.4): tu vi and linh thạch count up to each new server value (held while orbs/items fly to them); the tu vi
      bar shimmers while accumulating, pulses gold when full (bình cảnh) and shakes when a settle hit today's ceiling.
-     All of it display only — the numbers and aria values are the server's. -->
+     All of it display only — the numbers and aria values are the server's.
+     UI polish U1: the gear menu is a popover (top layer, popover="auto"): it closes on an outside press, Esc, or when a
+     window opens (showModal closes auto popovers), focus returns to the gear, and while closed it is not rendered
+     (nothing in the hit-test tree). Targets are ≥ 44px on touch. -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { feed } from '$lib/api/realtime.svelte';
 	import { logout, session } from '$lib/api/session.svelte';
 	import { factionColor, factionOf, factions } from '$lib/game/faction.svelte';
 	import { formatPoints, progressRatio } from '$lib/game/format';
+	import { idleClock } from '$lib/game/idle.svelte';
 	import { game } from '$lib/game/store.svelte';
 	import { fullscreen } from '$lib/engine/fullscreen.svelte';
 	import { openWindow } from '$lib/game/windows';
@@ -22,9 +26,34 @@
 	const ch = $derived(game.character);
 	const realm = $derived(ch && game.catalogue ? game.catalogue.realmOf(ch.stageId) : undefined);
 	const faction = $derived(factionOf(factions.me?.factionId));
-	let menu = $state<HTMLDetailsElement>();
+	let menu = $state<HTMLElement>();
+	let gear = $state<HTMLButtonElement>();
+	let menuOpen = $state(false);
+	// place the popover under the gear (top layer: fixed coordinates, clamped to the viewport)
+	function place(e: ToggleEvent) {
+		menuOpen = e.newState === 'open';
+		if (!menuOpen || !menu || !gear) return;
+		const r = gear.getBoundingClientRect();
+		menu.style.top = `${Math.round(r.bottom + 4)}px`;
+		menu.style.right = `${Math.max(8, Math.round(innerWidth - r.right))}px`;
+	}
+	function closeMenu() {
+		if (menu?.matches(':popover-open')) menu.hidePopover();
+	}
+	$effect(() => {
+		if (menuOpen) menu?.querySelector<HTMLElement>('[role=menuitem]')?.focus({ preventScroll: true });
+	});
+	function menuKeys(e: KeyboardEvent) {
+		if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+		e.preventDefault();
+		const items = [...(menu?.querySelectorAll<HTMLElement>('[role=menuitem]') ?? [])];
+		const i = items.indexOf(document.activeElement as HTMLElement);
+		items[(i + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+	}
 	const pending = $derived(game.claimable + (game.preview?.ready ? 1 : 0) + (game.vip && game.vip.benefits.dailyGift > 0 && !game.vip.giftClaimedToday ? 1 : 0));
-	const ratio = $derived(ch ? progressRatio(ch.cultivationMilli, ch.requiredMilli) : 0);
+	// A9: the same display value as Động Phủ's card (one shared idle clock + CountUp), never a second interpolation
+	const qiShown = $derived(idleClock.shown);
+	const ratio = $derived(ch ? progressRatio(qiShown, ch.requiredMilli) : 0);
 	// while orbs fly to the bar it stays where it was, then grows when they land (display only)
 	let heldRatio = $state(0);
 	$effect.pre(() => {
@@ -40,7 +69,7 @@
 		return next.realmId !== ch.realmId ? `đột phá ${label}` : label;
 	});
 	// bar state (server snapshot): full = bình cảnh reached; accumulating = idle qi still has room today
-	const atBottleneck = $derived(!!ch && ch.capMilli > 0 && ch.cultivationMilli >= ch.requiredMilli);
+	const atBottleneck = $derived(idleClock.atBottleneck);
 	const accumulating = $derived(
 		!!ch && !atBottleneck && ch.idleRateMilliPerHour > 0 && ch.today.pointsMilli < ch.today.ceilingMilli && ch.bottleneckRoomMilli > 0
 	);
@@ -80,7 +109,7 @@
 							<FactionEmblem id={faction.id} size={14} />{faction.name}
 						</button>
 					{/if}
-					<button type="button" class="vip-badge" onclick={() => openWindow({ kind: 'vip' })} title="Tiên Duyên — xem đặc quyền">
+					<button type="button" class="vip-badge hidden sm:inline-flex" onclick={() => openWindow({ kind: 'vip' })} title="Tiên Duyên — xem đặc quyền">
 						<Icon name="seal" size={11} />
 						{game.vip?.benefits.name ?? 'Tiên Duyên'}
 						{#if game.vip && game.vip.benefits.dailyGift > 0 && !game.vip.giftClaimedToday}<span class="dot" aria-label="Có quà chưa nhận"></span>{/if}
@@ -94,7 +123,7 @@
 			<div class="flex items-baseline justify-between gap-2 text-xs">
 				<span class="text-mist-300"
 					>Tu vi <strong class="text-sm font-semibold text-mist-100 tabular-nums"
-						><CountUp value={ch.cultivationMilli} format={formatPoints} hold={hudFx.held('qi')} />/{formatPoints(ch.requiredMilli)}</strong
+						><CountUp value={qiShown} format={formatPoints} hold={hudFx.held('qi')} />/{formatPoints(ch.requiredMilli)}</strong
 					></span
 				>
 				{#if atBottleneck}<span class="truncate text-gold-300">Bình cảnh</span>{:else if target}<span class="truncate text-mist-300">→ {target}</span>{/if}
@@ -118,7 +147,7 @@
 		</div>
 	{/if}
 
-	<div class="flex flex-1 items-center justify-end gap-1.5 sm:gap-3">
+	<div class="flex shrink-0 items-center justify-end gap-2 sm:flex-1 sm:gap-3">
 		<WorldProgress />
 		<button
 			type="button"
@@ -142,7 +171,7 @@
 			<Icon name="talisman" size={16} class="text-gold-500" />
 			<span class="tabular-nums" aria-hidden="true">{game.phuCount}</span>
 		</button>
-		<button type="button" class="relative inline-flex size-10 items-center justify-center text-mist-300 hover:text-mist-100" onclick={() => openWindow({ kind: 'notifications' })}>
+		<button type="button" class="hbtn relative" onclick={() => openWindow({ kind: 'notifications' })}>
 			<Icon name="bell" label="Thông báo" />
 			{#if pending}{#key pending}<span class="count badge-pop tabular-nums">{pending}</span>{/key}{/if}
 		</button>
@@ -154,17 +183,26 @@
 			aria-label={feed.connected ? 'Trực tuyến' : 'Đang kết nối lại'}
 		></span>
 
-		<details bind:this={menu} class="relative">
-			<summary class="inline-flex size-10 cursor-pointer list-none items-center justify-center text-mist-300 hover:text-mist-100">
-				<Icon name="gear" label="Tùy chọn" />
-			</summary>
-			<div class="panel absolute top-11 right-0 z-40 w-56 p-1.5 text-sm" role="menu">
+		<button
+			bind:this={gear}
+			type="button"
+			class="hbtn"
+			popovertarget="hud-menu"
+			aria-haspopup="menu"
+			aria-expanded={menuOpen}
+			data-hud-menu
+		>
+			<Icon name="gear" label="Tùy chọn" />
+		</button>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions (arrow keys move between the menu items) -->
+		<div bind:this={menu} id="hud-menu" class="hud-menu panel p-1.5 text-sm" popover="auto" role="menu" tabindex="-1" ontoggle={place} onkeydown={menuKeys}>
+			{#if menuOpen}
 				<button
 					role="menuitem"
 					type="button"
 					class="menu-item w-full text-left"
 					onclick={() => {
-						menu?.removeAttribute('open');
+						closeMenu();
 						openWindow({ kind: 'settings' });
 					}}
 				>
@@ -177,7 +215,7 @@
 						class="menu-item w-full text-left"
 						data-fullscreen
 						onclick={() => {
-							menu?.removeAttribute('open');
+							closeMenu();
 							void fullscreen.toggle();
 						}}
 					>
@@ -185,30 +223,29 @@
 						{fullscreen.active ? 'Thoát toàn màn hình' : 'Toàn màn hình'}
 					</button>
 				{/if}
-				<a role="menuitem" class="menu-item" href="/chinh-sach-du-lieu" onclick={() => menu?.removeAttribute('open')}>Chính sách dữ liệu</a>
+				<a role="menuitem" class="menu-item" href="/chinh-sach-du-lieu" onclick={closeMenu}>Chính sách dữ liệu</a>
 				{#if session.user?.role === 'admin'}
-					<a role="menuitem" class="menu-item" href="/admin/reports" onclick={() => menu?.removeAttribute('open')}>Quản trị báo cáo</a>
+					<a role="menuitem" class="menu-item" href="/admin/reports" onclick={closeMenu}>Quản trị báo cáo</a>
 				{/if}
 				<button role="menuitem" type="button" class="menu-item w-full text-left text-cinnabar-300" onclick={signOut}>
 					<Icon name="exit" size={16} /> Đăng xuất
 				</button>
-			</div>
-		</details>
+			{/if}
+		</div>
 	</div>
 </header>
 
 <style>
 	.hud {
-		/* backdrop-filter makes the HUD a stacking context: lift it so the gear menu drops over the screen below */
+		/* layer: the shell's HUD region (--z-hud); the gear menu is a top-layer popover */
 		position: relative;
-		z-index: 30;
 		background: linear-gradient(180deg, color-mix(in oklab, var(--color-ink-950) 94%, transparent), color-mix(in oklab, var(--color-ink-950) 72%, transparent));
 		border-bottom: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
 		backdrop-filter: blur(6px);
 	}
 	.res {
 		display: inline-flex;
-		height: 2.25rem;
+		height: var(--tap);
 		align-items: center;
 		gap: 0.375rem;
 		padding: 0 0.625rem;
@@ -224,8 +261,8 @@
 		border-color: color-mix(in oklab, var(--color-gold-300) 55%, transparent);
 	}
 	.vip-badge {
+		/* display from the classes: phones reach Tiên Duyên through "Thêm" (an 18px chip is no tap target) */
 		position: relative;
-		display: inline-flex;
 		flex-shrink: 0;
 		align-items: center;
 		gap: 0.2rem;
@@ -355,11 +392,34 @@
 		background: var(--color-jade-300);
 		box-shadow: 0 0 8px var(--color-jade-300);
 	}
+	.hbtn {
+		display: inline-flex;
+		width: var(--tap);
+		height: var(--tap);
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		color: var(--color-mist-300);
+	}
+	.hbtn:hover {
+		color: var(--color-mist-100);
+	}
+	.hud-menu {
+		position: fixed;
+		inset: auto;
+		margin: 0;
+		width: 14rem;
+		color: inherit;
+		background-color: var(--color-ink-900);
+	}
+	.hud-menu:not(:popover-open) {
+		display: none;
+	}
 	.menu-item {
 		display: flex;
 		align-items: center;
 		gap: 0.5rem;
-		min-height: 2.5rem;
+		min-height: var(--tap);
 		padding: 0 0.75rem;
 		color: var(--color-mist-100);
 	}

@@ -140,7 +140,7 @@
 			{#if hallArt}<img src={hallArt.src} srcset={hallArt.srcset} alt="" draggable="false" />{/if}
 		</div>
 
-		<nav class="sticky top-0 z-10 flex items-center gap-3 px-4 py-3 sm:px-8" aria-label="Các bước">
+		<nav class="sticky top-0 z-(--z-local-2) flex items-center gap-3 px-4 py-3 sm:px-8" aria-label="Các bước">
 			<button type="button" class="btn btn-ghost h-10 w-10 shrink-0 p-0" onclick={back} aria-label="Quay lại">
 				<Icon name="arrow" size={18} class="rotate-180" />
 			</button>
@@ -277,7 +277,7 @@
 	.backdrop {
 		position: fixed;
 		inset: 0;
-		z-index: 0;
+		z-index: var(--z-scene);
 		background: var(--color-ink-950);
 	}
 	.backdrop img {

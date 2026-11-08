@@ -145,6 +145,7 @@
 <div class="scene-layer" class:is-covered={stage.covered} data-quality={settings.fx} aria-hidden={stage.covered ? 'true' : undefined}>
 	<div
 		class="box"
+		class:is-swapping={stage.phase === 'cover'}
 		data-scene={stage.shown}
 		style:left="{box.x}px"
 		style:top="{box.y}px"
@@ -167,7 +168,7 @@
 	.scene-layer {
 		position: fixed;
 		inset: 0;
-		z-index: 0;
+		z-index: var(--z-scene);
 		overflow: hidden;
 		background: radial-gradient(ellipse at 50% 30%, var(--color-ink-850), var(--color-ink-950) 75%);
 	}
@@ -175,6 +176,11 @@
 		position: absolute;
 		overflow: hidden;
 		contain: layout paint;
+	}
+	/* under the transition cover the box moves to the new page's slot: hidden meanwhile, so the move is no layout
+	   shift (CLS) and never seen; it shows again for the reveal */
+	.box.is-swapping {
+		visibility: hidden;
 	}
 	.box[data-scene='tu_tieu_cung'] {
 		background: radial-gradient(ellipse at 50% 20%, color-mix(in oklab, var(--color-spirit-violet) 30%, var(--color-ink-900)), var(--color-ink-950) 70%);

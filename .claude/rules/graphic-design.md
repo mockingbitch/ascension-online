@@ -66,7 +66,17 @@ cinnabar (chu sa) for danger/failure. Calm, spacious, readable; effects are subt
 - Contrast ≥ 4.5:1 for text (mist-100/300 on ink-900/950 OK; check gold on ink for small text).
 - Never convey state by colour alone — pair with text/icon (e.g. "Bình cảnh — có thể đột phá").
 - Progress bars use `role="progressbar"` + aria values. Focus ring = gold outline (global).
-- Layout works from 360px width; tap targets ≥ 40px.
+- Layout works from 360px width and in landscape phones (812×375) and tablets (768/1024).
+- Tap targets ≥ 44×44 px on touch (`--tap`), ≥ 8 px apart (`--tap-gap`); icon-only buttons use `var(--tap)` boxes.
+  A control too small to grow (a tiny chip) moves somewhere it can be a real target (phones: Tiên Duyên via "Thêm").
+- **Sending state:** a button that sends a request shows it at once (< 100 ms): disabled + `aria-busy` + a small
+  spinner/dim (the primary action has `busy`); the result still appears only after the server answers.
+
+## Layers
+- One z scale in `app.css` (`:root`): `--z-scene` 0 < `--z-scene-ui` 10 < `--z-stage` 20 < `--z-chat` 30 <
+  `--z-bar` 40 < `--z-hud` 50 < `--z-wipe` 60 < `--z-mode` 70 < `--z-toast` 80 < `--z-boot` 90; above them the top
+  layer (windows, HUD menu, FxLayer, toasts, FPS overlay). Inside a component/region: `--z-under`, `--z-local-1..3`.
+  No literal z numbers anywhere else (a test fails on them); depth sorting from data (hall seats by scene y) is fine.
 
 ## Assets
 - Icons/badges: inline SVG using `currentColor`, viewBox 0 0 24 24 (icons) or 64 64 (emblems), optimized (no editor

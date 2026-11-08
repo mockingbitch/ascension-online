@@ -1,8 +1,16 @@
-<!-- Dev/QA overlay (?fps=1): frames per second of the shared rAF loop, refreshed twice a second without re-rendering. -->
+<!-- Dev/QA overlay (?fps=1): frames per second of the shared rAF loop, refreshed twice a second without re-rendering.
+     A manual popover (top layer) so it stays above windows; never takes the pointer. -->
 <script lang="ts">
 	import { gameLoop } from './loop';
 
 	let el = $state<HTMLSpanElement>();
+	$effect(() => {
+		try {
+			el?.showPopover?.();
+		} catch {
+			/* popover unsupported: fixed + --z-boot */
+		}
+	});
 
 	$effect(() => {
 		const loop = gameLoop();
@@ -16,14 +24,18 @@
 	});
 </script>
 
-<span bind:this={el} class="fps tabular-nums" aria-hidden="true">— fps</span>
+<span bind:this={el} class="fps tabular-nums" popover="manual" aria-hidden="true">— fps</span>
 
 <style>
 	.fps {
 		position: fixed;
 		left: 6px;
 		bottom: 6px;
-		z-index: 100;
+		inset: auto auto 6px 6px;
+		margin: 0;
+		border: 0;
+		pointer-events: none;
+		z-index: var(--z-boot);
 		padding: 2px 6px;
 		font-size: 0.7rem;
 		font-weight: 600;

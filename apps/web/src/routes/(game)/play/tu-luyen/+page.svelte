@@ -15,9 +15,11 @@
 	import { useIdleClock } from '$lib/game/idle.svelte';
 	import { usePrimaryAction } from '$lib/game/primary.svelte';
 	import { game } from '$lib/game/store.svelte';
-	import { openWindow } from '$lib/game/windows';
+	import { openWindow, prefetchWindow } from '$lib/game/windows';
+	import { MediaQuery } from 'svelte/reactivity';
 
 	const clock = useIdleClock();
+	const phone = new MediaQuery('max-width: 639px');
 	const ch = $derived(game.character!);
 	const cat = $derived(game.catalogue!);
 	const stage = $derived(cat.stages.get(ch.stageId));
@@ -44,6 +46,7 @@
 		hint: clock.isFull ? 'Đã đầy' : clock.elapsedLabel,
 		ready: clock.shown > ch.cultivationMilli,
 		disabled: game.busy,
+		busy: game.busy,
 		progress: clock.capSeconds ? clock.elapsedSeconds / clock.capSeconds : 0,
 		tone: 'jade',
 		run: game.settle
@@ -52,22 +55,26 @@
 
 <svelte:head><title>Tu Luyện · Tiên Đạo</title></svelte:head>
 
-<div class="dong-phu flex h-full min-h-0 flex-col overflow-y-auto px-3 pt-2 pb-3 sm:px-6">
-	<header class="ui relative text-center" data-toast-below>
-		<p class="eyebrow">Động Phủ · bế quan</p>
-		<span class="chip" data-tone={state.tone} data-state-chip><Icon name={state.icon} size={14} /> {state.text}</span>
-		<div class="mt-2 flex flex-col items-center gap-1">
-			{#if realm}<RealmBadge name={realm.name} aura={realm.visual.aura} size="lg" />{/if}
-			<span class="font-display text-lg text-mist-100">{subStage}</span>
+<!-- one scroller (the stage); on phones: one-line title → scene (flexes, min ~38% of the stage) → qi card, with the
+     Đột phá / Gieo quẻ row sticky at the stage bottom, so it is always on screen (UI polish U2, A1) -->
+<div class="dong-phu" data-stage-scroll>
+	<header class="head ui" data-toast-below>
+		<p class="eyebrow hidden sm:block">Động Phủ · bế quan</p>
+		<span class="chip" data-tone={state.tone} data-state-chip><Icon name={state.icon} size={14} /> <span class="truncate">{state.text}</span></span>
+		<div class="title">
+			{#if realm}<RealmBadge name={realm.name} aura={realm.visual.aura} size={phone.current ? 'sm' : 'lg'} />{/if}
+			<span class="font-display text-mist-100 sm:text-lg">{subStage}</span>
 		</div>
-		<HelpButton topic="dong_phu" class="absolute top-0 right-0" />
+		<HelpButton topic="dong_phu" class="help-pos" />
 	</header>
 
 	<SceneSlot class="scene-box" />
 
-	<div class="ui controls panel mx-auto w-full max-w-xl shrink-0 p-3">
-		<div data-fx-target="qi"><QiBar current={clock.shown} required={ch.requiredMilli} cap={ch.capMilli} {aura} label="Tu vi · ước tính" /></div>
-		<dl class="stats stagger mt-3 grid grid-cols-3 gap-2 text-center">
+	<div class="ui controls panel">
+		<div class="px-3 pt-3" data-fx-target="qi">
+			<QiBar current={clock.shown} required={ch.requiredMilli} cap={ch.capMilli} {aura} label="Tu vi · ước tính" />
+		</div>
+		<dl class="stats stagger mt-3 grid grid-cols-3 gap-2 px-3 text-center">
 			<div>
 				<dt><Icon name="spark" size={14} /> Tốc độ</dt>
 				<dd class="text-jade-300">+{formatPoints(ch.idleRateMilliPerHour)}<small>/giờ</small></dd>
@@ -84,21 +91,21 @@
 			</div>
 		</dl>
 		{#if ch.today.catchUp.active || ch.offlineBonusSeconds > 0}
-			<p class="mt-2 flex flex-wrap justify-center gap-2 text-xs">
+			<p class="mt-2 flex flex-wrap justify-center gap-2 px-3 text-xs">
 				{#if ch.today.catchUp.active}<span class="tag text-gold-300"><Icon name="bolt" size={12} /> Bù đắp ×{ch.today.catchUp.multiplierBp / 10000}</span>{/if}
 				{#if ch.offlineBonusSeconds > 0}<span class="tag text-jade-300"><Icon name="talisman" size={12} /> +{ch.offlineBonusSeconds / 3600} giờ {phu?.name ?? 'Tụ Linh Phù'}</span>{/if}
 			</p>
 		{/if}
-		<div class="mt-3 flex gap-2">
-			<button type="button" class="btn btn-gold h-12 flex-1 px-2 text-sm whitespace-nowrap sm:text-base" class:is-ready={pv?.ready} onclick={() => openWindow({ kind: 'breakthrough' })} data-open-breakthrough>
+		<div class="actions" data-region="actions">
+			<button type="button" class="btn btn-gold h-12 flex-1 px-2 text-sm whitespace-nowrap sm:text-base" class:is-ready={pv?.ready} onclick={() => openWindow({ kind: 'breakthrough' })} onpointerenter={() => prefetchWindow('breakthrough')} onpointerdown={() => prefetchWindow('breakthrough')} onfocus={() => prefetchWindow('breakthrough')} data-open-breakthrough>
 				<Icon name="bolt" size={18} stroke={1.8} /> Đột phá{#if pv && !pv.missing.some((m) => m.kind === 'final_stage')}<span class="tabular-nums opacity-80">{formatBp(pv.successBp)}</span>{/if}
 			</button>
 			{#if ch.offlineBonusSeconds <= 0 && game.phuCount > 0 && !ch.bonusUsedToday}
-				<button class="btn btn-ghost h-12 px-3" disabled={game.busy} onclick={game.usePhu} title="Dùng {phu?.name ?? 'Tụ Linh Phù'}{phu?.offlineCapBonusHours ? ` (+${phu.offlineCapBonusHours} canh giờ)` : ''}">
+				<button class="btn btn-ghost h-12 px-3" disabled={game.busy} aria-busy={game.busy || undefined} onclick={game.usePhu} title="Dùng {phu?.name ?? 'Tụ Linh Phù'}{phu?.offlineCapBonusHours ? ` (+${phu.offlineCapBonusHours} canh giờ)` : ''}">
 					<Icon name="talisman" size={18} /><span class="sr-only sm:not-sr-only">{phu?.name ?? 'Tụ Linh Phù'}</span>
 				</button>
 			{/if}
-			<button type="button" class="btn btn-ghost h-12 px-3" onclick={() => openWindow({ kind: 'fortune' })}>
+			<button type="button" class="btn btn-ghost h-12 px-3 whitespace-nowrap" onclick={() => openWindow({ kind: 'fortune' })} onpointerenter={() => prefetchWindow('fortune')} onpointerdown={() => prefetchWindow('fortune')} onfocus={() => prefetchWindow('fortune')}>
 				<Icon name="dice" size={18} /><span class="sr-only sm:not-sr-only">Gieo quẻ</span>
 			</button>
 		</div>
@@ -106,27 +113,128 @@
 </div>
 
 <style>
-	/* the scene fills the slot (renderer: 4:3 stage contain-fitted); definite height on narrow screens */
+	/* the stage's one scroller (overscroll stays inside: no scene/page chaining) */
+	.dong-phu {
+		display: flex;
+		height: 100%;
+		min-height: 0;
+		flex-direction: column;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+		padding: 0.25rem 0.25rem 0;
+	}
+	.head {
+		position: relative;
+		display: flex;
+		flex-shrink: 0;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		text-align: center;
+	}
+	.title {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.25rem;
+	}
+	.head :global(.help-pos) {
+		position: absolute;
+		top: 0;
+		right: 0;
+	}
+	/* the scene fills what is left: on phones never less than ~38% of the stage */
 	.dong-phu :global(.scene-box) {
-		flex: none;
+		flex: 1 0 auto;
 		width: 100%;
-		max-width: 640px;
+		max-width: 760px;
+		min-height: max(160px, 38%);
 		margin-inline: auto;
-		height: clamp(200px, 38dvh, 380px);
-	}
-	@media (min-width: 640px) {
-		.dong-phu :global(.scene-box) {
-			flex: 1 1 0;
-			height: auto;
-			min-height: 200px;
-			max-width: 760px;
-		}
-	}
-	.ui {
-		pointer-events: auto;
 	}
 	.controls {
+		flex-shrink: 0;
+		width: 100%;
+		max-width: 36rem;
+		margin-inline: auto;
 		backdrop-filter: blur(4px);
+	}
+	/* the action row sticks to the stage bottom (always reachable, never under the bar / chat dock) */
+	.actions {
+		position: sticky;
+		bottom: 0;
+		z-index: var(--z-local-1);
+		display: flex;
+		gap: var(--tap-gap);
+		margin-top: 0.75rem;
+		padding: 0.5rem 0.75rem 0.75rem;
+		background: linear-gradient(180deg, color-mix(in oklab, var(--color-ink-900) 70%, transparent), var(--color-ink-900) 40%);
+	}
+	/* phones: one-line title (badge · tầng · state chip · ?) */
+	@media (max-width: 639px) {
+		.head {
+			flex-direction: row;
+			flex-wrap: nowrap;
+			justify-content: flex-start;
+			gap: 0.5rem;
+			padding-right: calc(var(--tap) + 0.25rem);
+			min-height: var(--tap);
+			text-align: left;
+		}
+		.title {
+			order: -1;
+			flex-direction: row;
+			align-items: center;
+			gap: 0.4rem;
+			margin: 0;
+			flex-shrink: 0;
+		}
+		.chip {
+			min-width: 0;
+			overflow: hidden;
+		}
+		.dong-phu :global(.scene-box) {
+			flex: 1 1 auto;
+			margin-block: 0.25rem;
+		}
+	}
+	/* wide: the chat dock owns the stage's bottom-left corner; the card stays right of it when the stage is narrow */
+	@media (min-width: 640px) {
+		.controls {
+			margin-left: max(calc(var(--chat-w, 0px) + 0.75rem), calc((100% - 36rem) / 2));
+			margin-right: max(0px, calc((100% - 36rem) / 2));
+			width: auto;
+			margin-bottom: 0.25rem;
+		}
+	}
+	/* landscape phones (short + wide): scene left, title + card right, the right column scrolls */
+	@media (min-width: 640px) and (max-height: 560px) {
+		.dong-phu {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+			grid-template-rows: auto minmax(0, 1fr);
+			grid-template-areas: 'scene head' 'scene card';
+			column-gap: 0.75rem;
+		}
+		.head {
+			grid-area: head;
+		}
+		.dong-phu :global(.scene-box) {
+			grid-area: scene;
+			min-height: 0;
+			height: 100%;
+			position: sticky;
+			top: 0;
+		}
+		.controls {
+			grid-area: card;
+			align-self: end;
+			margin: 0;
+			width: 100%;
+		}
+		.stats :global(.sub) {
+			display: none;
+		}
 	}
 	.chip {
 		display: inline-flex;
@@ -187,12 +295,30 @@
 		border: 1px solid currentColor;
 		border-radius: 9999px;
 	}
+	/* ready: a glow layer breathes (opacity only — no box-shadow animation) */
 	.is-ready {
-		animation: ready-glow 2.4s ease-in-out infinite;
+		position: relative;
+	}
+	.is-ready::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		border-radius: inherit;
+		box-shadow: 0 0 22px 2px color-mix(in oklab, var(--color-gold-300) 45%, transparent);
+		opacity: 0.5;
+		pointer-events: none;
+	}
+	:global(:root[data-fx='full']) .is-ready::after,
+	:global(:root[data-fx='lite']) .is-ready::after {
+		animation: ready-glow 2.4s var(--ease-in-out-sine) infinite;
 	}
 	@keyframes ready-glow {
+		0%,
+		100% {
+			opacity: 0;
+		}
 		50% {
-			box-shadow: 0 0 22px 2px color-mix(in oklab, var(--color-gold-300) 45%, transparent);
+			opacity: 1;
 		}
 	}
 </style>

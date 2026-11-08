@@ -78,6 +78,26 @@ paths:
 - **Action bar / primary.** Navigation lives in `components/ActionBar.svelte` (items in `lib/game/nav.ts`). A scene's
   main action is registered by its page with `usePrimaryAction(() => …)` (calls the page/store handler; no logic in
   the bar). Chat is `components/FloatingChat.svelte` only — no fixed chat panels in pages.
+- **Regions & layers (UI polish, decisions.md 2026-11-09).** The `/play` shell is a grid of regions that it owns:
+  HUD (+ ticker) / STAGE / CHAT DOCK / BAR (phones: rows hud·stage·chat·bar; ≥ 640: hud over stage + right rail, the
+  chat dock a fixed box in the stage's bottom-left). One ResizeObserver in the shell measures them and publishes
+  `--hud-h`, `--bar-h`, `--rail-w`, `--chat-w`, `--chat-reserve`, `--stage-inset-*` on `<html>` (pure math in
+  `engine/layout/regions.ts`, store `regions.svelte.ts`). The **stage is the only place for a scene page's UI**: it
+  clips, and a page has **one scroller** (`overflow-y: auto; overscroll-behavior: contain`) — never let UI run under
+  the bar/chat, never patch with `margin-bottom`/`--chat-lift`. Wide pages keep bottom UI clear of the chat dock with
+  `--chat-w` (e.g. `margin-left: max(calc(var(--chat-w) + …), …)`). Must-reach actions (Đột phá) sit in a
+  `position: sticky; bottom: 0` row of the scroller. Scene-anchored UI (map plaques) is clamped into
+  `regions.stage` and kept off page cards / the dock (`relaxLabels`, avoid boxes marked `data-scene-avoid`).
+  Pointer: regions take the pointer; the stage lets empty space through to the scene only when the page's
+  `<SceneSlot passthrough>` asks (map hotspots, seat hover cards) — then its UI blocks opt back in with `.ui` /
+  `data-ui`. Layers: only `--z-*` tokens from `app.css` (`src/lib/zindex.test.ts` fails on a bare `z-index: N` or
+  `z-N` class in `src/lib` / `routes/(game)`); each region is a stacking context, inner z uses `--z-local-*`. The
+  top layer belongs to `GameWindow` (`<dialog>`), popovers (HUD menu `popover="auto"`, FxLayer, Toaster, FpsOverlay —
+  manual popovers re-shown when they need to be above a window); its order = opening order. Windows prefetch their
+  chunk (`prefetchWindow(kind)` on hover/focus/pointerdown of the opener; common ones idle after boot). Tu vi has one
+  display value: `idleClock` (`game/idle.svelte.ts`, pure `game/qi.ts`) through `CountUp` — HUD and pages never
+  interpolate on their own. Budgets: INP ≤ 200 ms, no long task > 50 ms on main interactions, CLS ≈ 0 in `/play`
+  (the scene box hides while it moves under the transition cover).
 - **Less text.** Rules/explanations go to `lib/game/help.ts` behind a `<HelpButton topic>` ("?"); empty lists use
   `components/EmptyState.svelte` with an action hint.
 - UI text is Vietnamese; keep strings in components for now (i18n later), no hardcoded numbers from game config.

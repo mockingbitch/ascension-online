@@ -24,16 +24,18 @@
 		subtitle: string;
 		/** mobile list: full width, smaller title */
 		compact?: boolean;
+		/** small maps: title only (the subtitle stays for screen readers), tighter box */
+		dense?: boolean;
 	}
-	let { screen, title, subtitle, compact = false }: Props = $props();
+	let { screen, title, subtitle, compact = false, dense = false }: Props = $props();
 	const s = $derived(screens[screen]);
 </script>
 
-<button type="button" class="plaque" class:w-full={compact} class:is-soon={s.status === 'soon'} onclick={() => enterPlace(screen)}>
+<button type="button" class="plaque" class:w-full={compact} class:is-dense={dense} class:is-soon={s.status === 'soon'} onclick={() => enterPlace(screen)}>
 	<span class="ring"><Icon name={s.status === 'soon' ? 'lock' : s.icon} size={18} /></span>
 	<span class="min-w-0 text-left">
 		<span class={['block font-display leading-tight font-bold', compact ? 'truncate text-base' : 'text-lg']}>{title}</span>
-		<span class={['block text-xs text-mist-300', compact && 'truncate']}>{subtitle}</span>
+		<span class={['block text-xs text-mist-300', compact && 'truncate', dense && 'sr-only']}>{subtitle}</span>
 	</span>
 	{#if s.status === 'soon'}<span class="sr-only">(chưa khai mở)</span>{/if}
 </button>
@@ -57,6 +59,14 @@
 	.plaque:focus-visible {
 		transform: translateY(-2px);
 		border-color: var(--color-gold-300);
+	}
+	.plaque.is-dense {
+		gap: 0.4rem;
+		padding: 0.2rem 0.6rem 0.2rem 0.2rem;
+	}
+	.plaque.is-dense .ring {
+		width: 2rem;
+		height: 2rem;
 	}
 	.plaque.is-soon {
 		color: var(--color-mist-500);

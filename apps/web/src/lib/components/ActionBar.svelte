@@ -2,7 +2,11 @@
 	Action bar of the game shell (spec §3.4, §4.7) — replaces the old text dock.
 	  ≥ 640px  vertical rail on the right edge: scenes, the scene's primary button in the centre, windows. Labels show
 	           on hover/focus. Hover lifts 2px with a faint gold border.
-	  < 640px  bottom row: icon + short label, the primary button raised in the centre, "Thêm" opens the menu window.
+	           Short screens (landscape phones, ≤ 560px tall): scenes + primary + "Thêm" only, so the rail fits.
+	  < 640px  bottom row: icon + short label, the primary button in the centre (flush with the row: nothing sticks out
+	           over the chat dock / stage — UI polish U2), "Thêm" opens the menu window. Targets ≥ 44px, ≥ 8px apart.
+	The primary shows "đang gửi" at once while its request runs (spinner + aria-busy); the result still comes only
+	from the server.
 	Scenes are links (the ink transition runs from the shell); windows open over the current scene (shallow routing).
 	Badges carry a count or "!" plus an aria label. Press = scale 0.96; disabled buttons never animate.
 -->
@@ -13,11 +17,12 @@
 	import { badgeOf } from '$lib/game/badges';
 	import { extraItems, mobileRow, sceneItems, windowItems, type BarItem } from '$lib/game/nav';
 	import { primaryAction } from '$lib/game/primary.svelte';
-	import { openWindow } from '$lib/game/windows';
+	import { openWindow, prefetchWindow } from '$lib/game/windows';
 	import { hudFx } from '$lib/engine/fx/hud.svelte';
 	import Icon from './Icon.svelte';
 
 	const wide = new MediaQuery('min-width: 640px');
+	const short = new MediaQuery('max-height: 560px');
 	const path = $derived(page.url.pathname.replace(/\/$/, '') || '/');
 	const action = $derived(primaryAction());
 	// a reward landed in the bag: the Túi Đồ button bounces (re-keyed per landing)
@@ -26,7 +31,9 @@
 	const byId = (id: string) => all.find((x) => x.id === id)!;
 	const isHere = (it: BarItem) => !!it.href && path === it.href;
 	const moreBadge = $derived(
-		[...windowItems, ...extraItems].filter((x) => !(mobileRow.left as readonly string[]).concat(mobileRow.right).includes(x.id)).some((x) => badgeOf(x.id))
+		wide.current
+			? [...windowItems, ...extraItems].some((x) => badgeOf(x.id))
+			: [...windowItems, ...extraItems].filter((x) => !(mobileRow.left as readonly string[]).concat(mobileRow.right).includes(x.id)).some((x) => badgeOf(x.id))
 	);
 	// ring geometry
 	const R = 30;
@@ -53,6 +60,9 @@
 			class="item press"
 			aria-label={mobile ? undefined : it.label}
 			data-bar={it.id}
+			onpointerenter={() => prefetchWindow(it.window)}
+			onpointerdown={() => prefetchWindow(it.window)}
+			onfocus={() => prefetchWindow(it.window)}
 			onclick={() => it.window && openWindow({ kind: it.window } as Parameters<typeof openWindow>[0])}
 		>
 			{@render face(it, mobile, b)}
@@ -82,6 +92,8 @@
 				class:is-ready={action.ready && !action.disabled}
 				data-fx={settings.fx}
 				disabled={action.disabled}
+				aria-busy={action.busy || undefined}
+				class:is-busy={action.busy}
 				onclick={action.run}
 				data-primary={action.id}
 				aria-label={action.label}
@@ -93,7 +105,8 @@
 						<circle class="fill" cx="36" cy="36" r={R} stroke-dasharray={C} stroke-dashoffset={C * (1 - Math.min(1, Math.max(0, action.progress)))} />
 					</svg>
 				{/if}
-				<span class="orb"><Icon name={action.icon} size={24} stroke={1.8} /></span>
+				<span class="orb"><Icon name={action.icon} size={wide.current ? 24 : 20} stroke={1.8} /></span>
+				{#if action.busy}<span class="spin" aria-hidden="true"></span>{/if}
 				<span class="sweep" aria-hidden="true"></span>
 			</button>
 			<span class="plabel">{action.label}</span>
@@ -103,13 +116,17 @@
 {/snippet}
 
 {#if wide.current}
-	<nav class="rail" aria-label="Thanh hành động">
+	<nav class="rail" class:is-short={short.current} aria-label="Thanh hành động">
 		<div class="group">
 			{#each sceneItems as it (it.id)}{@render item(it, false)}{/each}
 		</div>
 		{@render primary()}
 		<div class="group">
-			{#each windowItems as it (it.id)}{@render item(it, false)}{/each}
+			{#if short.current}
+				{@render more(false)}
+			{:else}
+				{#each windowItems as it (it.id)}{@render item(it, false)}{/each}
+			{/if}
 		</div>
 	</nav>
 {:else}
@@ -117,15 +134,27 @@
 		{#each mobileRow.left as id (id)}{@render item(byId(id), true)}{/each}
 		{@render primary()}
 		{#each mobileRow.right as id (id)}{@render item(byId(id), true)}{/each}
-		<button type="button" class="item press" data-bar="more" onclick={() => openWindow({ kind: 'menu' })}>
-			<span class="disc">
-				<Icon name="more" size={20} />
-				{#if moreBadge}<span class="badge" aria-label="Có việc cần xem trong mục Thêm">!</span>{/if}
-			</span>
-			<span class="short">Thêm</span>
-		</button>
+		{@render more(true)}
 	</nav>
 {/if}
+
+{#snippet more(mobile: boolean)}
+	<button
+		type="button"
+		class="item press"
+		data-bar="more"
+		aria-label={mobile ? undefined : 'Thêm'}
+		onpointerdown={() => prefetchWindow('menu')}
+		onfocus={() => prefetchWindow('menu')}
+		onclick={() => openWindow({ kind: 'menu' })}
+	>
+		<span class="disc">
+			<Icon name="more" size={mobile ? 20 : 22} />
+			{#if moreBadge}<span class="badge" aria-label="Có việc cần xem trong mục Thêm">!</span>{/if}
+		</span>
+		{#if mobile}<span class="short">Thêm</span>{:else}<span class="tip" aria-hidden="true">Thêm</span>{/if}
+	</button>
+{/snippet}
 
 <style>
 	/* ── shared item ── */
@@ -227,6 +256,22 @@
 		padding: 0.5rem 0.35rem;
 		scrollbar-width: none;
 	}
+	/* landscape phones: tighter rail, the primary's label is its aria-label (the hint stays) */
+	.rail.is-short {
+		gap: 0.3rem;
+		padding: 0.25rem 0.3rem;
+	}
+	.rail.is-short .group {
+		gap: 0.25rem;
+		padding: 0.2rem;
+	}
+	.rail.is-short .primary {
+		width: 3.25rem;
+		height: 3.25rem;
+	}
+	.rail.is-short .plabel {
+		display: none;
+	}
 	.group {
 		display: flex;
 		flex-direction: column;
@@ -271,14 +316,15 @@
 		display: flex;
 		align-items: flex-end;
 		justify-content: space-around;
-		gap: 2px;
-		padding: 4px 4px max(4px, env(safe-area-inset-bottom));
+		gap: var(--tap-gap);
+		padding: 4px 6px;
 		background: var(--grain), linear-gradient(180deg, color-mix(in oklab, var(--color-ink-800) 94%, transparent), color-mix(in oklab, var(--color-ink-950) 98%, transparent));
 		border-top: 1px solid color-mix(in oklab, var(--color-gold-500) 35%, transparent);
 	}
 	.row .item {
 		flex: 1 1 0;
 		padding: 2px 0;
+		min-width: var(--tap);
 		min-height: 3.25rem;
 	}
 	.row .disc {
@@ -306,7 +352,8 @@
 	}
 	.row .primary-wrap {
 		flex: 1.3 1 0;
-		margin-top: -1.6rem;
+		min-width: 0;
+		gap: 0;
 	}
 	.primary {
 		position: relative;
@@ -320,8 +367,11 @@
 		transition: transform var(--dur-instant) var(--ease-qi);
 	}
 	.row .primary {
-		width: 4rem;
-		height: 4rem;
+		width: 3rem;
+		height: 3rem;
+	}
+	.row .phint {
+		display: none;
 	}
 	.ring {
 		position: absolute;
@@ -412,7 +462,36 @@
 		color: var(--color-mist-300);
 	}
 	.row .plabel {
-		font-size: 0.85rem;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.72rem;
+	}
+	.row .orb {
+		width: calc(100% - 8px);
+		height: calc(100% - 8px);
+	}
+	/* sending: a thin spinning arc over the ring (transform only); the button is disabled until the server answers */
+	.spin {
+		position: absolute;
+		inset: 1px;
+		border-radius: 9999px;
+		border: 2px solid transparent;
+		border-top-color: var(--color-mist-100);
+		animation: spin 0.8s linear infinite;
+	}
+	:global(:root[data-fx='off']) .spin {
+		animation: none;
+		border-color: color-mix(in oklab, var(--color-mist-100) 55%, transparent);
+	}
+	.primary.is-busy .orb {
+		opacity: 0.7;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	@keyframes sweep {
