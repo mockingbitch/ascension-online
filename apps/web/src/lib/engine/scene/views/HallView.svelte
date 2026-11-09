@@ -36,6 +36,10 @@
 	const sageAt = $derived(scene.at('hong_quan'));
 	// depth order inside the hall's own stacking context: lower on the floor = in front (normalised scene y × 100)
 	const depth = (y: number, mine = false) => Math.round(y * 100) + (mine ? 50 : 0);
+	// the hovered/focused seat rises above every other seat (and the sage), so its hover card is never covered by a
+	// seat in front of it — each seat is its own stacking context (z-index + transform), so the card's local z can't do it
+	const LIFTED = depth(1, true) + 1;
+	let lifted = $state<number | null>(null);
 	const sageDepth = $derived(depth(scene.def.anchors['hong_quan']?.y ?? 0));
 	const dais = $derived(scene.at('dais'));
 	const stream = $derived(listening && mySeat?.p && dais ? { from: dais, to: mySeat.p } : null);
@@ -118,7 +122,9 @@
 					style:left="{s.p.x}px"
 					style:top="{s.p.y}px"
 					style:--s={mine ? s.scale * 1.3 : s.scale}
-					style:z-index={depth(s.y, mine)}
+					style:z-index={lifted === s.seat ? LIFTED : depth(s.y, mine)}
+					onpointerenter={() => (lifted = s.seat)}
+					onpointerleave={() => lifted === s.seat && (lifted = null)}
 				>
 					{#if mine}<span class="halo" aria-hidden="true"></span>{/if}
 					{#if !is3d || !scene.def.anchors[`seat.${s.seat}`]}<span class="cushion" aria-hidden="true"></span>{/if}

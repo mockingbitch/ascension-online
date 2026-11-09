@@ -35,6 +35,24 @@
 			? [...windowItems, ...extraItems].some((x) => badgeOf(x.id))
 			: [...windowItems, ...extraItems].filter((x) => !(mobileRow.left as readonly string[]).concat(mobileRow.right).includes(x.id)).some((x) => badgeOf(x.id))
 	);
+	// Rail labels: ONE shared tooltip in the top layer (popover="manual"). A per-item absolutely positioned label was
+	// clipped by the rail's overflow-y scroller (overflow-y: auto clips the x axis too) and sat under the stage.
+	let tipEl = $state<HTMLElement>();
+	let tipText = $state('');
+	function showTip(e: Event, label: string) {
+		if (!wide.current || !tipEl) return;
+		const el = e.currentTarget as HTMLElement;
+		if (e.type === 'pointerenter' && (e as PointerEvent).pointerType !== 'mouse') return;
+		if (e.type === 'focus' && !el.matches(':focus-visible')) return;
+		const r = el.getBoundingClientRect();
+		tipText = label;
+		tipEl.style.top = `${Math.round(r.top + r.height / 2)}px`;
+		tipEl.style.right = `${Math.round(innerWidth - r.left + 10)}px`;
+		if (!tipEl.matches(':popover-open')) tipEl.showPopover();
+	}
+	function hideTip() {
+		if (tipEl?.matches(':popover-open')) tipEl.hidePopover();
+	}
 	// ring geometry
 	const R = 30;
 	const C = 2 * Math.PI * R;
@@ -51,6 +69,11 @@
 			aria-label={mobile ? undefined : it.label}
 			data-bar={it.id}
 			data-sveltekit-noscroll
+			onpointerenter={(e) => showTip(e, it.label)}
+			onpointerleave={hideTip}
+			onfocus={(e) => showTip(e, it.label)}
+			onblur={hideTip}
+			onpointerdown={hideTip}
 		>
 			{@render face(it, mobile, b)}
 		</a>
@@ -60,9 +83,11 @@
 			class="item press"
 			aria-label={mobile ? undefined : it.label}
 			data-bar={it.id}
-			onpointerenter={() => prefetchWindow(it.window)}
-			onpointerdown={() => prefetchWindow(it.window)}
-			onfocus={() => prefetchWindow(it.window)}
+			onpointerenter={(e) => (prefetchWindow(it.window), showTip(e, it.label))}
+			onpointerleave={hideTip}
+			onpointerdown={() => (prefetchWindow(it.window), hideTip())}
+			onfocus={(e) => (prefetchWindow(it.window), showTip(e, it.label))}
+			onblur={hideTip}
 			onclick={() => it.window && openWindow({ kind: it.window } as Parameters<typeof openWindow>[0])}
 		>
 			{@render face(it, mobile, b)}
@@ -72,7 +97,7 @@
 
 {#snippet face(it: BarItem, mobile: boolean, b: ReturnType<typeof badgeOf>)}
 	{#if it.id === 'inventory'}{#key bounce}{@render disc(it, mobile, b)}{/key}{:else}{@render disc(it, mobile, b)}{/if}
-	{#if mobile}<span class="short">{it.short}</span>{:else}<span class="tip" aria-hidden="true">{it.label}</span>{/if}
+	{#if mobile}<span class="short">{it.short}</span>{/if}
 {/snippet}
 
 {#snippet disc(it: BarItem, mobile: boolean, b: ReturnType<typeof badgeOf>)}
@@ -116,7 +141,7 @@
 {/snippet}
 
 {#if wide.current}
-	<nav class="rail" class:is-short={short.current} aria-label="Thanh hành động">
+	<nav class="rail" class:is-short={short.current} aria-label="Thanh hành động" onscroll={hideTip}>
 		<div class="group">
 			{#each sceneItems as it (it.id)}{@render item(it, false)}{/each}
 		</div>
@@ -129,6 +154,8 @@
 			{/if}
 		</div>
 	</nav>
+	<!-- labels are decorative (each item has aria-label); top layer, so nothing can clip or cover them -->
+	<span bind:this={tipEl} class="rail-tip" popover="manual" aria-hidden="true">{tipText}</span>
 {:else}
 	<nav class="row" class:has-primary={!!action} aria-label="Thanh hành động">
 		{#each mobileRow.left as id (id)}{@render item(byId(id), true)}{/each}
@@ -144,15 +171,18 @@
 		class="item press"
 		data-bar="more"
 		aria-label={mobile ? undefined : 'Thêm'}
-		onpointerdown={() => prefetchWindow('menu')}
-		onfocus={() => prefetchWindow('menu')}
+		onpointerenter={(e) => showTip(e, 'Thêm')}
+		onpointerleave={hideTip}
+		onpointerdown={() => (prefetchWindow('menu'), hideTip())}
+		onfocus={(e) => (prefetchWindow('menu'), showTip(e, 'Thêm'))}
+		onblur={hideTip}
 		onclick={() => openWindow({ kind: 'menu' })}
 	>
 		<span class="disc">
 			<Icon name="more" size={mobile ? 20 : 22} />
 			{#if moreBadge}<span class="badge" aria-label="Có việc cần xem trong mục Thêm">!</span>{/if}
 		</span>
-		{#if mobile}<span class="short">Thêm</span>{:else}<span class="tip" aria-hidden="true">Thêm</span>{/if}
+		{#if mobile}<span class="short">Thêm</span>{/if}
 	</button>
 {/snippet}
 
@@ -286,10 +316,11 @@
 		top: 50%;
 		margin-top: -2.5px;
 	}
-	.tip {
-		position: absolute;
-		right: calc(100% + 10px);
-		top: 50%;
+	.rail-tip {
+		/* top layer (popover): undo the UA popover box, place by the item's rect (set in showTip) */
+		position: fixed;
+		inset: auto;
+		margin: 0;
 		padding: 0.2rem 0.6rem;
 		font-size: 0.8rem;
 		font-weight: 600;
@@ -299,16 +330,16 @@
 		background: color-mix(in oklab, var(--color-ink-950) 92%, transparent);
 		border-radius: 2px;
 		pointer-events: none;
-		opacity: 0;
-		transform: translate(4px, -50%);
-		transition:
-			opacity var(--dur-fast),
-			transform var(--dur-fast) var(--ease-qi);
+		transform: translateY(-50%);
 	}
-	.item:hover .tip,
-	.item:focus-visible .tip {
-		opacity: 1;
-		transform: translate(0, -50%);
+	.rail-tip:popover-open {
+		animation: tip-in var(--dur-fast) var(--ease-qi);
+	}
+	@keyframes tip-in {
+		from {
+			opacity: 0;
+			transform: translate(4px, -50%);
+		}
 	}
 
 	/* ── mobile row ── */
