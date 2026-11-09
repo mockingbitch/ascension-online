@@ -205,6 +205,110 @@ Mẫu chung:
 | Nguyên Anh | `small luminous nascent soul figure above head, powerful teal-gold aura` |
 | Hoá Thần | `divine light halo, robes of starlight, clouds gathering beneath feet, celestial presence` |
 
+### Bộ ảnh theo dáng người (`characters/<body_id>/…`)
+
+Mỗi dáng người trong `appearances.yaml` có character sheet riêng (lưu ở `art-work/refs/<body_id>-sheet.png`), mọi ảnh
+sau gọi kèm `--ref` sheet đó. Đã làm đủ 12 dáng người (2026-11-09).
+
+- **Sheet:** `character reference sheet of one original adult [mô tả từ traits/temperament + màu default_robe], same
+  person shown three times in a row: front view, side view, back view, full body, neutral standing pose, plain light
+  parchment background, no text, no labels`. Nhân vật nữ thêm `modest non-revealing clothing`, `modest high closed collar`.
+- Mọi ảnh sau mở đầu bằng `exactly the same character as in the reference sheet (same face, hair, hair ornament and
+  robe)`, rồi:
+  - **avatar:** `bust portrait of head and shoulders, face in gentle three-quarter view…, soft antique-gold rim light,
+    dark teal ink-wash gradient background, head centred with generous space around it so it survives a circular crop`
+  - **meditate:** `sitting cross-legged in full lotus meditation pose, hands resting together in the lap, eyes closed,
+    seated above a glowing circular formation of concentric jade and antique-gold rings with abstract cloud-pattern
+    engravings (no letters, no religious symbols)…, front view, whole figure and formation centred with margin`
+  - **listener:** `seen from directly behind, seated cross-legged on a round dark jade meditation cushion, back view
+    only, face not visible, … about 70 percent of the frame height, clear simple silhouette`
+  - **body-luyen_khi:** `full body standing from head to feet, calm poised stance, [đạo cụ], robes flowing gently,
+    faint wisps of teal qi, humble beginner-cultivator aura, front three-quarter view, … margin above and below`
+- **Nền tách:** áo/khí màu ngọc gặp nền xanh lá sẽ bị tách mất, nên các slot alpha của nhân vật dùng nền **magenta**
+  phẳng (#FF00FF) rồi tách magenta; khói mờ được khử về xám mực.
+- **body-b1…b6 (bậc hiệu ứng):** cùng mẫu toàn thân, thêm theo bậc. Tiên: b1 `simple plain outfit, faint wisps of
+  qi` · b2 `slightly finer, steady glowing aura, faint jade ring on the ground` · b3 `finer layered, more gold trim,
+  glowing core at the lower belly` · b4 `richer embroidery, flowing outer mantle, small pale lightning sparks` · b5
+  `ornate gold-embroidered outer robe, sashes, five-coloured auspicious clouds at the feet` · b6 `woven with faint
+  starlight, ring of small stars, five-coloured clouds`. Vu: thay hào quang bằng `blood-qi steam`, hình xăm sáng, giáp đồng,
+  áo lông (b5), `primordial titan … bronze and starlight` (b6). **Vu b2:** viết rõ `the ground under the feet cracked
+  with faint glowing ember-red earth veins (no circle, no star, no symbols, no runes, no letters)`. Viết "ring of
+  geometric patterns" thì model vẽ ngôi sao năm cánh kiểu phù thuỷ phương Tây.
+- **Thời Vu:** meditate = `deep wide horse stance` (trung_binh_tan) hoặc `sitting on a flat boulder` (toa_thach), hơi
+  huyết khí đỏ trầm, không dùng trận pháp ngọc của phe tiên.
+- **Nữ:** luôn thêm `modest non-revealing clothing fully covering the body, adult proportions`. Mô tả "mặt tròn, mắt
+  cười" dễ ra dáng trẻ con: phải ghi rõ tuổi (`about twenty-five years old, adult height, not a child, not chibi`).
+- **Avatar:** dặn rõ `EYES OPEN`, `no halo, no ring or circle behind the head`. Nhân vật trầm tĩnh (Hành Giả) dễ bị vẽ
+  nhắm mắt, còn ánh viền vàng dễ thành vầng hào quang.
+- **Nền tách:** áo ngọc/mặc/thanh lam/bạch và Lực Sĩ (áo đồng xanh) dùng `--key magenta`, áo huyết/thổ dùng `--key green`.
+- **`avatar-robe`:** không sinh bằng AI (không khớp từng pixel). Tách từ chính avatar theo màu áo. Chỉ làm được khi
+  màu áo khác hẳn nền teal (vàng, thổ, huyết, bạch); áo ngọc/mặc tối trên nền teal thì bỏ qua.
+
+### Bộ trang phục vẽ sẵn (`characters/<body_id>/<outfit_id>/…`, decisions 2026-11-09 "Bộ trang phục vẽ sẵn")
+
+Mỗi dáng người có 3 bộ trong `appearances.yaml` (`outfits[]`). Bộ mặc định (`default_outfit`) chính là bộ ảnh hiện có
+trong `characters/<body_id>/` — không vẽ lại. Hai bộ còn lại vẽ vào thư mục con theo id bộ, cùng tên file và kích thước
+(`avatar`, `meditate` = `default_pose`, `meditate-<pose>` cho các tư thế khác của đạo đồ, `listener`, `body-b1…b6`).
+- **Sheet theo bộ:** sheet của dáng người làm `--ref`, prompt `exactly the same person as in the reference sheet (same
+  face, body, hairstyle) now wearing: [trường art của bộ]`; giữ đúng mặt/tóc, chỉ đổi y phục + phụ kiện tóc của bộ
+  (`hair_accessory`; `khong` = không trang sức tóc). Lưu `art-work/refs/<body_id>-<outfit_id>-sheet.png`, rồi các ảnh
+  sau gọi kèm sheet bộ đó với các mẫu avatar/meditate/listener/body-b ở trên.
+- Màu chủ đạo của bộ = `robe_palette` (token `--color-robe-<id>`); ba bộ của một dáng người luôn khác màu, nên ảnh phải
+  khác rõ khi đặt cạnh nhau. Nữ (trừ Vân Khê): vẫn `modest non-revealing clothing fully covering the body`, cổ kín.
+- **Đã làm (2026-11-09):** 24 sheet + 255 ảnh. Mỗi slot gọi 2 ref: sheet bộ (đồ, màu) + ảnh cùng slot của bộ mặc định
+  (`use the SECOND reference image ONLY for camera framing, pose, scale and position, IGNORE its clothing and colours`).
+  Nền tách theo màu áo: magenta cho lam/bạch/ngọc/mặc/tử/đồng, green cho thổ/huyết/kim.
+- **Lỗi hay gặp:** sheet bộ mới hay giữ lại trang sức tóc của sheet gốc (dây đỏ của Nữ Kiếm Khách, kim quan của Công
+  Tử), nên phải ghi rõ `NO red cord…` / `NO gold crown…`. Ở b6, màu áo dễ trôi về teal (Y Sư bộ thổ), nên phải ghi
+  `the robe stays WARM EARTH-OCHRE in every image`.
+
+### Hướng dẫn viên Vân Khê (`characters/guide/<expr>`)
+
+Nhân vật nguyên bản (`content/story/characters/van-khe.md`). Làm character sheet trước, rồi 6 biểu cảm cùng khung hình
+(nửa người, đầu ở cùng độ cao, nền trong suốt, 768×1024).
+
+**Ngoại hình đang dùng: phương án C2** (chủ dự án chọn ngày 2026-11-09, sửa từ C "mị lực"). Sheet:
+`art-work/refs/van_khe-sheet-c2.png`, ảnh khóa khung: `art-work/refs/van_khe-c2-neutral.png`. Để khôi phục: bản C cất ở
+`art-work/old-guide-c/`, bản kín đáo ban đầu ở `art-work/old-guide/`.
+
+```
+[STYLE], character reference sheet of the same woman as in the reference image (same face, low bun at the nape with the
+peach-wood hairpin and a few silver strands, brush and bamboo notebook at the hip, ink-black silk shawl draped at the
+elbows), clearly an adult woman in her late twenties with natural average adult proportions (modest natural bust, not
+exaggerated), tasteful elegant xianxia fashion illustration, all fabric fully opaque, non-explicit: an opaque smoky violet
+silk gown with a shallow V / sweetheart neckline showing only a slight hint of cleavage, embroidered violet-and-gold belt
+with a thin gold waist chain and small gold tassels, jade-and-gold drop earrings, fine gold necklace with a small jade
+pendant, gold upper-arm cuff, thin jade bracelets, gold step-shake hairpin (buyao) beside the peach-wood pin, red lips,
+calm subtle smile, violet black and antique gold palette, front view, side view, back view, full body --ar 16:9
+```
+
+Mẹo: khi gọi kèm ảnh `neutral` cũ để khóa khung hình, model chép luôn bộ áo cũ. Phải ghi rõ `use the SECOND reference
+image ONLY for camera framing; IGNORE its clothing. Copy the outfit and every accessory from the FIRST`. Các chi tiết nhỏ
+(chấm giữa mày, hoa tai) phải liệt kê trong mọi prompt biểu cảm, nếu không sẽ lúc có lúc mất.
+
+Giới hạn cứng (giữ nguyên dù đổi phong cách): rõ là người trưởng thành, không khỏa thân, vải không xuyên thấu, không
+phóng đại hình thể, không tư thế gợi dục, không có gì lộ liễu. Ảnh trong game chỉ cắt nửa người, nên đường xẻ tà không
+xuất hiện.
+
+Biểu cảm (thêm vào mẫu nửa người `[STYLE], same character, half body, facing the viewer, isolated on plain flat green
+background --ar 3:4`): `neutral` (bình thản, tay khép trước bụng) · `smile` (mắt cong cười) · `point` (tay phải chỉ lên
+góc trên phải) · `worried` (mày hơi chau, tay đặt lên cuốn sổ) · `proud` (tay đặt trước ngực, cằm hơi ngẩng) ·
+`surprised` (mắt tròn, miệng hé). Không trẻ hóa, không biểu tượng tôn giáo.
+
+Cách làm đã dùng (2026-11-09): sheet → `neutral` (bản C2 ở `art-work/refs/van_khe-c2-neutral.png`; lần sinh đầu ra
+khung 3/4 người, nên phải gọi kèm `neutral` cũ làm ref thứ hai để khóa khung hình) → 5 biểu cảm gọi kèm
+**hai** ref (sheet + neutral) với câu `the same framing, scale and position as the second reference image (head at
+exactly the same height…); only the expression and hands change`. Đầu lệch nhau ≤ ~2% chiều cao. `blink`: model hay vẽ
+nháy một mắt hoặc đổi tư thế, nên chỉ lấy dải mắt của ảnh nhắm mắt (căn khớp với neutral, mép làm mềm) dán lên neutral.
+
+### Hào quang theo bậc (`fx/aura-1…6`)
+
+Nền **đen** (`--key black`): alpha lấy theo độ sáng, nên ảnh chỉ có ánh sáng. Chừa trống phần giữa dưới và đường giữa
+phía trên (đầu nhân vật nằm ở đó). Chọn aura-1, rồi aura-2, làm `--ref` cho các bậc sau. Các bậc: 1 sương ngọc · 2 vòng
+ngọc dưới đất · 3 + hai linh châu nhỏ thấp ở hai bên (để ở giữa thì thành vầng hào quang sau đầu, nên không làm thế) ·
+4 + tia sét nhỏ · 5 + mây ngũ sắc · 6 + vòng sao và pháp tướng là bóng người tu sĩ bằng ánh sao (`faceless, no hood, no
+halo, no lotus, no hand gesture`). Không vẽ tượng thần, không làm như người đội mũ trùm.
+
 ### Đối thủ / NPC
 
 Chèn mô tả vào cùng mẫu toàn thân ở trên, ví dụ:
@@ -283,9 +387,12 @@ cung cấp. Tài liệu ảnh của Meta không nói rõ hai điểm này.
 
 ### 7.3. Chỗ còn thiếu hoặc cần quyết
 
-1. **Nam hay nữ.** Game hiện chưa có lựa chọn ngoại hình, nên mọi người chơi dùng chung một bộ ảnh nhân vật.
-   Muốn có cả nam và nữ thì cần thêm trường ngoại hình lúc tạo nhân vật (cần quyết định sản phẩm và một
-   migration). Trước mắt nên chọn **một** bộ để làm.
+1. **Dáng người (GĐ-A, 2026-11-09).** Người chơi chọn 1 trong 12 dáng người của `content/catalog/appearances.yaml`
+   (tiên 4 nam + 4 nữ, Vu 2 + 2). Mỗi dáng người có thư mục ảnh riêng `characters/<body_id>/` (avatar, meditate,
+   body-<realm_id>, listener — xem README ô ảnh), làm **character sheet riêng trước** rồi mới làm các ảnh khác. Mô tả
+   khuôn mặt, tóc, vóc dáng lấy từ trường `traits` / `temperament` của dáng người; kiểu tóc gắn với dáng người, phụ kiện
+   tóc và màu áo là lớp phủ / mặt nạ tô màu. Thiếu ảnh thì game vẽ SVG theo đúng ngoại hình đã chọn. Bộ ảnh dùng chung
+   ở trên chỉ còn dùng cho dữ liệu chưa có ngoại hình.
 2. **Cảnh giới.** Game có 15 cảnh giới (`realms.yaml`), bảng §4 mới có 5. Thiếu thì tự lùi về ảnh cảnh giới
    thấp hơn. Đạo đồ Vu cần bộ riêng (luyện thể, huyết khí), không dùng ảnh ngồi thiền của phe tiên.
 3. **Huy hiệu thế lực** chưa có prompt. Dùng mẫu sau, phần mô tả lấy từ mục "Huy hiệu" trong
