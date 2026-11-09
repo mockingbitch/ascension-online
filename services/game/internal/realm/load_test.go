@@ -242,8 +242,13 @@ func TestRejectsBadCatalogue(t *testing.T) {
 		{"max_bp: 500", "max_bp: 1500", "max_total_bonus_bp"},
 		{"names: { tien: Lôi Kiếp, vu: Huyết Kiếp }", "names: { tien: Lôi Kiếp }", "missing path"},
 		{"stages: { phases: bon_ky, layers: 16 }", "stages: { phases: bon_ky, layers: 17 }", "layers"},
-		{"{ tier: 6,  entry_points: 5400,  stages: { phases: bon_ky, layers: 2 } }",
-			"{ tier: 6,  entry_points: 5400,  stages: { phases: bon_ky, layers: 2 }, major_breakthrough: { success_bp: 5000 } }", "must not set success_bp"},
+		{"{ tier: 6,  entry_points: 5400,  stages: { phases: bon_ky, layers: 2 }, visual: { fx_tier: 4 } }",
+			"{ tier: 6,  entry_points: 5400,  stages: { phases: bon_ky, layers: 2 }, visual: { fx_tier: 4 }, major_breakthrough: { success_bp: 5000 } }", "must not set success_bp"},
+		// effect tiers (decisions 2026-11-09): 1..6, never decreasing up the ladder, only on tiers
+		{"layers: 2 }, visual: { fx_tier: 4 } }   # Luyện Hư", "layers: 2 }, visual: { fx_tier: 2 } }   # Luyện Hư", "below the previous tier"},
+		{"layers: 2 }, visual: { fx_tier: 4 } }   # Luyện Hư", "layers: 2 }, visual: { fx_tier: 7 } }   # Luyện Hư", "fx_tier must be within"},
+		{"    visual: { fx_tier: 1 }\n", "", "fx_tier must be within"},
+		{"visual: { badge: realm-luyen-khi, aura: mist }", "visual: { badge: realm-luyen-khi, aura: mist, fx_tier: 1 }", "fx_tier"},
 		{"overflow_cap_bp: 12000", "overflow_cap_bp: 9000", "overflow_cap_bp"},
 	}
 	for _, tc := range cases {
@@ -323,6 +328,26 @@ func TestStageWeightsValidation(t *testing.T) {
 		}
 		if _, err := Load(strings.NewReader(s)); err == nil {
 			t.Errorf("%s: want a validation error", name)
+		}
+	}
+}
+
+// Effect tiers (decisions 2026-11-09): 1 / 2–3 / 4–5 / 6–9 / 10–12 / 13–15 on BOTH paths, shared through the tier.
+func TestShippedFxTiers(t *testing.T) {
+	c, err := LoadFile("../../../../content/catalog/realms.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[int]int{1: 1, 2: 2, 3: 2, 4: 3, 5: 3, 6: 4, 7: 4, 8: 4, 9: 4, 10: 5, 11: 5, 12: 5, 13: 6, 14: 6, 15: 6}
+	for _, p := range c.Paths() {
+		for tier, fx := range want {
+			r := c.byPathTier[p.ID][tier]
+			if r == nil {
+				t.Fatalf("path %s tier %d missing", p.ID, tier)
+			}
+			if r.Visual.FxTier != fx {
+				t.Errorf("%s: fx tier %d, want %d", r.ID, r.Visual.FxTier, fx)
+			}
 		}
 	}
 }

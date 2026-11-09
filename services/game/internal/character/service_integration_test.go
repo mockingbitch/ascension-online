@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/character"
 	"tiendao/game/internal/content"
 	"tiendao/game/internal/cultivation"
@@ -36,7 +37,7 @@ func newEnv(t *testing.T) *env {
 	nowFn := func() time.Time { return e.now }
 	cult := &cultivation.Service{Pool: e.pool, Realms: cb.Realms, Contribution: cb.Contribution, VIP: cb.VIP, Tasks: cb.DailyTasks, Now: nowFn}
 	fac := &faction.Service{Pool: e.pool, Cat: cb.Factions, Realms: cb.Realms, World: cb.World, Now: nowFn, Settle: cult.SettleLockedRow}
-	e.chars = &character.Service{Pool: e.pool, Cultivation: cult, Names: cb.Moderation, Factions: fac}
+	e.chars = &character.Service{Pool: e.pool, Cultivation: cult, Names: cb.Moderation, Factions: fac, Looks: cb.Appearances}
 	return e
 }
 
@@ -143,5 +144,53 @@ func TestCreateOnboardedRefusalsWriteNothing(t *testing.T) {
 	plain := &character.Service{Pool: e.pool, Cultivation: e.chars.Cultivation}
 	if _, err := plain.CreateOnboarded(e.ctx, e.user(), "Ai Đó", character.Onboarding{IdempotencyKey: "onb-k-nofac", FactionID: "vu_toc"}); !errors.Is(err, character.ErrNoFactions) {
 		t.Fatalf("no factions: %v", err)
+	}
+}
+
+// GĐ-A: the onboarding intent may carry the picked look; it is validated for the faction's path, written in the same
+// transaction (no cooldown started) and shown by GET /character. A refused look writes nothing.
+func TestCreateOnboardedWithLook(t *testing.T) {
+	e := newEnv(t)
+	u := e.user()
+	bad := character.Onboarding{IdempotencyKey: "onb-look-bad1", FactionID: "vu_toc",
+		Look: &appearance.Look{BodyID: "tien_nu_y_su", OutfitID: "y_su_ngoc_bich", PoseID: "ban_gia"}}
+	if _, err := e.chars.CreateOnboarded(e.ctx, u, "Vân Thư", bad); !errors.Is(err, appearance.ErrWrongPath) {
+		t.Fatalf("tiên body on Vu Tộc: %v", err)
+	}
+	if n := e.count("SELECT count(*) FROM characters WHERE user_id=$1", u); n != 0 {
+		t.Fatal("a refused look left a character behind")
+	}
+	// An outfit of another body is refused too (outfits belong to one body).
+	foreign := character.Onboarding{IdempotencyKey: "onb-look-bad2", FactionID: "vu_toc",
+		Look: &appearance.Look{BodyID: "vu_nu_luc_si", OutfitID: "tho_san_mac_ung", PoseID: "toa_thach"}}
+	if _, err := e.chars.CreateOnboarded(e.ctx, u, "Vân Thư", foreign); !errors.Is(err, appearance.ErrUnknown) {
+		t.Fatalf("foreign outfit: %v", err)
+	}
+	// body + outfit + pose; accessory and robe are derived from the outfit and stored as its parts.
+	want := appearance.Look{BodyID: "vu_nu_luc_si", OutfitID: "luc_si_hoang_tho", PoseID: "toa_thach"}
+	v, err := e.chars.CreateOnboarded(e.ctx, u, "Vân Thư", character.Onboarding{IdempotencyKey: "onb-look-ok01", FactionID: "vu_toc", Look: &want})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Appearance.Look == nil || *v.Appearance.Look != (appearance.Look{BodyID: "vu_nu_luc_si", OutfitID: "luc_si_hoang_tho", HairID: "khong", RobePaletteID: "tho", PoseID: "toa_thach"}) {
+		t.Fatalf("view look = %+v", v.Appearance.Look)
+	}
+	if n := e.count("SELECT count(*) FROM character_appearance WHERE character_id=$1 AND body_id='vu_nu_luc_si' AND hair_id='khong' AND robe_palette_id='tho' AND body_changed_at IS NULL", v.ID); n != 1 {
+		t.Fatal("onboarding look must be stored without starting the cooldown")
+	}
+	// Replay: same key + same look = replay; same key + another look = key reused (nothing changes).
+	if r, err := e.chars.CreateOnboarded(e.ctx, u, "Vân Thư", character.Onboarding{IdempotencyKey: "onb-look-ok01", FactionID: "vu_toc", Look: &want}); err != nil || !r.Replayed {
+		t.Fatalf("replay: %v %v", r.Replayed, err)
+	}
+	other := want
+	other.OutfitID = "luc_si_huyet_son"
+	if _, err := e.chars.CreateOnboarded(e.ctx, u, "Vân Thư", character.Onboarding{IdempotencyKey: "onb-look-ok01", FactionID: "vu_toc", Look: &other}); !errors.Is(err, faction.ErrIdempotencyReused) {
+		t.Fatalf("replay with another look: %v", err)
+	}
+	// Without a look: the path default is shown.
+	u2 := e.user()
+	v2, err := e.chars.CreateOnboarded(e.ctx, u2, "Mộc Phong", character.Onboarding{IdempotencyKey: "onb-look-ok02", FactionID: "huyen_khung_mon"})
+	if err != nil || v2.Appearance.Look == nil || v2.Appearance.Look.BodyID != "tien_nam_thu_sinh" {
+		t.Fatalf("default: %+v %v", v2.Appearance.Look, err)
 	}
 }

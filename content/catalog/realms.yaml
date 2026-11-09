@@ -84,8 +84,13 @@ minor_breakthrough: { auto: true }   # minor stages: 100%, applied automatically
 #
 # Early game front-loaded (2026-11-07): Luyện Khí 300 → 100 (tầng 1 ≈ 2 points ≈ the first session), Trúc Cơ
 # 650 → 550, Kim Đan 1100 → 1400; Nguyên Anh entry (2050) and everything after unchanged, so the 330-day arc holds.
+# visual.fx_tier (decisions 2026-11-09 "Ngoại hình…" #11 + D): the effect tier 1–6 of every realm at this tier, on
+# BOTH paths (1 / 2–3 / 4–5 / 6–9 / 10–12 / 13–15; the reserved tier repeats the last). Display only: celebration size,
+# persistent aura, formation, sound. Non-decreasing by tier (loader-checked); each tier's effect is at least as strong
+# as the previous one (web test).
 tiers:
   - tier: 1                       # Luyện Khí
+    visual: { fx_tier: 1 }
     entry_points: 0
     stages: { set: chin_tang }
     stage_weights: [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -95,6 +100,7 @@ tiers:
       cooldown_seconds: 1800
       requirements: [{ item_id: truc_co_dan, quantity: 1 }]
   - tier: 2                       # Trúc Cơ
+    visual: { fx_tier: 2 }
     entry_points: 100
     stages: { phases: bon_ky, layers: 1 }
     major_breakthrough:
@@ -103,32 +109,37 @@ tiers:
       cooldown_seconds: 3600
       requirements: [{ item_id: ket_dan_qua, quantity: 1 }]
   - tier: 3                       # Kim Đan — leaving it needs a Tâm Ma pass (trials.yaml gate.tier: 3)
+    visual: { fx_tier: 2 }
     entry_points: 650
     stages: { phases: bon_ky, layers: 1 }
     major_breakthrough: { success_bp: 5000, pity_step_bp: 700, cooldown_seconds: 7200 }
   - tier: 4                       # Nguyên Anh — leaving it needs a Hóa Phàm pass (trials.yaml gate.tier: 4)
+    visual: { fx_tier: 3 }
     entry_points: 2050
     stages: { phases: bon_ky, layers: 2 }
     major_breakthrough: { success_bp: 4500, pity_step_bp: 600, cooldown_seconds: 10800 }
   - tier: 5                       # Hóa Thần — leaving it is the first tribulation
+    visual: { fx_tier: 3 }
     entry_points: 3500
     stages: { phases: bon_ky, layers: 2 }
-  - { tier: 6,  entry_points: 5400,  stages: { phases: bon_ky, layers: 2 } }   # Luyện Hư
-  - { tier: 7,  entry_points: 7500,  stages: { phases: bon_ky, layers: 2 } }   # Hợp Thể
-  - { tier: 8,  entry_points: 9750,  stages: { phases: bon_ky, layers: 3 } }   # Đại Thừa
-  - { tier: 9,  entry_points: 12250, stages: { phases: bon_ky, layers: 3 } }   # Độ Kiếp
-  - { tier: 10, entry_points: 14900, stages: { phases: bon_ky, layers: 3 } }   # Nhân Tiên
-  - { tier: 11, entry_points: 17750, stages: { phases: bon_ky, layers: 3 } }   # Địa Tiên
-  - { tier: 12, entry_points: 20900, stages: { phases: bon_ky, layers: 3 } }   # Kim Tiên
-  - { tier: 13, entry_points: 24350, stages: { phases: bon_ky, layers: 4 } }   # Thái Ất Kim Tiên
-  - { tier: 14, entry_points: 28200, stages: { phases: bon_ky, layers: 4 } }   # Đại La Kim Tiên
+  - { tier: 6,  entry_points: 5400,  stages: { phases: bon_ky, layers: 2 }, visual: { fx_tier: 4 } }   # Luyện Hư
+  - { tier: 7,  entry_points: 7500,  stages: { phases: bon_ky, layers: 2 }, visual: { fx_tier: 4 } }   # Hợp Thể
+  - { tier: 8,  entry_points: 9750,  stages: { phases: bon_ky, layers: 3 }, visual: { fx_tier: 4 } }   # Đại Thừa
+  - { tier: 9,  entry_points: 12250, stages: { phases: bon_ky, layers: 3 }, visual: { fx_tier: 4 } }   # Độ Kiếp
+  - { tier: 10, entry_points: 14900, stages: { phases: bon_ky, layers: 3 }, visual: { fx_tier: 5 } }   # Nhân Tiên
+  - { tier: 11, entry_points: 17750, stages: { phases: bon_ky, layers: 3 }, visual: { fx_tier: 5 } }   # Địa Tiên
+  - { tier: 12, entry_points: 20900, stages: { phases: bon_ky, layers: 3 }, visual: { fx_tier: 5 } }   # Kim Tiên
+  - { tier: 13, entry_points: 24350, stages: { phases: bon_ky, layers: 4 }, visual: { fx_tier: 6 } }   # Thái Ất Kim Tiên
+  - { tier: 14, entry_points: 28200, stages: { phases: bon_ky, layers: 4 }, visual: { fx_tier: 6 } }   # Đại La Kim Tiên
   - tier: 15                      # Chuẩn Thánh — last playable tier (bổ sung C: 32,450 → 51,650)
+    visual: { fx_tier: 6 }
     entry_points: 32450
     span_points: 19200            # 4 kỳ × 16 trọng = 64 stages × 300
     stages: { phases: bon_ky, layers: 16 }
     extra_stages: []              # append-only tail (e.g. vien_man_17) if Tây Du comes late; each needs required_points
     major_breakthrough: { success_bp: 0 }   # Thánh Nhân is reserved: no player breakthrough
   - tier: 16
+    visual: { fx_tier: 6 }
     reserved: true                # Thánh Nhân: events/NPCs only; no player may hold a stage here
     stages: { set: dac_dao }
 
@@ -151,18 +162,18 @@ realms:
   - { id: chuan_thanh,      path: tien, tier: 15, name: Chuẩn Thánh,      title: Chuẩn Thánh,        visual: { badge: realm-chuan-thanh, aura: saint } }
   - { id: thanh_nhan,       path: tien, tier: 16, name: Thánh Nhân,       title: Thánh Nhân,         visual: { badge: realm-thanh-nhan, aura: saint } }
   # ── Vu path: IDs permanent and neutral; names from cot-truyen.md §5.3 (D2 reversed 2026-11-07) ──
-  - { id: vu_1,  path: vu, tier: 1,  name: Khai Huyết, title: Khai Huyết Vu Sĩ, visual: { badge: realm-vu-1, aura: blood } }
-  - { id: vu_2,  path: vu, tier: 2,  name: Luyện Cốt,  title: Luyện Cốt Vu Sĩ,  visual: { badge: realm-vu-2, aura: blood } }
-  - { id: vu_3,  path: vu, tier: 3,  name: Tẩy Tủy,    title: Tẩy Tủy Vu Sĩ,    visual: { badge: realm-vu-3, aura: blood } }
-  - { id: vu_4,  path: vu, tier: 4,  name: Huyết Hải,  title: Huyết Hải Vu Sĩ,  visual: { badge: realm-vu-4, aura: blood } }
-  - { id: vu_5,  path: vu, tier: 5,  name: Vu Hồn,     title: Vu Hồn Sứ,        visual: { badge: realm-vu-5, aura: blood } }
-  - { id: vu_6,  path: vu, tier: 6,  name: Tiểu Vu,    title: Tiểu Vu,          visual: { badge: realm-vu-6, aura: blood } }
-  - { id: vu_7,  path: vu, tier: 7,  name: Trung Vu,   title: Trung Vu,         visual: { badge: realm-vu-7, aura: blood } }
-  - { id: vu_8,  path: vu, tier: 8,  name: Thượng Vu,  title: Thượng Vu,        visual: { badge: realm-vu-8, aura: blood } }
-  - { id: vu_9,  path: vu, tier: 9,  name: Chân Vu,    title: Chân Vu,          visual: { badge: realm-vu-9, aura: blood } }
-  - { id: vu_10, path: vu, tier: 10, name: Vu Tướng,   title: Vu Tướng,         visual: { badge: realm-vu-10, aura: blood } }
-  - { id: vu_11, path: vu, tier: 11, name: Vu Vương,   title: Vu Vương,         visual: { badge: realm-vu-11, aura: blood } }
-  - { id: vu_12, path: vu, tier: 12, name: Vu Tôn,     title: Vu Tôn,           visual: { badge: realm-vu-12, aura: blood } }
-  - { id: vu_13, path: vu, tier: 13, name: Vu Hoàng,   title: Vu Hoàng,         visual: { badge: realm-vu-13, aura: blood } }
-  - { id: vu_14, path: vu, tier: 14, name: Đại Vu,     title: Đại Vu,           visual: { badge: realm-vu-14, aura: blood } }
-  - { id: vu_15, path: vu, tier: 15, name: Tổ Vu,      title: Tổ Vu,            visual: { badge: realm-vu-15, aura: blood } }
+  - { id: vu_1,  path: vu, tier: 1,  name: Khai Huyết, title: Khai Huyết Vu Sĩ, visual: { badge: realm-vu-1, aura: vu-ember } }
+  - { id: vu_2,  path: vu, tier: 2,  name: Luyện Cốt,  title: Luyện Cốt Vu Sĩ,  visual: { badge: realm-vu-2, aura: vu-blood } }
+  - { id: vu_3,  path: vu, tier: 3,  name: Tẩy Tủy,    title: Tẩy Tủy Vu Sĩ,    visual: { badge: realm-vu-3, aura: vu-blood } }
+  - { id: vu_4,  path: vu, tier: 4,  name: Huyết Hải,  title: Huyết Hải Vu Sĩ,  visual: { badge: realm-vu-4, aura: vu-crimson } }
+  - { id: vu_5,  path: vu, tier: 5,  name: Vu Hồn,     title: Vu Hồn Sứ,        visual: { badge: realm-vu-5, aura: vu-crimson } }
+  - { id: vu_6,  path: vu, tier: 6,  name: Tiểu Vu,    title: Tiểu Vu,          visual: { badge: realm-vu-6, aura: vu-storm } }
+  - { id: vu_7,  path: vu, tier: 7,  name: Trung Vu,   title: Trung Vu,         visual: { badge: realm-vu-7, aura: vu-storm } }
+  - { id: vu_8,  path: vu, tier: 8,  name: Thượng Vu,  title: Thượng Vu,        visual: { badge: realm-vu-8, aura: vu-storm } }
+  - { id: vu_9,  path: vu, tier: 9,  name: Chân Vu,    title: Chân Vu,          visual: { badge: realm-vu-9, aura: vu-storm } }
+  - { id: vu_10, path: vu, tier: 10, name: Vu Tướng,   title: Vu Tướng,         visual: { badge: realm-vu-10, aura: vu-totem } }
+  - { id: vu_11, path: vu, tier: 11, name: Vu Vương,   title: Vu Vương,         visual: { badge: realm-vu-11, aura: vu-totem } }
+  - { id: vu_12, path: vu, tier: 12, name: Vu Tôn,     title: Vu Tôn,           visual: { badge: realm-vu-12, aura: vu-totem } }
+  - { id: vu_13, path: vu, tier: 13, name: Vu Hoàng,   title: Vu Hoàng,         visual: { badge: realm-vu-13, aura: vu-ancestral } }
+  - { id: vu_14, path: vu, tier: 14, name: Đại Vu,     title: Đại Vu,           visual: { badge: realm-vu-14, aura: vu-ancestral } }
+  - { id: vu_15, path: vu, tier: 15, name: Tổ Vu,      title: Tổ Vu,            visual: { badge: realm-vu-15, aura: vu-ancestral } }

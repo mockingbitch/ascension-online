@@ -17,7 +17,7 @@ func TestShippedContentIsConsistent(t *testing.T) {
 
 func TestUnknownItemReferenceFails(t *testing.T) {
 	dir := t.TempDir()
-	for _, f := range []string{"realms.yaml", "vip.yaml", "spirit_roots.yaml", "daily_tasks.yaml", "contribution.yaml", "world_milestones.yaml", "moderation.yaml", "chat.yaml", "lectures.yaml", "factions.yaml", "shop.yaml", "fortunes.yaml", "trials.yaml", "cosmetics.yaml", "faction_works.yaml", "secret_realms.yaml", "protector.yaml", "payments.yaml", "dao_lu.yaml", "trade.yaml"} {
+	for _, f := range []string{"realms.yaml", "vip.yaml", "spirit_roots.yaml", "daily_tasks.yaml", "contribution.yaml", "world_milestones.yaml", "moderation.yaml", "chat.yaml", "lectures.yaml", "factions.yaml", "shop.yaml", "fortunes.yaml", "trials.yaml", "cosmetics.yaml", "faction_works.yaml", "secret_realms.yaml", "protector.yaml", "payments.yaml", "dao_lu.yaml", "trade.yaml", "appearances.yaml", "announcements.yaml"} {
 		b, err := os.ReadFile(filepath.Join(shippedDir, f))
 		if err != nil {
 			t.Fatal(err)
@@ -38,7 +38,7 @@ func TestUnknownItemReferenceFails(t *testing.T) {
 
 func TestUnknownSplitFactionFails(t *testing.T) {
 	dir := t.TempDir()
-	for _, f := range []string{"realms.yaml", "vip.yaml", "items.yaml", "spirit_roots.yaml", "daily_tasks.yaml", "contribution.yaml", "world_milestones.yaml", "moderation.yaml", "chat.yaml", "lectures.yaml", "factions.yaml", "shop.yaml", "fortunes.yaml", "trials.yaml", "cosmetics.yaml", "faction_works.yaml", "secret_realms.yaml", "protector.yaml", "payments.yaml", "dao_lu.yaml", "trade.yaml"} {
+	for _, f := range []string{"realms.yaml", "vip.yaml", "items.yaml", "spirit_roots.yaml", "daily_tasks.yaml", "contribution.yaml", "world_milestones.yaml", "moderation.yaml", "chat.yaml", "lectures.yaml", "factions.yaml", "shop.yaml", "fortunes.yaml", "trials.yaml", "cosmetics.yaml", "faction_works.yaml", "secret_realms.yaml", "protector.yaml", "payments.yaml", "dao_lu.yaml", "trade.yaml", "appearances.yaml", "announcements.yaml"} {
 		b, err := os.ReadFile(filepath.Join(shippedDir, f))
 		if err != nil {
 			t.Fatal(err)
@@ -248,5 +248,15 @@ func TestTradeCrossCheckRefusesForbiddenAssets(t *testing.T) {
 				t.Fatalf("want error containing %q, got %v", c.want, err)
 			}
 		})
+	}
+}
+
+func TestAppearanceUnknownPathFails(t *testing.T) {
+	dir := shippedWith(t, map[string][2]string{
+		"appearances.yaml": {"{ id: tram_go,   name: Trâm gỗ,    paths: [tien],", "{ id: tram_go,   name: Trâm gỗ,    paths: [tien, yeu],"},
+	})
+	_, err := LoadAll(dir)
+	if err == nil || !strings.Contains(err.Error(), `unknown path "yeu"`) {
+		t.Fatalf("expected appearance path error, got %v", err)
 	}
 }

@@ -81,7 +81,12 @@ describe('window deep links', () => {
 	it('old screen routes map to windows; scenes and mini games do not', () => {
 		expect(windowFromPath('/play/nhan-vat')).toEqual({ kind: 'character' });
 		expect(windowFromPath('/play/xep-hang/')).toEqual({ kind: 'ranking' });
-		expect(windowFromPath('/play/tui-do', '?tab=trang-phuc')).toEqual({ kind: 'inventory', tab: 'cosmetics' });
+		// Trang phục moved to Nhân Vật (decisions 2026-11-09 #9): old Túi Đồ links redirect there
+		expect(windowFromPath('/play/tui-do', '?tab=trang-phuc')).toEqual({ kind: 'character', tab: 'cosmetics' });
+		expect(windowFromSearch('?win=inventory&tab=trang-phuc')).toEqual({ kind: 'character', tab: 'cosmetics' });
+		expect(windowFromPath('/play/nhan-vat', '?tab=trang-phuc')).toEqual({ kind: 'character', tab: 'cosmetics' });
+		expect(windowHref({ kind: 'character', tab: 'cosmetics' })).toBe('/play?win=character&tab=trang-phuc');
+		expect(windowFromSearch('?win=character')).toEqual({ kind: 'character' });
 		expect(windowFromPath('/play/tui-do', '?tab=trao-doi&den=c1&ten=Lan&canh-gioi=luyen_khi.tang_3')).toEqual({
 			kind: 'inventory',
 			tab: 'trade',

@@ -92,6 +92,8 @@ names:
 
     # ── story characters (cot-truyen.md) ──
     - { term: "hồng quân",             match: name_exact, category: story }
+    - { term: "vân khê",               match: name_exact, category: story }   # tutorial guide (decisions 2026-11-09 #1)
+    - { term: "van khe",               match: word,       category: story }   # same, without diacritics
     - { term: "hồng quân lão tổ",      match: word_exact, category: story }
     - { term: "đạo tổ",                match: word_exact, category: story }
     - { term: "bàn cổ",                match: word_exact, category: story }

@@ -26,8 +26,12 @@ export interface WindowMeta {
 const inventoryTabs: WindowTab[] = [
 	{ id: 'bag', label: 'Hành trang', icon: 'bag' },
 	{ id: 'shop', label: 'Cửa hàng', icon: 'stone' },
-	{ id: 'cosmetics', label: 'Trang phục', icon: 'spark' },
 	{ id: 'trade', label: 'Trao đổi', icon: 'gift' }
+];
+// Trang phục ("Gương Thủy Nguyệt": dáng người, phụ kiện, màu áo, tư thế + danh hiệu, khung, danh quang, trang trí)
+const characterTabs: WindowTab[] = [
+	{ id: 'info', label: 'Nhân vật', icon: 'person' },
+	{ id: 'cosmetics', label: 'Trang phục', icon: 'spark' }
 ];
 const rankingTabs: WindowTab[] = [
 	{ id: 'personal', label: 'Tu sĩ', icon: 'person' },
@@ -45,7 +49,7 @@ export function windowMeta(w: WindowState): WindowMeta {
 		case 'settings':
 			return { title: 'Cài đặt', icon: 'gear', size: 'md' };
 		case 'character':
-			return { title: 'Nhân Vật', icon: 'person', size: 'lg' };
+			return { title: 'Nhân Vật', icon: 'person', size: 'lg', tabs: characterTabs, tab: w.tab ?? 'info' };
 		case 'inventory':
 			return { title: 'Túi Đồ', icon: 'bag', size: 'lg', tabs: inventoryTabs, tab: w.tab ?? 'bag', help: 'inventory' };
 		case 'ranking':

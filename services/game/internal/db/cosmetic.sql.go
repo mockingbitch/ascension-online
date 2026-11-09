@@ -39,7 +39,7 @@ func (q *Queries) EnsureAppearance(ctx context.Context, characterID uuid.UUID) e
 }
 
 const getAppearance = `-- name: GetAppearance :one
-SELECT character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, version, updated_at FROM character_appearance WHERE character_id = $1
+SELECT character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, version, updated_at, body_id, hair_id, robe_palette_id, pose_id, body_changed_at FROM character_appearance WHERE character_id = $1
 `
 
 func (q *Queries) GetAppearance(ctx context.Context, characterID uuid.UUID) (CharacterAppearance, error) {
@@ -53,12 +53,17 @@ func (q *Queries) GetAppearance(ctx context.Context, characterID uuid.UUID) (Cha
 		&i.CaveDecorationIds,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.BodyID,
+		&i.HairID,
+		&i.RobePaletteID,
+		&i.PoseID,
+		&i.BodyChangedAt,
 	)
 	return i, err
 }
 
 const getAppearanceForUpdate = `-- name: GetAppearanceForUpdate :one
-SELECT character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, version, updated_at FROM character_appearance WHERE character_id = $1 FOR UPDATE
+SELECT character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, version, updated_at, body_id, hair_id, robe_palette_id, pose_id, body_changed_at FROM character_appearance WHERE character_id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetAppearanceForUpdate(ctx context.Context, characterID uuid.UUID) (CharacterAppearance, error) {
@@ -72,12 +77,17 @@ func (q *Queries) GetAppearanceForUpdate(ctx context.Context, characterID uuid.U
 		&i.CaveDecorationIds,
 		&i.Version,
 		&i.UpdatedAt,
+		&i.BodyID,
+		&i.HairID,
+		&i.RobePaletteID,
+		&i.PoseID,
+		&i.BodyChangedAt,
 	)
 	return i, err
 }
 
 const getCosmeticEquipByKey = `-- name: GetCosmeticEquipByKey :one
-SELECT id, character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, idempotency_key, created_at FROM cosmetic_equips WHERE character_id = $1 AND idempotency_key = $2
+SELECT id, character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, idempotency_key, created_at, look_set, body_id, hair_id, robe_palette_id, pose_id FROM cosmetic_equips WHERE character_id = $1 AND idempotency_key = $2
 `
 
 type GetCosmeticEquipByKeyParams struct {
@@ -97,6 +107,11 @@ func (q *Queries) GetCosmeticEquipByKey(ctx context.Context, arg GetCosmeticEqui
 		&i.CaveDecorationIds,
 		&i.IdempotencyKey,
 		&i.CreatedAt,
+		&i.LookSet,
+		&i.BodyID,
+		&i.HairID,
+		&i.RobePaletteID,
+		&i.PoseID,
 	)
 	return i, err
 }
@@ -125,8 +140,10 @@ func (q *Queries) GetCosmeticPurchaseByKey(ctx context.Context, arg GetCosmeticP
 }
 
 const insertCosmeticEquip = `-- name: InsertCosmeticEquip :exec
-INSERT INTO cosmetic_equips (character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, idempotency_key, created_at)
-VALUES ($1, $2, $3, $4, $5::text[], $6, $7)
+INSERT INTO cosmetic_equips (character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, idempotency_key, created_at,
+                             look_set, body_id, hair_id, robe_palette_id, pose_id)
+VALUES ($1, $2, $3, $4, $5::text[], $6, $7,
+        $8, $9, $10, $11, $12)
 `
 
 type InsertCosmeticEquipParams struct {
@@ -137,6 +154,11 @@ type InsertCosmeticEquipParams struct {
 	CaveDecorationIds []string    `json:"cave_decoration_ids"`
 	IdempotencyKey    string      `json:"idempotency_key"`
 	Now               time.Time   `json:"now"`
+	LookSet           bool        `json:"look_set"`
+	BodyID            pgtype.Text `json:"body_id"`
+	HairID            pgtype.Text `json:"hair_id"`
+	RobePaletteID     pgtype.Text `json:"robe_palette_id"`
+	PoseID            pgtype.Text `json:"pose_id"`
 }
 
 func (q *Queries) InsertCosmeticEquip(ctx context.Context, arg InsertCosmeticEquipParams) error {
@@ -148,6 +170,11 @@ func (q *Queries) InsertCosmeticEquip(ctx context.Context, arg InsertCosmeticEqu
 		arg.CaveDecorationIds,
 		arg.IdempotencyKey,
 		arg.Now,
+		arg.LookSet,
+		arg.BodyID,
+		arg.HairID,
+		arg.RobePaletteID,
+		arg.PoseID,
 	)
 	return err
 }
@@ -173,6 +200,34 @@ func (q *Queries) InsertCosmeticOwnership(ctx context.Context, arg InsertCosmeti
 		arg.Source,
 		arg.Price,
 		arg.IdempotencyKey,
+		arg.Now,
+	)
+	return err
+}
+
+const insertOnboardingLook = `-- name: InsertOnboardingLook :exec
+INSERT INTO character_appearance (character_id, body_id, hair_id, robe_palette_id, pose_id, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertOnboardingLookParams struct {
+	CharacterID   uuid.UUID   `json:"character_id"`
+	BodyID        pgtype.Text `json:"body_id"`
+	HairID        pgtype.Text `json:"hair_id"`
+	RobePaletteID pgtype.Text `json:"robe_palette_id"`
+	PoseID        pgtype.Text `json:"pose_id"`
+	Now           time.Time   `json:"now"`
+}
+
+// The onboarding pick (POST /character appearance): the row is new, so the cooldown does not start (body_changed_at NULL).
+// Plain INSERT on purpose: if a row ever existed already, the create transaction fails loudly instead of dropping the pick.
+func (q *Queries) InsertOnboardingLook(ctx context.Context, arg InsertOnboardingLookParams) error {
+	_, err := q.db.Exec(ctx, insertOnboardingLook,
+		arg.CharacterID,
+		arg.BodyID,
+		arg.HairID,
+		arg.RobePaletteID,
+		arg.PoseID,
 		arg.Now,
 	)
 	return err
@@ -224,6 +279,37 @@ func (q *Queries) SetAppearance(ctx context.Context, arg SetAppearanceParams) er
 		arg.AvatarFrameID,
 		arg.ChatAuraID,
 		arg.CaveDecorationIds,
+		arg.Now,
+		arg.CharacterID,
+	)
+	return err
+}
+
+const setLook = `-- name: SetLook :exec
+UPDATE character_appearance
+SET body_id = $1, hair_id = $2, robe_palette_id = $3,
+    pose_id = $4, body_changed_at = $5, version = version + 1, updated_at = $6
+WHERE character_id = $7
+`
+
+type SetLookParams struct {
+	BodyID        pgtype.Text `json:"body_id"`
+	HairID        pgtype.Text `json:"hair_id"`
+	RobePaletteID pgtype.Text `json:"robe_palette_id"`
+	PoseID        pgtype.Text `json:"pose_id"`
+	BodyChangedAt *time.Time  `json:"body_changed_at"`
+	Now           time.Time   `json:"now"`
+	CharacterID   uuid.UUID   `json:"character_id"`
+}
+
+// Look part of an equip (appearances.yaml ids; display only). body_changed_at moves only on a real body change.
+func (q *Queries) SetLook(ctx context.Context, arg SetLookParams) error {
+	_, err := q.db.Exec(ctx, setLook,
+		arg.BodyID,
+		arg.HairID,
+		arg.RobePaletteID,
+		arg.PoseID,
+		arg.BodyChangedAt,
 		arg.Now,
 		arg.CharacterID,
 	)

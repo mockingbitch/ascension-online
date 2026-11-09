@@ -25,10 +25,18 @@ const PHU = 'tu_linh_phu';
 const definitive = (e: unknown) => e instanceof ApiError && e.status < 500;
 const errText = (e: unknown) => (e instanceof ApiError ? e.message : String(e));
 
-/** FxBus: tell effects/audio what the server just reported (presentation only; payloads are server values). */
-function emitStages(from: string | undefined, advanced: string[]) {
-	const to = advanced.at(-1);
-	if (from && to && to !== from) fxBus.emit('stageUp', { from, to });
+/**
+ * FxBus: tell effects/audio what the server just reported (presentation only; payloads are server values). The server's
+ * `stagesAdvanced` lists the minor stages LEFT by auto-advance: one stageUp for all of them, from the first one left to
+ * the stage after the last one (the server's new stage) — several stages in one answer = one event.
+ */
+function emitStages(from: string | undefined, advanced: string[], cat?: { nextStage(id: string): { id: string } | undefined } | null) {
+	const first = advanced[0];
+	const last = advanced.at(-1);
+	if (!first || !last) return;
+	const to = cat?.nextStage(last)?.id;
+	if (to && first !== to) fxBus.emit('stageUp', { from: first, to });
+	else if (from && from !== last) fxBus.emit('stageUp', { from, to: last }); // no catalogue yet: best effort
 }
 
 class GameStore {
@@ -137,7 +145,7 @@ class GameStore {
 			const r = await api.useItem<SpeedItemResult>(itemId, fetch, key);
 			this.#speedKeys.delete(itemId);
 			fxBus.emit('settled', { earnedMilli: r.earnedMilli, source: 'speed_item', stagesAdvanced: r.stagesAdvanced });
-			emitStages(from, r.stagesAdvanced);
+			emitStages(from, r.stagesAdvanced, this.catalogue);
 			toast('ok', `Nhận ${formatPoints(r.earnedMilli)} tu vi. Hôm nay đã dùng ${r.usesToday}/${r.maxUsesPerDay}.`);
 			await this.reload();
 		} catch (e) {
@@ -154,7 +162,7 @@ class GameStore {
 			const r = await api.incense();
 			if (!r.replayed) {
 				fxBus.emit('settled', { earnedMilli: r.earnedMilli, source: 'incense', stagesAdvanced: r.stagesAdvanced });
-				emitStages(from, r.stagesAdvanced);
+				emitStages(from, r.stagesAdvanced, this.catalogue);
 			}
 			if (r.replayed) return `Hôm nay đã dâng hương — chuỗi ${r.streak.current} ngày.`;
 			return `Dâng hương tĩnh tâm: chuỗi ${r.streak.current} ngày, +${formatPoints(r.earnedMilli)} tu vi${r.vipPoints ? `, +${r.vipPoints} điểm duyên` : ''}.`;
@@ -175,7 +183,7 @@ class GameStore {
 			this.#settleKey = null;
 			// effects ("+X tu vi" float, orbs to the HUD) listen to this — server values only
 			fxBus.emit('settled', { earnedMilli: st.earnedMilli, source: 'settle', stagesAdvanced: st.stagesAdvanced, hitDailyCap: st.hitDailyCap });
-			emitStages(from, st.stagesAdvanced);
+			emitStages(from, st.stagesAdvanced, this.catalogue);
 			const notes = [
 				st.hitOfflineCap && 'đã chạm giới hạn bế quan',
 				st.hitDailyCap && 'đã chạm hạn mức hôm nay',

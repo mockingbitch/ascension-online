@@ -2,7 +2,9 @@
 // retina) and the matching screen picks them up on the next build/dev reload — no code change. Anything missing
 // falls back to the original SVG art, so the game never shows a broken image and never requests a 404.
 // Expected files and their prompts: docs/design/art-prompts.md.
-const files = import.meta.glob('/src/lib/assets/art/**/*.{webp,avif,png}', {
+// Per-body character folders (characters/<body_id>/…) are NOT here: they load lazily via charArt.svelte.ts so the
+// initial /play bundle carries neither their files nor their URLs (decisions 2026-11-09, GĐ-A).
+const files = import.meta.glob(['/src/lib/assets/art/**/*.{webp,avif,png}', '!/src/lib/assets/art/characters/*/**', '!/src/lib/assets/art/fx/**'], {
 	eager: true,
 	query: '?url',
 	import: 'default'

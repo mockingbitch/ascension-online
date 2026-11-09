@@ -2,6 +2,8 @@
 <script lang="ts">
 	import { feed } from '$lib/api/realtime.svelte';
 	import { game } from '$lib/game/store.svelte';
+	import { news } from '$lib/game/news.svelte';
+	import { prominence } from '$lib/game/newsRules';
 	import { openWindow } from '$lib/game/windows';
 	import EmptyState from './EmptyState.svelte';
 	import Icon from './Icon.svelte';
@@ -9,6 +11,10 @@
 	const tasks = $derived(game.board?.tasks.filter((t) => t.complete && !t.claimed) ?? []);
 	const gift = $derived(game.vip && game.vip.benefits.dailyGift > 0 && !game.vip.giftClaimedToday ? game.vip.benefits.dailyGift : 0);
 	const ready = $derived(!!game.preview?.ready);
+	// world / faction news from the live feed; breakthrough news from the history (GĐ-D, newest first)
+	const world = $derived(feed.items.filter((a) => !a.type.startsWith('announcement.')));
+	const recent = $derived(news.items.slice(0, 20));
+	$effect(() => void news.load());
 </script>
 
 <ul class="stagger space-y-2">
@@ -33,13 +39,20 @@
 			<button class="btn btn-ghost h-9 px-3 text-sm" disabled={game.busy} onclick={game.claimGift}>Nhận</button>
 		</li>
 	{/if}
-	{#each feed.items as a (a.id)}
+	{#each world as a (a.type + a.id)}
 		<li class="note text-mist-300">
 			<Icon name="spark" size={20} class="text-gold-500" />
 			<span class="flex-1">{a.data.text}</span>
 		</li>
 	{/each}
-	{#if !ready && !tasks.length && !gift && !feed.items.length}
+	{#each recent as n (n.id)}
+		<li class="note text-mist-300" data-news-item={n.kind} data-news-prominence={prominence(n)}>
+			<Icon name={n.kind === 'rank_top10' ? 'rank' : 'bolt'} size={20} class={prominence(n) === 'major' ? 'text-gold-300' : 'text-gold-500'} />
+			<span class="flex-1">{n.text}</span>
+			<time class="shrink-0 text-xs text-mist-500 tabular-nums">{new Date(n.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</time>
+		</li>
+	{/each}
+	{#if !ready && !tasks.length && !gift && !world.length && !recent.length}
 		<li><EmptyState icon="bell" title="Thiên địa tĩnh lặng" hint="Chưa có việc gì chờ bạn — tu luyện rồi quay lại." /></li>
 	{/if}
 </ul>

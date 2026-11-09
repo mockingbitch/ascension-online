@@ -1,0 +1,39 @@
+# Vân Khê dẫn người mới qua luồng tạo nhân vật (/create). Chạy trước khi có nhân vật nên tiến độ chỉ lưu ở client.
+# Lore: content/story/characters/van-khe.md. Loader + validator: services/game/internal/tutorial (≤ 200 ký tự/câu,
+# expr ∈ neutral|smile|point|worried|proud|surprised, trigger theo danh sách của loader). Web: lib/game/tutorial.svelte.ts.
+version: 1
+guide: van_khe
+name: Vân Khê
+
+steps:
+  - id: ob_tu_tieu_cung
+    flow: onboarding
+    trigger: onboarding.tu_tieu_cung
+    title: Người dẫn chỗ
+    lines:
+      - { expr: smile, text: "Đạo hữu mới đến phải không? Ta là Vân Khê, người dẫn chỗ trong Tử Tiêu Cung. Đừng ngại, ai mới vào cũng đứng lóng ngóng như vậy." }
+      - { expr: neutral, text: "Hồng Quân giảng không dứt, câu nào lỡ thì vòng sau sẽ quay lại. Cứ nghe hết lời mở đầu, rồi ta đưa đạo hữu ra ngoài chọn thế lực." }
+
+  - id: ob_the_luc
+    flow: onboarding
+    trigger: onboarding.the_luc
+    title: Chọn thế lực
+    lines:
+      - { expr: point, text: "Ngoài điện, mỗi thế lực mở một cửa. Thế lực định con đường tu, nơi đạo hữu kết giao và đi qua các đại kiếp." }
+      - { expr: smile, text: "Không nhà nào mạnh hơn nhà nào. Chọn nơi lòng thấy yên là được. Vu Tộc rèn thân, các nhà khác tu linh khí." }
+
+  - id: ob_ngoai_hinh
+    flow: onboarding
+    trigger: onboarding.ngoai_hinh
+    title: Soi bóng
+    lines:
+      - { expr: smile, text: "Bên hồ Thủy Nguyệt, đạo hữu chọn dáng hình của mình. Chỉ là dáng vẻ người khác thấy, không đổi tu vi hay tỉ lệ đột phá." }
+      - { expr: neutral, text: "Vào game rồi vẫn đổi được ở Nhân Vật, mục Trang phục. Ta từng đổi ba lần trong một buổi, chẳng ai cười ta cả." }
+
+  - id: ob_dao_hieu
+    flow: onboarding
+    trigger: onboarding.dao_hieu
+    title: Lập đạo hiệu
+    lines:
+      - { expr: point, text: "Bước cuối là đạo hiệu. Thiên Bảng sẽ khắc tên này, nên chọn cái tên đạo hữu muốn mang lâu dài." }
+      - { expr: worried, text: "Đừng mượn tên các đại năng hay nhân vật tín ngưỡng, tên ấy sẽ bị từ chối. Tên của riêng mình vẫn hay hơn." }

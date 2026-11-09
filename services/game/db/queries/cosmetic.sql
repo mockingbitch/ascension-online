@@ -30,5 +30,20 @@ WHERE character_id = @character_id;
 SELECT * FROM cosmetic_equips WHERE character_id = $1 AND idempotency_key = $2;
 
 -- name: InsertCosmeticEquip :exec
-INSERT INTO cosmetic_equips (character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, idempotency_key, created_at)
-VALUES (@character_id, @title_id, @avatar_frame_id, @chat_aura_id, @cave_decoration_ids::text[], @idempotency_key, @now);
+INSERT INTO cosmetic_equips (character_id, title_id, avatar_frame_id, chat_aura_id, cave_decoration_ids, idempotency_key, created_at,
+                             look_set, body_id, hair_id, robe_palette_id, pose_id)
+VALUES (@character_id, @title_id, @avatar_frame_id, @chat_aura_id, @cave_decoration_ids::text[], @idempotency_key, @now,
+        @look_set, sqlc.narg(body_id), sqlc.narg(hair_id), sqlc.narg(robe_palette_id), sqlc.narg(pose_id));
+
+-- name: SetLook :exec
+-- Look part of an equip (appearances.yaml ids; display only). body_changed_at moves only on a real body change.
+UPDATE character_appearance
+SET body_id = sqlc.narg(body_id), hair_id = sqlc.narg(hair_id), robe_palette_id = sqlc.narg(robe_palette_id),
+    pose_id = sqlc.narg(pose_id), body_changed_at = sqlc.narg(body_changed_at), version = version + 1, updated_at = @now
+WHERE character_id = @character_id;
+
+-- name: InsertOnboardingLook :exec
+-- The onboarding pick (POST /character appearance): the row is new, so the cooldown does not start (body_changed_at NULL).
+-- Plain INSERT on purpose: if a row ever existed already, the create transaction fails loudly instead of dropping the pick.
+INSERT INTO character_appearance (character_id, body_id, hair_id, robe_palette_id, pose_id, updated_at)
+VALUES (@character_id, sqlc.narg(body_id), sqlc.narg(hair_id), sqlc.narg(robe_palette_id), sqlc.narg(pose_id), @now);

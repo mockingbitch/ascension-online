@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -200,4 +201,21 @@ func (c *Catalogue) SpeedBudgetMilli() int64 {
 		sum += d.InstantPointsMilli * int64(d.MaxUsePerGameDay)
 	}
 	return sum
+}
+
+// EffectLikeKey reports whether a YAML key looks like a gameplay effect: any items.yaml effect key, any unit-suffixed
+// number (`*_bp`, `*_milli`, `*_hours`, `*_seconds`, `*_points`) or a known modifier name. Display-only catalogues
+// (cosmetics, faction works, appearances) reject such keys so a designer cannot attach power to a look.
+func EffectLikeKey(key string) bool {
+	switch key {
+	case EffectOfflineCapBonus, EffectInstantPoints, EffectMaxUsePerDay, EffectBreakthroughBP,
+		EffectTribulationBP, "rate_bonus", "points", "merit", "rank_points", "vip_points", "cultivation":
+		return true
+	}
+	for _, suf := range []string{"_bp", "_milli", "_hours", "_seconds", "_points"} {
+		if strings.HasSuffix(key, suf) {
+			return true
+		}
+	}
+	return false
 }

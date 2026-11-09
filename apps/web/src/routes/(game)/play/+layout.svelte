@@ -43,6 +43,9 @@
 	import { sceneStage as stage } from '$lib/engine/scene/stage.svelte';
 	import { settings } from '$lib/engine/settings.svelte';
 	import Toaster from '$lib/components/Toaster.svelte';
+	import TutorialHost from '$lib/components/TutorialHost.svelte';
+	import NewsBanner from '$lib/components/NewsBanner.svelte';
+	import { news } from '$lib/game/news.svelte';
 	import { chatUi } from '$lib/game/chat.svelte';
 	import { cosmetics } from '$lib/game/cosmetics.svelte';
 	import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
@@ -64,6 +67,8 @@
 	$effect(() => startPresence());
 	// Cosmetics catalogue (public, cached, per-IP rate limited): retried with backoff like the faction roster.
 	$effect(() => void cosmetics.load(true));
+	// other players' news: my own never becomes a banner (my celebration already played)
+	news.setSelf(() => game.character?.id ?? null);
 	// Faction card in the HUD / Nhân Vật: membership + roster names (light; refreshed by the Thế Lực screen and WS).
 	// Once per character (the (game) load no longer re-runs on navigation, but invalidateAll still re-runs it).
 	const characterId = $derived(data.character?.id);
@@ -266,7 +271,9 @@
 	{/if}
 	{#if btActive && BtMode}<BtMode />{/if}
 </div>
+<NewsBanner />
 <Toaster />
+<TutorialHost />
 {#if showFps}<FpsOverlay />{/if}
 {#if booting}<BootScreen ondone={() => (booting = false)} />{:else if !inMode}<InstallHint />{/if}
 

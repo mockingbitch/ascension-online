@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/db"
 	"tiendao/game/internal/gameday"
 	"tiendao/game/internal/leaderboard"
@@ -40,6 +41,8 @@ type Ranking struct {
 	KeyPrefix string // "" → DefaultKeyPrefix
 	// Look filters members' frame/title by điểm duyên (leaderboard.Service.Look). nil → shown as equipped.
 	Look func(frame, title string, vipPoints int64) (string, string)
+	// Looks resolves members' looks (leaderboard.Service.Looks). nil → no look.
+	Looks *appearance.Catalogue
 }
 
 func (r *Ranking) prefix() string {
@@ -260,7 +263,7 @@ func (r *Ranking) Board(ctx context.Context) (members map[string]int64, merit ma
 
 // Members pages a faction's members by global realm score (ties: who reached the stage first, then id).
 func (r *Ranking) Members(ctx context.Context, factionID string, offset, limit int64) ([]leaderboard.Entry, int64, error) {
-	lb := &leaderboard.Service{Pool: r.Pool, Redis: r.Redis, Realms: r.Realms, Key: r.RealmKey(factionID), Look: r.Look}
+	lb := &leaderboard.Service{Pool: r.Pool, Redis: r.Redis, Realms: r.Realms, Key: r.RealmKey(factionID), Look: r.Look, Looks: r.Looks}
 	entries, total, err := lb.Page(ctx, offset, limit)
 	if errors.Is(err, leaderboard.ErrUnavailable) {
 		return nil, 0, fmt.Errorf("%w: %v", ErrRankingUnavailable, err)

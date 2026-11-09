@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/cosmetic"
 	"tiendao/game/internal/factionwork"
 )
@@ -17,7 +18,9 @@ func (d Deps) cosmeticCatalog(w http.ResponseWriter, _ *http.Request) {
 	}
 	c := d.Content.Cosmetics
 	w.Header().Set("Cache-Control", "public, max-age=300")
-	writeJSON(w, 200, map[string]any{"settings": c.Settings, "seasons": c.Seasons, "series": c.AllSeries(), "cosmetics": c.All()})
+	// appearances: bodies, hair accessories, robe colours, poses (appearances.yaml; display only, decisions 2026-11-09).
+	writeJSON(w, 200, map[string]any{"settings": c.Settings, "seasons": c.Seasons, "series": c.AllSeries(), "cosmetics": c.All(),
+		"appearances": d.Content.Appearances})
 }
 
 // cosmeticsView: GET /cosmetics — owned, buyable now, equipped.
@@ -38,6 +41,9 @@ func (d Deps) cosmeticsView(w http.ResponseWriter, r *http.Request) {
 }
 
 func (d Deps) cosmeticError(w http.ResponseWriter, r *http.Request, op string, err error) {
+	if writeLookError(w, err) {
+		return
+	}
 	switch {
 	case errors.Is(err, cosmetic.ErrUnknown):
 		writeError(w, 404, "unknown_cosmetic", "món trang sức không tồn tại")
@@ -62,6 +68,24 @@ func (d Deps) cosmeticError(w http.ResponseWriter, r *http.Request, op string, e
 	default:
 		d.internal(w, r, op, err)
 	}
+}
+
+// writeLookError maps appearance (body / accessory / robe / pose) errors; false = not a look error.
+func writeLookError(w http.ResponseWriter, err error) bool {
+	var cd *appearance.CooldownError
+	switch {
+	case errors.As(err, &cd):
+		writeErrorDetails(w, 409, "body_cooldown", "Vừa đổi dáng người, hãy chờ thêm một lúc", map[string]any{"retryAt": cd.RetryAt.UTC()})
+	case errors.Is(err, appearance.ErrUnknown):
+		writeError(w, 400, "unknown_look", "ngoại hình không tồn tại")
+	case errors.Is(err, appearance.ErrWrongPath):
+		writeError(w, 422, "wrong_path", "ngoại hình này không dành cho đạo đồ của đạo hữu")
+	case errors.Is(err, appearance.ErrNotOwned):
+		writeError(w, 409, "not_owned", "chưa sở hữu ngoại hình này")
+	default:
+		return false
+	}
+	return true
 }
 
 // cosmeticsBuy: POST /cosmetics/buy {cosmeticId} + Idempotency-Key. Price comes from cosmetics.yaml only.
@@ -90,8 +114,8 @@ func (d Deps) cosmeticsBuy(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, res)
 }
 
-// cosmeticsEquip: POST /cosmetics/equip {titleId, avatarFrameId, chatAuraId, caveDecorationIds} + Idempotency-Key —
-// the whole loadout ("" / [] = unequip).
+// cosmeticsEquip: POST /cosmetics/equip {titleId, avatarFrameId, chatAuraId, caveDecorationIds, look?} + Idempotency-Key —
+// the whole loadout ("" / [] = unequip); `look` {bodyId, outfitId, poseId} is optional (absent = keep; accessory + robe come from the outfit).
 func (d Deps) cosmeticsEquip(w http.ResponseWriter, r *http.Request) {
 	if d.Cosmetics == nil {
 		unavailable(w)

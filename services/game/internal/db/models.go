@@ -59,6 +59,11 @@ type CharacterAppearance struct {
 	CaveDecorationIds []string    `json:"cave_decoration_ids"`
 	Version           int64       `json:"version"`
 	UpdatedAt         time.Time   `json:"updated_at"`
+	BodyID            pgtype.Text `json:"body_id"`
+	HairID            pgtype.Text `json:"hair_id"`
+	RobePaletteID     pgtype.Text `json:"robe_palette_id"`
+	PoseID            pgtype.Text `json:"pose_id"`
+	BodyChangedAt     *time.Time  `json:"body_changed_at"`
 }
 
 type CharacterArtifact struct {
@@ -129,6 +134,7 @@ type ChatMessage struct {
 	HiddenBy       pgtype.UUID `json:"hidden_by"`
 	CreatedAt      time.Time   `json:"created_at"`
 	NameFx         pgtype.Text `json:"name_fx"`
+	Look           []byte      `json:"look"`
 }
 
 type ChatMute struct {
@@ -148,6 +154,11 @@ type CosmeticEquip struct {
 	CaveDecorationIds []string    `json:"cave_decoration_ids"`
 	IdempotencyKey    string      `json:"idempotency_key"`
 	CreatedAt         time.Time   `json:"created_at"`
+	LookSet           bool        `json:"look_set"`
+	BodyID            pgtype.Text `json:"body_id"`
+	HairID            pgtype.Text `json:"hair_id"`
+	RobePaletteID     pgtype.Text `json:"robe_palette_id"`
+	PoseID            pgtype.Text `json:"pose_id"`
 }
 
 type CultivationCredit struct {
@@ -496,6 +507,12 @@ type ProtectorInvite struct {
 	UsedRef        pgtype.Text `json:"used_ref"`
 }
 
+type RealmFirst struct {
+	RealmID     string      `json:"realm_id"`
+	CharacterID pgtype.UUID `json:"character_id"`
+	ReachedAt   time.Time   `json:"reached_at"`
+}
+
 type RefreshToken struct {
 	ID         uuid.UUID   `json:"id"`
 	UserID     uuid.UUID   `json:"user_id"`
@@ -656,6 +673,22 @@ type TrialRun struct {
 	ConsumedRef    pgtype.Text `json:"consumed_ref"`
 }
 
+type TutorialPref struct {
+	CharacterID uuid.UUID   `json:"character_id"`
+	Muted       bool        `json:"muted"`
+	LastKey     pgtype.Text `json:"last_key"`
+	Version     int64       `json:"version"`
+	UpdatedAt   time.Time   `json:"updated_at"`
+}
+
+type TutorialProgress struct {
+	CharacterID    uuid.UUID `json:"character_id"`
+	StepID         string    `json:"step_id"`
+	Status         string    `json:"status"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type User struct {
 	ID           uuid.UUID   `json:"id"`
 	Email        string      `json:"email"`
@@ -718,6 +751,22 @@ type VipPointLedger struct {
 	ActivityID       pgtype.Text `json:"activity_id"`
 	GameDay          pgtype.Date `json:"game_day"`
 	ReversesLedgerID pgtype.Int8 `json:"reverses_ledger_id"`
+}
+
+type WorldAnnouncement struct {
+	ID            int64       `json:"id"`
+	SourceEventID pgtype.Int8 `json:"source_event_id"`
+	Kind          string      `json:"kind"`
+	Tier          int16       `json:"tier"`
+	CharacterID   pgtype.UUID `json:"character_id"`
+	Name          string      `json:"name"`
+	RealmID       pgtype.Text `json:"realm_id"`
+	StageID       pgtype.Text `json:"stage_id"`
+	Path          pgtype.Text `json:"path"`
+	Rank          pgtype.Int4 `json:"rank"`
+	Count         pgtype.Int4 `json:"count"`
+	Text          string      `json:"text"`
+	CreatedAt     time.Time   `json:"created_at"`
 }
 
 type WorldDailyTotal struct {

@@ -8,7 +8,7 @@
 	import RealmBadge from '$lib/components/RealmBadge.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import { game } from '$lib/game/store.svelte';
-	import type { LeaderboardPage } from '$lib/game/types';
+	import type { LeaderboardPage, Look } from '$lib/game/types';
 	import { openWindow } from '$lib/game/windows';
 	import { factionColor, factions, loadFactions } from '$lib/game/faction.svelte';
 	import { formatPoints } from '$lib/game/format';
@@ -35,8 +35,8 @@
 		if (tab === 'faction') void loadFactions();
 	});
 	const byFaction = $derived((factions.list?.factions ?? []).filter((f) => f.meritRank > 0).sort((a, b) => a.meritRank - b.meritRank));
-	const profile = (e: { characterId: string; name: string; stageId: string; avatarFrameId?: string; titleId?: string }) =>
-		openWindow({ kind: 'profile', characterId: e.characterId, name: e.name, stageId: e.stageId, avatarFrameId: e.avatarFrameId, titleId: e.titleId });
+	const profile = (e: { characterId: string; name: string; stageId: string; avatarFrameId?: string; titleId?: string; look?: Look }) =>
+		openWindow({ kind: 'profile', characterId: e.characterId, name: e.name, stageId: e.stageId, avatarFrameId: e.avatarFrameId, titleId: e.titleId, look: e.look });
 </script>
 
 
@@ -53,7 +53,7 @@
 						<li class={['podium', e.rank === 1 && 'first', order[e.rank]]} style:--aura="var(--color-aura-{r?.visual.aura ?? 'none'})">
 							<button type="button" class="flex w-full flex-col items-center px-3 pt-5 pb-4 text-center" onclick={() => profile(e)}>
 								<RankMedal rank={e.rank} size={e.rank === 1 ? 48 : 40} />
-								<div class="mt-3"><Portrait aura={r?.visual.aura ?? 'none'} size={e.rank === 1 ? 96 : 76} frameId={e.avatarFrameId} /></div>
+								<div class="mt-3"><Portrait aura={r?.visual.aura ?? 'none'} size={e.rank === 1 ? 96 : 76} frameId={e.avatarFrameId} look={e.look} /></div>
 								<p class="mt-3 w-full truncate font-display text-xl font-bold text-mist-100">{e.name}</p>
 								{#if e.titleId}<p class="w-full truncate text-xs text-gold-300">「{cosmetics.name(e.titleId)}」</p>{/if}
 								{#if r}<div class="mt-1"><RealmBadge name={r.name} aura={r.visual.aura} size="sm" /></div>{/if}

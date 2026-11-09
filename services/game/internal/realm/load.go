@@ -55,6 +55,9 @@ type fileTier struct {
 	Stages            fileStagesRef    `yaml:"stages"`
 	ExtraStages       []fileExtraStage `yaml:"extra_stages"`
 	MajorBreakthrough *fileMajor       `yaml:"major_breakthrough"`
+	Visual            struct {
+		FxTier int `yaml:"fx_tier"`
+	} `yaml:"visual"`
 }
 
 type filePath struct {
@@ -205,7 +208,16 @@ func build(raw file) (*Catalogue, error) {
 		return nil, errors.Join(append(errs, errors.New("no tiers"))...)
 	}
 	lastPlayable := 0
+	prevFx := 0
 	for i, t := range raw.Tiers {
+		// effect tier (display only): 1..MaxFxTier, never decreasing up the ladder
+		if fx := t.Visual.FxTier; fx < 1 || fx > MaxFxTier {
+			fail("tier %d: visual.fx_tier must be within 1..%d", t.Tier, MaxFxTier)
+		} else if fx < prevFx {
+			fail("tier %d: visual.fx_tier %d is below the previous tier's %d (effects never get smaller)", t.Tier, fx, prevFx)
+		} else {
+			prevFx = fx
+		}
 		if t.Tier != i+1 {
 			fail("tiers[%d]: tier %d must equal position %d (contiguous from 1)", i, t.Tier, i+1)
 		}
@@ -434,8 +446,10 @@ func build(raw file) (*Catalogue, error) {
 			continue
 		}
 		ft := raw.Tiers[fr.Tier-1]
+		vis := fr.Visual
+		vis.FxTier = ft.Visual.FxTier
 		rl := &Realm{ID: fr.ID, Path: fr.Path, Tier: fr.Tier, Name: fr.Name, NamePlaceholder: fr.NamePlaceholder,
-			Title: fr.Title, Visual: fr.Visual, Reserved: ft.Reserved}
+			Title: fr.Title, Visual: vis, Reserved: ft.Reserved}
 		c.byPathTier[fr.Path][fr.Tier] = rl
 		c.realms = append(c.realms, rl)
 		gens := tierStages[fr.Tier]

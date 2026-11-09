@@ -121,6 +121,7 @@
 				class:is-busy={action.busy}
 				onclick={action.run}
 				data-primary={action.id}
+				data-tutorial="primary"
 				aria-label={action.label}
 				aria-describedby="primary-hint"
 			>

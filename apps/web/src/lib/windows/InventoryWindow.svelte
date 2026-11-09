@@ -1,5 +1,5 @@
 <!--
-	Túi Đồ (window, tabs Hành trang / Cửa hàng / Trang phục / Trao đổi): server inventory (GET /inventory) + item
+	Túi Đồ (window, tabs Hành trang / Cửa hàng / Trao đổi; Trang phục lives in Nhân Vật — the bag keeps a shortcut): server inventory (GET /inventory) + item
 	catalogue (names, rarity, descriptions), the shop and Trao đổi (Phase 5.2). A player card opens the trade tab with
 	the composer addressed to that player (window state `to`; deep link /play/tui-do?tab=trao-doi&den=…&ten=…).
 -->
@@ -8,7 +8,6 @@
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import GameWindow from '$lib/components/GameWindow.svelte';
 	import Icon, { type IconName } from '$lib/components/Icon.svelte';
-	import CosmeticsPanel from '$lib/components/CosmeticsPanel.svelte';
 	import ShopPanel from '$lib/components/ShopPanel.svelte';
 	import TradePanel from '$lib/components/TradePanel.svelte';
 	import { ApiError, api } from '$lib/api/client';
@@ -42,7 +41,7 @@
 	// Raster icons: src/lib/assets/art/items/<item_id>.webp (linh_thach for the currency); SVG icon otherwise.
 	const stoneArt = art('items/linh_thach');
 	const itemArt = (id: string) => art(`items/${id}`);
-	// The window tab (Hành trang / Cửa hàng / Trang phục / Trao đổi) comes from the frame; a player card sets `to`.
+	// The window tab (Hành trang / Cửa hàng / Trao đổi) comes from the frame; a player card sets `to`.
 	const tradeTarget = $derived(win.kind === 'inventory' && win.to && win.to.characterId !== game.character?.id ? win.to : null);
 	let tab = $state<Tab>('all');
 	let selected = $state<ItemDef | null>(null);
@@ -89,13 +88,15 @@
 		<ShopPanel />
 	{:else if mode === 'trade'}
 		<TradePanel target={tradeTarget} />
-	{:else if mode === 'cosmetics'}
-		<CosmeticsPanel />
 	{:else}
 		<div class="-mx-1 mb-4 flex gap-1 overflow-x-auto pb-1" role="group" aria-label="Loại vật phẩm">
 			{#each tabs as t (t.id)}
 				<button type="button" aria-pressed={tab === t.id} class="tab press" class:is-on={tab === t.id} onclick={() => (tab = t.id)}>{t.label}</button>
 			{/each}
+			<button type="button" class="tab press ml-auto gap-1.5 text-gold-300" data-testid="bag-to-cosmetics"
+				onclick={() => openWindow({ kind: 'character', tab: 'cosmetics' })}>
+				<Icon name="spark" size={14} /> Trang phục
+			</button>
 		</div>
 
 		{#if !game.inventory}

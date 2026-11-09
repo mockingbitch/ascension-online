@@ -1,0 +1,20 @@
+# World announcements (decisions 2026-11-09 #7 #8 #12, GĐ-D): pacing of the news other players see. Loaded by
+# internal/announce; texts live in content/story/announcements/major-breakthrough.yaml (validated against
+# max_chars with the longest đạo hiệu and realm names). Display only — nothing here touches progress.
+#
+#   window_seconds / max_separate_per_window   ≤ N separate breakthrough announcements per window; the rest of the
+#                                              window becomes ONE digest ("X và K đạo hữu khác…"). First-to-realm
+#                                              news is never folded (it happens once per realm id).
+#   rank_top / rank_cooldown_seconds           "vào top N Thiên Bảng" news: entering the top N (or reaching rank 1),
+#                                              at most once per player per cooldown
+#   history_keep_days / recent_limit           world_announcements history: pruned after N days, GET returns ≤ limit
+#   max_chars                                  every text after substitution (story-writing rules: 90)
+version: 1
+settings:
+  window_seconds: 10
+  max_separate_per_window: 3
+  rank_top: 10
+  rank_cooldown_seconds: 21600
+  history_keep_days: 7
+  recent_limit: 50
+  max_chars: 90

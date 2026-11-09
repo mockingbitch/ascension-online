@@ -5,7 +5,10 @@
 <script lang="ts">
 	import type { Aura } from '$lib/game/types';
 	import { art } from '$lib/game/art';
+	import { charArtFirst } from '$lib/game/charArt.svelte';
 	import { cosmetics, hangs, slugOf } from '$lib/game/cosmetics.svelte';
+	import { figureOf, meditateSlots } from '$lib/game/looks';
+	import { game } from '$lib/game/store.svelte';
 	import CosmeticArt from './CosmeticArt.svelte';
 	import CultivatorFigure from './CultivatorFigure.svelte';
 	import FormationCircle from './FormationCircle.svelte';
@@ -31,7 +34,13 @@
 			...floor.map((id, i) => ({ id, pos: i === 0 ? 'fl' : i === 1 ? 'fr' : 'fc' }))
 		];
 	});
-	const meditate = art('characters/meditate'); // raster slot; includes its own rune array
+	// raster slot (includes its own rune array): the player's body art (lazy), else the SVG figure of their look;
+	// the shared characters/meditate slot only when no look is known
+	const shared = art('characters/meditate');
+	const myLook = $derived(game.character?.appearance?.look);
+	const figure = $derived(figureOf(cosmetics.looks, myLook));
+	const meditate = $derived(myLook ? charArtFirst(meditateSlots(myLook)) : shared);
+	const fxTier = $derived(game.catalogue?.realmOf(game.character?.stageId ?? '')?.visual.fxTier ?? 1);
 
 	// Deterministic mote spawn ring (no Math.random → stable SSR/hydration, no layout jitter).
 	const motes = Array.from({ length: 16 }, (_, i) => {
@@ -57,10 +66,10 @@
 	{:else}
 		<!-- formation on the floor, in perspective -->
 		<div class="floor absolute left-1/2 w-[86%]" aria-hidden="true">
-			<div class="spin"><FormationCircle color={ready ? 'var(--color-gold-300)' : 'var(--aura)'} class="size-full" /></div>
+			<div class="spin"><FormationCircle color={ready ? 'var(--color-gold-300)' : 'var(--aura)'} tier={fxTier} class="size-full" /></div>
 		</div>
 
-		<CultivatorFigure {aura} class="figure absolute inset-x-0 bottom-[8%] mx-auto h-[62%]" />
+		<CultivatorFigure {aura} {figure} class="figure absolute inset-x-0 bottom-[8%] mx-auto h-[62%]" />
 	{/if}
 
 	<!-- converging qi motes; anchor = the pearl -->

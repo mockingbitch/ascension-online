@@ -1,5 +1,7 @@
 <!-- Nhân Vật (window): who I am. Server data (name, realm, tu vi, rank, resources, Tiên Duyên, faction); equipment slots
-     are previews until that system exists (no invented combat stats — the game has no combat yet). -->
+     are previews until that system exists (no invented combat stats — the game has no combat yet).
+     Tab "Trang phục" (Gương Thủy Nguyệt, decisions 2026-11-09 #9): dáng người / trang phục (bộ vẽ sẵn) / tư thế and the
+     cosmetics (CosmeticsPanel). Looks only. -->
 <script lang="ts">
 	import Icon from '$lib/components/Icon.svelte';
 	import NameFx from '$lib/components/NameFx.svelte';
@@ -10,9 +12,17 @@
 	import { formatPoints, ratePerDay } from '$lib/game/format';
 	import { useIdleClock } from '$lib/game/idle.svelte';
 	import { game } from '$lib/game/store.svelte';
-	import { openWindow } from '$lib/game/windows';
 	import FactionEmblem from '$lib/components/FactionEmblem.svelte';
+	import CosmeticsPanel from '$lib/components/CosmeticsPanel.svelte';
+	import CultivatorFigure from '$lib/components/CultivatorFigure.svelte';
+	import { charArtFirst } from '$lib/game/charArt.svelte';
 	import { factionColor, myFaction } from '$lib/game/faction.svelte';
+	import { bodySlots, figureOf } from '$lib/game/looks';
+	import { openWindow, updateWindow } from '$lib/game/windows';
+	import type { WindowProps } from './registry';
+
+	let { tab }: WindowProps = $props();
+	const toCosmetics = () => updateWindow({ kind: 'character', tab: 'cosmetics' });
 
 	const clock = useIdleClock();
 	const ch = $derived(game.character!);
@@ -24,15 +34,18 @@
 	// is still loading (the old check read a missing roster as "not a member").
 	const mine = $derived(myFaction());
 	const faction = $derived(mine.state === 'member' ? mine.view : undefined);
-	// Full-body art per realm (art-prompts §4): this realm's, else the closest lower realm's, else the portrait.
-	const body = $derived(
-		artFirst(
-			...[...cat.realms.values()]
-				.filter((r) => r.path === realm?.path && r.tier <= (realm?.tier ?? 0))
-				.sort((a, b) => b.tier - a.tier)
-				.map((r) => `characters/body-${r.id}`)
-		)
+	// Full-body art per realm (art-prompts §4): this realm's, else the closest lower realm's. With a chosen look the
+	// body's own folder (characters/<body_id>/body-<realm_id>, lazy) and then the SVG figure of the look — never the
+	// shared art of another figure; without a look the shared characters/body-<realm_id> chain, else the portrait.
+	const chain = $derived(
+		[...cat.realms.values()]
+			.filter((r) => r.path === realm?.path && r.tier <= (realm?.tier ?? 0))
+			.sort((a, b) => b.tier - a.tier)
+			.map((r) => r.id)
 	);
+	const look = $derived(ch.appearance?.look);
+	const figure = $derived(figureOf(cosmetics.looks, look));
+	const body = $derived(look ? charArtFirst(bodySlots(look, chain, realm?.visual.fxTier ?? 1)) : artFirst(...chain.map((r) => `characters/body-${r}`)));
 	const days = $derived(Math.max(1, Math.ceil((Date.now() - Date.parse(ch.createdAt)) / 86_400_000)));
 
 	const slots = [
@@ -43,16 +56,22 @@
 	] as const;
 </script>
 
-
+{#if tab === 'cosmetics'}
+	<CosmeticsPanel />
+{:else}
 	<div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
 		<!-- portrait plate -->
 		<section class="hero relative flex flex-col items-center overflow-hidden px-4 py-8 text-center" style:--aura="var(--color-aura-{aura})" style:--fc={factionColor(faction)}>
 			<div class="halo absolute inset-0" aria-hidden="true"></div>
-			{#if body}
-				<img src={body.src} srcset={body.srcset} alt="" class="body relative h-[340px] object-contain" draggable="false" />
-				{#if ch.appearance?.avatarFrameId}<div class="absolute top-4 left-4"><Portrait {aura} size={60} frameId={ch.appearance.avatarFrameId} /></div>{/if}
+			{#if body || look}
+				{#if body}
+					<img src={body.src} srcset={body.srcset} alt="" class="body relative h-[340px] object-contain" draggable="false" />
+				{:else}
+					<div class="body relative h-[300px] w-full max-w-[340px]" data-testid="look-figure"><CultivatorFigure {aura} {figure} class="size-full" /></div>
+				{/if}
+				<div class="absolute top-4 left-4"><Portrait {aura} size={60} frameId={ch.appearance?.avatarFrameId} {look} fxTier={realm?.visual.fxTier} /></div>
 			{:else}
-				<div class="relative"><Portrait {aura} size={168} frameId={ch.appearance?.avatarFrameId} /></div>
+				<div class="relative"><Portrait {aura} size={168} frameId={ch.appearance?.avatarFrameId} {look} fxTier={realm?.visual.fxTier} /></div>
 			{/if}
 			<p class="relative mt-4 eyebrow">{realm?.title ?? 'Tu sĩ'}</p>
 			<h2 class="relative font-display text-4xl font-bold text-mist-100"><NameFx fx={ch.appearance?.chatAuraId}>{ch.name}</NameFx></h2>
@@ -63,7 +82,7 @@
 				{#if mine.state === 'member'}<FactionEmblem id={mine.id} size={20} />{:else}<Icon name="sect" size={16} />{/if}
 				{#if mine.state === 'member'}{faction?.name ?? 'Thế lực của đạo hữu'}{:else if mine.state === 'none'}Chưa gia nhập thế lực{:else}Đang tải thế lực…{/if}
 			</a>
-			<button type="button" class="btn btn-ghost relative mt-3 h-10 px-3 text-sm" onclick={() => openWindow({ kind: 'inventory', tab: 'cosmetics' })}>
+			<button type="button" class="btn btn-ghost relative mt-3 h-10 px-3 text-sm" onclick={toCosmetics}>
 				<Icon name="spark" size={14} /> Trang phục & trang trí
 			</button>
 		</section>
@@ -106,6 +125,7 @@
 			</section>
 		</div>
 	</div>
+{/if}
 
 <style>
 	.hero {

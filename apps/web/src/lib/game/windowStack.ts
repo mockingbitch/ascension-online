@@ -4,9 +4,13 @@
 // Old screen URLs (/play/nhan-vat, /play/tui-do?tab=…) stay valid deep links: they map to a window over the default
 // scene (windowFromPath), and `?win=<kind>` links are parsed by windowFromSearch.
 
+import type { Look } from './types';
+
 export const MAX_WINDOWS = 2;
 
-export type InventoryTab = 'bag' | 'shop' | 'cosmetics' | 'trade';
+export type InventoryTab = 'bag' | 'shop' | 'trade';
+/** Nhân Vật tabs: Trang phục ("Gương Thủy Nguyệt") moved here from Túi Đồ (decisions 2026-11-09 #9). */
+export type CharacterTab = 'info' | 'cosmetics';
 export type RankingTab = 'personal' | 'faction';
 export type HelpTopic = 'dong_phu' | 'hall' | 'breakthrough' | 'timeline' | 'inventory' | 'world';
 
@@ -22,7 +26,7 @@ export type WindowState =
 	| { kind: 'vip' }
 	| { kind: 'notifications' }
 	| { kind: 'settings' } // Cài đặt: effects, sound, renderer (client only)
-	| { kind: 'character' }
+	| { kind: 'character'; tab?: CharacterTab }
 	| { kind: 'inventory'; tab?: InventoryTab; to?: PlayerRef }
 	| { kind: 'ranking'; tab?: RankingTab }
 	| { kind: 'timeline' }
@@ -43,6 +47,8 @@ export type WindowState =
 			avatarFrameId?: string;
 			titleId?: string;
 			nameFx?: string;
+			/** chosen look carried by the row/message (display only) */
+			look?: Look;
 	  };
 
 export type WindowKind = WindowState['kind'];
@@ -84,8 +90,10 @@ export const windowSlugs: Partial<Record<WindowKind, string>> = {
 };
 const kindOfSlug = new Map(Object.entries(windowSlugs).map(([k, s]) => [s, k as WindowKind]));
 
-const inventoryTabs: Record<string, InventoryTab> = { 'hanh-trang': 'bag', 'cua-hang': 'shop', 'trang-phuc': 'cosmetics', 'trao-doi': 'trade' };
+const inventoryTabs: Record<string, InventoryTab> = { 'hanh-trang': 'bag', 'cua-hang': 'shop', 'trao-doi': 'trade' };
 const inventorySlugs = Object.fromEntries(Object.entries(inventoryTabs).map(([s, t]) => [t, s])) as Record<InventoryTab, string>;
+const characterTabs: Record<string, CharacterTab> = { 'nhan-vat': 'info', 'trang-phuc': 'cosmetics' };
+const characterSlugs = Object.fromEntries(Object.entries(characterTabs).map(([s, t]) => [t, s])) as Record<CharacterTab, string>;
 const helpTopics: HelpTopic[] = ['dong_phu', 'hall', 'breakthrough', 'timeline', 'inventory', 'world'];
 
 /** Query parameters that belong to a window link (stripped from the URL once the window is open). */
@@ -103,14 +111,19 @@ function fromParams(kind: string, q: URLSearchParams): WindowState | null {
 		case 'vip':
 		case 'notifications':
 		case 'settings':
-		case 'character':
 		case 'timeline':
 		case 'breakthrough':
 		case 'faction':
 		case 'fortune':
 		case 'menu':
 			return { kind };
+		case 'character': {
+			const tab = characterTabs[q.get('tab') ?? ''];
+			return tab ? { kind, tab } : { kind };
+		}
 		case 'inventory': {
+			// old links to the Trang phục tab of Túi Đồ open it in Nhân Vật now (decisions 2026-11-09 #9)
+			if (q.get('tab') === 'trang-phuc' && !q.get('den')) return { kind: 'character', tab: 'cosmetics' };
 			const tab = inventoryTabs[q.get('tab') ?? ''];
 			const to = player(q, 'den');
 			return { kind, ...(tab ? { tab } : {}), ...(to ? { to, tab: 'trade' as const } : {}) };
@@ -156,7 +169,8 @@ export function windowHref(w: WindowState): string {
 		q.set('ten', r.name);
 		if (r.stageId) q.set('canh-gioi', r.stageId);
 	};
-	if (w.kind === 'inventory') {
+	if (w.kind === 'character' && w.tab && w.tab !== 'info') q.set('tab', characterSlugs[w.tab]);
+	else if (w.kind === 'inventory') {
 		if (w.tab) q.set('tab', inventorySlugs[w.tab]);
 		if (w.to) ref(w.to, 'den');
 	} else if (w.kind === 'ranking' && w.tab === 'faction') q.set('tab', 'the-luc');

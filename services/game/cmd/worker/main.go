@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
 
+	"tiendao/game/internal/announce"
 	"tiendao/game/internal/chat"
 	"tiendao/game/internal/config"
 	"tiendao/game/internal/content"
@@ -96,6 +97,15 @@ func run(log *slog.Logger) error {
 			return errors.New("faction: announcement template " + k + " missing")
 		}
 	}
+	// World announcements by effect tier (GĐ-D): every key present, every line ≤ max_chars after substitution.
+	if err := announce.CheckTemplates(tpl, cb.Realms, cb.Announce); err != nil {
+		return err
+	}
+	annTpl := realtime.Templates{} // its own copy: the world/faction templates merged below are never checked against it
+	for k, v := range tpl {
+		annTpl[k] = v
+	}
+	ann := &announce.Service{Pool: pool, Redis: rdb, Tpl: annTpl, Realms: cb.Realms, Cfg: cb.Announce, Now: time.Now, Log: log}
 	for k, v := range worldTpl {
 		tpl[k] = v
 	}
@@ -104,7 +114,7 @@ func run(log *slog.Logger) error {
 		chat:     &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: time.Now},
 		effects:  &faction.Effects{Pool: pool, Cat: cb.Factions, World: cb.World, Log: log, Now: time.Now},
 		factions: &faction.Ranking{Pool: pool, Redis: rdb, Realms: cb.Realms, Cat: cb.Factions, CapMilli: cb.World.Settings.WorldCreditCapMilli},
-		fcat:     cb.Factions, vip: cb.VIP}
+		fcat:     cb.Factions, vip: cb.VIP, ann: ann}
 
 	// Metrics on an internal port (METRICS_ADDR, default :9091; "off" disables). Never routed by nginx.
 	reg := metrics.NewRegistry()
@@ -143,6 +153,11 @@ func run(log *slog.Logger) error {
 			return nil
 		case <-reconcile.C:
 			w.reconcile(ctx)
+			if n, err := w.ann.Prune(ctx); err != nil {
+				log.Warn("announcement prune", "err", err)
+			} else if n > 0 {
+				log.Info("announcements pruned", "rows", n)
+			}
 			w.chatSweep(ctx)
 			social.run(ctx)
 			trades.run(ctx)
@@ -153,6 +168,10 @@ func run(log *slog.Logger) error {
 		case <-probe.C:
 			w.probe(ctx)
 		case <-drain.C:
+			// Digests of finished announcement windows go out on the drain cadence (best effort).
+			if err := w.ann.FlushDigests(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				log.Warn("announcement digest", "err", err)
+			}
 			// Drain until the queue is empty, then wait for the next tick.
 			for {
 				start := time.Now()
@@ -186,7 +205,8 @@ type worker struct {
 	effects  *faction.Effects
 	factions *faction.Ranking
 	fcat     *faction.Catalogue
-	vip      *vip.Table // protector_assist điểm duyên (protector.assist_counted)
+	vip      *vip.Table        // protector_assist điểm duyên (protector.assist_counted)
+	ann      *announce.Service // world announcements: render, pace (digest), history, publish
 
 	m      *metrics.Worker    // nil-safe
 	ledger *ops.LedgerScanner // economy flow counters
@@ -373,6 +393,13 @@ func (w *worker) reconcile(ctx context.Context) {
 func (w *worker) drainOnce(ctx context.Context) (int, error) {
 	var n int
 	var topics []string
+	// world news is announced only after this batch commits (review H1/M1): collected here, run below
+	type annEvent struct {
+		id      int64
+		payload []byte
+	}
+	var annEvents []annEvent
+	var rankMoves []announce.RankMove
 	err := postgres.InTx(ctx, w.lb.Pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
 		events, err := q.ClaimPendingOutbox(ctx, batchSize)
@@ -392,8 +419,9 @@ func (w *worker) drainOnce(ctx context.Context) (int, error) {
 					dirty[id] = struct{}{}
 				}
 			case "announcement.major_breakthrough":
-				// Best effort, at-most-once fan-out: a lost announcement is acceptable, a duplicate is noise.
-				w.announce(ctx, e.ID, e.Payload)
+				// Best effort, at-most-once fan-out: a lost announcement is acceptable, a duplicate is noise. The history
+				// row is written in this transaction (idempotent per event), the publish follows it.
+				annEvents = append(annEvents, annEvent{e.ID, e.Payload})
 			case world.TopicMilestoneReached:
 				w.announceMilestone(ctx, e.ID, e.Payload)
 			case world.TopicEventEnded:
@@ -426,9 +454,12 @@ func (w *worker) drainOnce(ctx context.Context) (int, error) {
 			for id := range dirty {
 				list = append(list, id)
 			}
+			old := w.ranks(ctx, list)
 			if err := w.lb.Refresh(ctx, list); err != nil {
 				return err // keep events pending; retried next tick
 			}
+			// Thiên Bảng news: entering the top / reaching rank 1 (≤ once per player per cooldown), after commit
+			rankMoves = w.rankMoves(ctx, q, list, old)
 		}
 		if err := w.refreshFactions(ctx, dirty, factionDirty, bulk); err != nil {
 			return err
@@ -452,36 +483,53 @@ func (w *worker) drainOnce(ctx context.Context) (int, error) {
 		for _, t := range topics {
 			w.m.Handled(t)
 		}
+		// committed: now the news (own statements, best effort — a failure never touches the outbox)
+		aq := db.New(w.lb.Pool)
+		for _, a := range annEvents {
+			if aerr := w.ann.Breakthrough(ctx, aq, a.id, a.payload); aerr != nil {
+				w.log.Warn("announcement", "id", a.id, "err", aerr)
+				w.m.DeadLetter("announcement.major_breakthrough")
+			}
+		}
+		if aerr := w.ann.Rank(ctx, aq, rankMoves); aerr != nil {
+			w.log.Warn("rank announcement", "err", aerr)
+		}
 	}
 	return n, err
 }
 
-func (w *worker) announce(ctx context.Context, eventID int64, payload []byte) {
-	var p struct {
-		CharacterID string `json:"characterId"`
-		Name        string `json:"name"`
-		RealmID     string `json:"realmId"`
-		StageID     string `json:"stageId"`
-	}
-	if err := json.Unmarshal(payload, &p); err != nil {
-		w.log.Warn("bad announcement payload", "id", eventID, "err", err)
-		w.m.DeadLetter("announcement.major_breakthrough")
-		return
-	}
-	realmName := p.RealmID
-	for _, r := range w.realms.Realms() {
-		if r.ID == p.RealmID {
-			realmName = r.Name
+// ranks reads the current Thiên Bảng rank of each character (0 = unranked) before a refresh.
+func (w *worker) ranks(ctx context.Context, ids []uuid.UUID) map[uuid.UUID]int64 {
+	out := make(map[uuid.UUID]int64, len(ids))
+	for _, id := range ids {
+		if r, _, err := w.lb.RankOf(ctx, id); err == nil {
+			out[id] = r
 		}
 	}
-	text := w.tpl.Render("major_breakthrough", map[string]string{"name": p.Name, "realm": realmName})
-	err := realtime.Publish(ctx, w.rdb, realtime.Envelope{
-		Type: "announcement.major_breakthrough", ID: strconv.FormatInt(eventID, 10), TS: time.Now().UTC(),
-		Data: map[string]string{"characterId": p.CharacterID, "characterName": p.Name, "realmId": p.RealmID, "stageId": p.StageID, "text": text},
-	})
-	if err != nil {
-		w.log.Warn("publish announcement", "err", err)
+	return out
+}
+
+// rankMoves pairs the ranks before and after a refresh with each character's đạo hiệu (display only).
+func (w *worker) rankMoves(ctx context.Context, q *db.Queries, ids []uuid.UUID, old map[uuid.UUID]int64) []announce.RankMove {
+	now := w.ranks(ctx, ids)
+	var moved []uuid.UUID
+	for _, id := range ids {
+		if announce.RankNews(old[id], now[id], w.ann.Cfg.RankTop) != "" {
+			moved = append(moved, id)
+		}
 	}
+	if len(moved) == 0 {
+		return nil
+	}
+	rows, err := q.GetLeaderboardRows(ctx, moved)
+	if err != nil {
+		return nil
+	}
+	out := make([]announce.RankMove, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, announce.RankMove{CharacterID: r.ID, Name: r.Name, Old: old[r.ID], New: now[r.ID]})
+	}
+	return out
 }
 
 // refreshFactions updates the faction caches for one drained batch (replay-safe): per-character member ZSET moves

@@ -12,7 +12,11 @@
 	import CultivatorFigure from '$lib/components/CultivatorFigure.svelte';
 	import FormationCircle from '$lib/components/FormationCircle.svelte';
 	import { art } from '$lib/game/art';
+	import RealmAura from '$lib/components/RealmAura.svelte';
+	import { auraAmbient } from '$lib/engine/fx/breakthrough';
+	import { charArtFirst } from '$lib/game/charArt.svelte';
 	import { cosmetics, hangs, slugOf } from '$lib/game/cosmetics.svelte';
+	import { figureOf, meditateSlots } from '$lib/game/looks';
 	import { useIdleClock } from '$lib/game/idle.svelte';
 	import { game } from '$lib/game/store.svelte';
 	import { mote, smoke } from '$lib/engine/fx/presets';
@@ -22,8 +26,16 @@
 
 	const clock = useIdleClock();
 	const aura = $derived(game.catalogue?.realmOf(game.character?.stageId ?? '')?.visual.aura ?? 'jade');
+	// effect tier of the realm the server says the character is in (realms.yaml visual.fx_tier): the persistent aura
+	const fxTier = $derived(game.catalogue?.realmOf(game.character?.stageId ?? '')?.visual.fxTier ?? 1);
+	const ambient = $derived(auraAmbient(fxTier, quality));
 	const ready = $derived(clock.atBottleneck);
-	const meditate = art('characters/meditate');
+	// The player's look (server-resolved): the body's own meditate art (pose variant first, lazy), else the
+	// parameterised SVG figure. Without a look (older data) the shared characters/meditate slot.
+	const shared = art('characters/meditate');
+	const myLook = $derived(game.character?.appearance?.look);
+	const figure = $derived(figureOf(cosmetics.looks, myLook));
+	const meditate = $derived(myLook ? charArtFirst(meditateSlots(myLook)) : shared);
 
 	// Wall-hung pieces take the upper anchors, floor pieces the lower ones (same rule as CultivationScene).
 	const placed = $derived.by(() => {
@@ -53,7 +65,8 @@
 		let k = 0;
 		return scene.fx.addEmitter(
 			every(
-				() => (quality === 'full' ? 250 : quality === 'lite' ? 700 : 0),
+				// persistent aura motes: ≤ 24 live at full / ≤ 8 at lite, more with each effect tier (auraAmbient)
+				() => ambient.everyMs,
 				() => {
 					const d = dantian;
 					if (!d) return;
@@ -62,7 +75,7 @@
 					const r = u * (30 + (k % 4) * 4.5);
 					const from = { x: d.x + Math.cos(a) * r, y: d.y + Math.sin(a) * r * 0.7 };
 					const ctrl = { x: d.x + Math.cos(a + 0.9) * r * 0.55, y: d.y + Math.sin(a + 0.9) * r * 0.4 };
-					scene.fx.path(auraMote, { from, to: d, ctrl, ms: 3000 }, 1);
+					scene.fx.path(auraMote, { from, to: d, ctrl, ms: ambient.lifeMs }, 1);
 				}
 			)
 		);
@@ -111,11 +124,12 @@
 	{#key game.backlash}
 		{#if base}
 			<div class="figure" class:shake={game.backlash > 0} style:left="{base.x}px" style:top="{base.y}px">
+				<RealmAura tier={fxTier} {aura} {figure} />
 				{#if meditate}
 					<img src={meditate.src} srcset={meditate.srcset} alt="" class="art" draggable="false" />
 				{:else}
-					<div class="floor" aria-hidden="true"><div class="spin"><FormationCircle color={ready ? 'var(--color-gold-300)' : 'var(--aura)'} class="size-full" /></div></div>
-					<CultivatorFigure {aura} class="fallback-figure" />
+					<div class="floor" aria-hidden="true"><div class="spin"><FormationCircle color={ready ? 'var(--color-gold-300)' : 'var(--aura)'} tier={fxTier} class="size-full" /></div></div>
+					<CultivatorFigure {aura} {figure} class="fallback-figure" />
 				{/if}
 			</div>
 		{/if}

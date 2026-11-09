@@ -29,7 +29,8 @@ const browserContext = (): SfxContext => ({
 	quality: defaultSettings.fx,
 	reducedMotion: defaultSettings.reducedMotion,
 	rarityOf: (id) => game.catalogue?.items.get(id)?.rarity,
-	selfId: game.character?.id ?? null
+	selfId: game.character?.id ?? null,
+	tierOf: (id) => game.catalogue?.realmOf(id)?.visual.fxTier
 });
 
 export function startAudioRouter(d: RouterDeps): () => void {

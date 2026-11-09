@@ -93,7 +93,7 @@
 		await game.reload(); // the path (and stage id) may have been converted
 	}
 	const profile = (e: FactionMemberEntry) =>
-		openWindow({ kind: 'profile', characterId: e.characterId, name: e.name, stageId: e.stageId, avatarFrameId: e.avatarFrameId, titleId: e.titleId });
+		openWindow({ kind: 'profile', characterId: e.characterId, name: e.name, stageId: e.stageId, avatarFrameId: e.avatarFrameId, titleId: e.titleId, look: e.look });
 </script>
 
 

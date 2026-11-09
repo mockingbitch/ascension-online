@@ -12,7 +12,9 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/contribution"
+	"tiendao/game/internal/cosmetic"
 	"tiendao/game/internal/cultivation"
 	"tiendao/game/internal/dailytask"
 	"tiendao/game/internal/db"
@@ -44,6 +46,8 @@ type Service struct {
 	Now         func() time.Time
 	Publish     Publisher
 	Log         *slog.Logger
+	// Looks resolves the listener's look for the seat (appearances.yaml). nil → seats carry no look.
+	Looks *appearance.Catalogue
 }
 
 // InsightView tells the client when ngộ đạo opens (server clock) and whether this player already took it.
@@ -131,6 +135,23 @@ func (s *Service) who(ctx context.Context, userID uuid.UUID) (who, error) {
 	return who{charID: ch.ID, name: ch.Name, stageID: p.StageID}, nil
 }
 
+// lookOf reads the seat look (only on Enter: heartbeats and ngộ đạo never need it). nil when looks are off.
+func (s *Service) lookOf(ctx context.Context, w who) (*appearance.Look, error) {
+	if s.Looks == nil {
+		return nil, nil
+	}
+	stored, _, err := cosmetic.LoadLook(ctx, db.New(s.Pool), w.charID)
+	if err != nil {
+		return nil, err
+	}
+	st, err := s.Cultivation.Realms.Stage(w.stageID)
+	if err != nil {
+		return nil, nil
+	}
+	l := s.Looks.Resolve(stored, st.Path)
+	return &l, nil
+}
+
 // Enter seats the player (keeps their seat if already inside) and returns the hall state.
 func (s *Service) Enter(ctx context.Context, userID uuid.UUID) (State, error) {
 	w, err := s.who(ctx, userID)
@@ -139,7 +160,11 @@ func (s *Service) Enter(ctx context.Context, userID uuid.UUID) (State, error) {
 	}
 	now := s.Now()
 	s.sweep(ctx, now)
-	l := Listener{CharacterID: w.charID.String(), Name: w.name, StageID: w.stageID}
+	look, err := s.lookOf(ctx, w)
+	if err != nil {
+		return State{}, fmt.Errorf("hall look: %w", err)
+	}
+	l := Listener{CharacterID: w.charID.String(), Name: w.name, StageID: w.stageID, Look: look}
 	seat, isNew, err := s.Hall.Enter(ctx, l, now)
 	if err != nil {
 		return State{}, fmt.Errorf("hall enter: %w", err)

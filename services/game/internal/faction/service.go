@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/db"
 	"tiendao/game/internal/gameday"
 	"tiendao/game/internal/leaderboard"
@@ -654,6 +655,8 @@ type MemberEntry struct {
 	// Equipped cosmetics (display only, never ranking input).
 	AvatarFrameID string `json:"avatarFrameId,omitempty"`
 	TitleID       string `json:"titleId,omitempty"`
+	// Chosen look resolved for the member's path (appearances.yaml). Display only.
+	Look *appearance.Look `json:"look,omitempty"`
 }
 
 // MembersPage is GET /factions/{id}/members.
@@ -690,7 +693,7 @@ func (s *Service) Members(ctx context.Context, factionID, cursor string) (Member
 	out := MembersPage{FactionID: factionID, Entries: make([]MemberEntry, 0, len(entries)), Total: total}
 	for _, e := range entries {
 		out.Entries = append(out.Entries, MemberEntry{Rank: e.Rank, CharacterID: e.CharacterID, Name: e.Name, StageID: e.StageID,
-			AvatarFrameID: e.AvatarFrameID, TitleID: e.TitleID})
+			AvatarFrameID: e.AvatarFrameID, TitleID: e.TitleID, Look: e.Look})
 	}
 	if next := offset + MembersPageSize; next < total {
 		c := strconv.FormatInt(next, 10)

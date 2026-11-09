@@ -82,7 +82,7 @@
 					<span class="text-mist-100">· {target && targetRealm && target.name.startsWith(targetRealm.name) ? target.name.slice(targetRealm.name.length).trim() : target?.name}</span>
 				</p>
 			</div>
-			<div class="text-right">
+			<div class="text-right" data-tutorial="bt-odds">
 				<p class="eyebrow">Tỉ lệ</p>
 				<p class="mt-1 text-3xl leading-none font-semibold text-jade-300 tabular-nums">{formatBp(preview.successBp)}</p>
 			</div>
@@ -112,7 +112,7 @@
 			</p>
 		{/if}
 		{#if trib}
-			<div class="trib mt-3 space-y-1 px-3 py-2 text-sm">
+			<div class="trib mt-3 space-y-1 px-3 py-2 text-sm" data-tutorial="bt-loss">
 				{#if trib.guaranteed}
 					<p class="flex items-center gap-2 text-jade-300"><Icon name="check" size={16} /> Thiên đạo thương xót: lần độ kiếp này chắc chắn thành công.</p>
 				{:else}
@@ -176,7 +176,7 @@
 	<div class={['mt-4 grid gap-3', children && 'sm:grid-cols-2']}>
 		{@render children?.()}
 		{#if canTry && preview}
-			<button class="btn btn-gold h-12 w-full text-base" class:is-ready={preview.ready && !busy} disabled={!preview.ready || busy} onclick={onattempt}>
+			<button class="btn btn-gold h-12 w-full text-base" class:is-ready={preview.ready && !busy} disabled={!preview.ready || busy} onclick={onattempt} data-tutorial="bt-attempt">
 				<Icon name="bolt" size={18} stroke={1.8} />
 				{busy ? 'Đang trùng kích…' : trib ? `Độ ${trib.name}` : 'Trùng kích bình cảnh'}
 			</button>

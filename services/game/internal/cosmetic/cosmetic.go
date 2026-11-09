@@ -18,6 +18,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/item"
 )
 
@@ -140,22 +141,9 @@ type file struct {
 	Series   []fileSeries `yaml:"series"`
 }
 
-// EffectLike reports whether a YAML key looks like a gameplay effect: any items.yaml effect key, any unit-suffixed
-// number (`*_bp`, `*_milli`, `*_hours`, `*_seconds`) or a known modifier name. Cosmetics and faction works must not
-// carry one (decisions 2026-11-07: sinks never speed progress).
-func EffectLike(key string) bool {
-	switch key {
-	case item.EffectOfflineCapBonus, item.EffectInstantPoints, item.EffectMaxUsePerDay, item.EffectBreakthroughBP,
-		item.EffectTribulationBP, "rate_bonus", "points", "merit", "rank_points", "vip_points", "cultivation":
-		return true
-	}
-	for _, suf := range []string{"_bp", "_milli", "_hours", "_seconds", "_points"} {
-		if strings.HasSuffix(key, suf) {
-			return true
-		}
-	}
-	return false
-}
+// EffectLike reports whether a YAML key looks like a gameplay effect (item.EffectLikeKey). Cosmetics and faction works
+// must not carry one (decisions 2026-11-07: sinks never speed progress).
+func EffectLike(key string) bool { return item.EffectLikeKey(key) }
 
 func rejectExtra(where string, extra map[string]any, fail func(string, ...any)) {
 	keys := make([]string, 0, len(extra))
@@ -505,15 +493,21 @@ func Owns(cm *Cosmetic, purchased map[string]bool, tier int) bool {
 }
 
 // Appearance is the equipped look (ids only; the client resolves names/visuals from GET /cosmetics/catalog).
+// Look = body / hair accessory / robe colour / pose (appearances.yaml, decisions 2026-11-09): in a response it is the
+// look shown for the character's current path (always complete); in an equip request it is optional (absent = keep).
 type Appearance struct {
-	TitleID           string   `json:"titleId,omitempty"`
-	AvatarFrameID     string   `json:"avatarFrameId,omitempty"`
-	ChatAuraID        string   `json:"chatAuraId,omitempty"`
-	CaveDecorationIDs []string `json:"caveDecorationIds"`
+	TitleID           string           `json:"titleId,omitempty"`
+	AvatarFrameID     string           `json:"avatarFrameId,omitempty"`
+	ChatAuraID        string           `json:"chatAuraId,omitempty"`
+	CaveDecorationIDs []string         `json:"caveDecorationIds"`
+	Look              *appearance.Look `json:"look,omitempty"`
 }
 
 // Equal compares two loadouts (idempotency-key reuse check).
 func (a Appearance) Equal(b Appearance) bool {
+	if (a.Look == nil) != (b.Look == nil) || (a.Look != nil && *a.Look != *b.Look) {
+		return false
+	}
 	return a.TitleID == b.TitleID && a.AvatarFrameID == b.AvatarFrameID && a.ChatAuraID == b.ChatAuraID &&
 		slices.Equal(a.CaveDecorationIDs, b.CaveDecorationIDs)
 }
@@ -570,7 +564,7 @@ func (c *Catalogue) Visible(id string, tier int) string {
 // VisibleLook filters a whole appearance with Visible.
 func (c *Catalogue) VisibleLook(a Appearance, tier int) Appearance {
 	out := Appearance{TitleID: c.Visible(a.TitleID, tier), AvatarFrameID: c.Visible(a.AvatarFrameID, tier),
-		ChatAuraID: c.Visible(a.ChatAuraID, tier), CaveDecorationIDs: []string{}}
+		ChatAuraID: c.Visible(a.ChatAuraID, tier), CaveDecorationIDs: []string{}, Look: a.Look}
 	for _, id := range a.CaveDecorationIDs {
 		if c.Visible(id, tier) != "" {
 			out.CaveDecorationIDs = append(out.CaveDecorationIDs, id)

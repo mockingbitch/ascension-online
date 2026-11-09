@@ -2,6 +2,11 @@
 // state and must REPLACE local state (never merge client-computed values).
 import type {
 	EquippedArtifact,
+	Look,
+	TutorialMarkResult,
+	TutorialScript,
+	TutorialState,
+	WorldAnnouncement,
 	ProtectorView,
 	SecretRealmClaim,
 	SecretRealmStart,
@@ -142,12 +147,12 @@ export const api = {
 		}),
 	/** Onboarding intent (data-model §9.6): create the character and join the faction in one transaction. Reuse `key`
 	 *  when retrying after a network error (a replay answers 200 with `replayed: true`). */
-	onboard: (name: string, factionId: string, key: string, path?: PathId, f: Fetch = fetch) => {
+	onboard: (name: string, factionId: string, key: string, path?: PathId, appearance?: Look, f: Fetch = fetch) => {
 		const init = mutate(key);
 		return request<CharacterView>(f, '/character', {
 			...init,
 			headers: { ...init.headers, 'Content-Type': 'application/json' },
-			body: JSON.stringify({ name, factionId, path })
+			body: JSON.stringify({ name, factionId, path, appearance })
 		});
 	},
 
@@ -286,6 +291,18 @@ export const api = {
 
 	// cosmetics (no gameplay effect)
 	cosmeticCatalog: (f: Fetch = fetch) => request<CosmeticCatalog>(f, '/cosmetics/catalog'),
+
+	/** the world's recent news (public; GĐ-D) */
+	recentAnnouncements: (f: Fetch = fetch) => request<{ items: WorldAnnouncement[] }>(f, '/announcements/recent'),
+
+	// tutorial (Vân Khê; display only — a step never grants anything)
+	tutorialScript: (f: Fetch = fetch) => request<TutorialScript>(f, '/tutorial/script'),
+	tutorial: (f: Fetch = fetch) => request<TutorialState>(f, '/tutorial', { auth: true }),
+	/** Mark a stored step seen (`done`) or dismissed (`skip`); reuse `key` on a retry. */
+	tutorialMark: (stepId: string, how: 'done' | 'skip', key: string, f: Fetch = fetch) =>
+		request<TutorialMarkResult>(f, `/tutorial/steps/${encodeURIComponent(stepId)}/${how}`, mutate(key)),
+	tutorialSkipAll: (key: string, f: Fetch = fetch) => request<TutorialState>(f, '/tutorial/skip-all', mutate(key)),
+	tutorialReset: (key: string, f: Fetch = fetch) => request<TutorialState>(f, '/tutorial/reset', mutate(key)),
 	cosmetics: (f: Fetch = fetch) => request<CosmeticsView>(f, '/cosmetics', { auth: true }),
 	/** Reuse `key` when retrying the same purchase after a network error (idempotent). */
 	cosmeticBuy: (cosmeticId: string, key: string, f: Fetch = fetch) => {

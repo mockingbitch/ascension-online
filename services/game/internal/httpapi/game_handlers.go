@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/breakthrough"
 	"tiendao/game/internal/character"
 	"tiendao/game/internal/cultivation"
@@ -79,6 +80,8 @@ func (d Deps) createCharacter(w http.ResponseWriter, r *http.Request) {
 		Name      string       `json:"name"`
 		FactionID string       `json:"factionId"` // onboarding (§9.6): create + join in one tx; needs Idempotency-Key
 		Path      realm.PathID `json:"path"`
+		// onboarding look (appearances.yaml; optional, display only): {bodyId, outfitId, poseId}
+		Appearance *appearance.Look `json:"appearance"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -86,8 +89,8 @@ func (d Deps) createCharacter(w http.ResponseWriter, r *http.Request) {
 	var v character.View
 	var err error
 	if body.FactionID == "" {
-		if body.Path != "" {
-			writeError(w, 400, "invalid_body", "path needs a factionId")
+		if body.Path != "" || body.Appearance != nil {
+			writeError(w, 400, "invalid_body", "path and appearance need a factionId")
 			return
 		}
 		v, err = d.Characters.Create(r.Context(), userFrom(r.Context()), body.Name)
@@ -97,7 +100,10 @@ func (d Deps) createCharacter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		v, err = d.Characters.CreateOnboarded(r.Context(), userFrom(r.Context()), body.Name,
-			character.Onboarding{IdempotencyKey: key, FactionID: body.FactionID, Path: body.Path})
+			character.Onboarding{IdempotencyKey: key, FactionID: body.FactionID, Path: body.Path, Look: body.Appearance})
+	}
+	if writeLookError(w, err) {
+		return
 	}
 	if msg, ok := nameBlockedMessage(err); ok {
 		writeError(w, 400, "name_not_allowed", msg)
@@ -110,7 +116,7 @@ func (d Deps) createCharacter(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 409, "name_taken", "Đạo hiệu này đã có người dùng")
 	case errors.Is(err, character.ErrAlreadyExists):
 		writeError(w, 409, "character_exists", "account already has a character")
-	case errors.Is(err, character.ErrNoFactions):
+	case errors.Is(err, character.ErrNoFactions), errors.Is(err, character.ErrNoLooks):
 		unavailable(w)
 	case err != nil:
 		if !writeFactionError(w, err) {

@@ -80,7 +80,8 @@ paths:
         path) and joins the faction (first join starts the switch cooldown). Faction errors as in /factions/join
         (`unknown_faction` 404, `faction_closed` 409, `path_not_allowed` 400, `idempotency_key_reused` 409); on any
         error nothing is created. A retry with the same key, name and faction returns 200 with `replayed: true`.
-        `path` without `factionId` → 400.
+        `path` without `factionId` → 400. Optional `appearance` (Look, needs `factionId`): `unknown_look` 400,
+        `wrong_path` 422 (body/option not of the faction's path), `not_owned` 409; written in the same transaction.
       security: [{ bearer: [] }]
       parameters:
         - name: Idempotency-Key
@@ -99,12 +100,18 @@ paths:
                 name: { type: string, minLength: 2, maxLength: 24 }
                 factionId: { type: string, description: onboarding — faction to join in the same transaction }
                 path: { type: string, enum: [tien, vu], description: requested path (must be allowed by the faction) }
+                appearance:
+                  $ref: "#/components/schemas/Look"
+                  description: >-
+                    onboarding look (appearances.yaml, display only; needs factionId). Validated for the faction's path;
+                    does not start the 24 h body cooldown. Absent = the path default.
       responses:
         "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
         "200": { description: Onboarding replay (same Idempotency-Key), content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
         "400": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
   /breakthrough/preview:
     get:
       summary: >-
@@ -154,7 +161,10 @@ paths:
         - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000 } }
         - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
       responses:
-        "200": { description: OK }
+        "200":
+          description: >-
+            `{ entries, total, offset }`; each entry `{ rank, characterId, name, stageId, score, stageReachedAt,
+            avatarFrameId?, titleId?, look? }` — `look` (Look) is the chosen look resolved for the row's path (display only).
         "503": { $ref: "#/components/responses/Error" }
   /leaderboards/global/me:
     get:
@@ -671,7 +681,9 @@ paths:
     post:
       summary: >-
         Set the WHOLE loadout ("" / [] = unequip). Locks the appearance row; every id must be owned and of the slot's
-        kind; ≤ settings.caveSlots decorations, no duplicates. Same key + same loadout = replay; other loadout = 409.
+        kind; ≤ settings.caveSlots decorations, no duplicates. Optional `look` (body / accessory / robe / pose): valid for
+        the character's path, owned, and a body change at most once per 24 h (a path change grants one free re-pick);
+        absent = keep. Same key + same loadout = replay; other loadout = 409.
       security: [{ bearer: [] }]
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -691,9 +703,10 @@ paths:
                 properties:
                   replayed: { type: boolean }
                   state: { $ref: "#/components/schemas/CosmeticsView" }
-        "400": { description: "invalid_loadout | invalid_body | invalid_idempotency_key" }
+        "400": { description: "invalid_loadout | unknown_look | invalid_body | invalid_idempotency_key" }
         "404": { description: character_not_found }
-        "409": { description: "not_owned | idempotency_key_reused" }
+        "409": { description: "not_owned | idempotency_key_reused | body_cooldown (details.retryAt)" }
+        "422": { description: wrong_path }
   /factions/works:
     get:
       summary: >-
@@ -1084,6 +1097,81 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
+  /announcements/recent:
+    get:
+      summary: >-
+        The world's recent news (public; short history kept by the worker, world_announcements). Newest first, ≤
+        recent_limit (announcements.yaml). Clients merge it with the live WebSocket feed by id. Only đạo hiệu + realm/rank.
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { items: { type: array, items: { $ref: "#/components/schemas/WorldAnnouncement" } } }
+        "503": { $ref: "#/components/responses/Error" }
+  /tutorial/script:
+    get:
+      summary: >-
+        Vân Khê's tutorial lines (content/story/tutorial/*.yaml; decisions 2026-11-09 #1). Public and immutable —
+        onboarding steps run in /create before a character exists. Numbers in the lines come from realms.yaml.
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TutorialScript" } } } }
+        "503": { $ref: "#/components/responses/Error" }
+  /tutorial:
+    get:
+      summary: The caller's tutorial progress (display only; never grants anything)
+      security: [{ bearer: [] }]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TutorialState" } } } }
+        "404": { description: character_not_found }
+  /tutorial/steps/{stepId}/done:
+    post:
+      summary: >-
+        Mark a stored ("play") step as seen. First mark of a step wins (another device's later mark is a no-op);
+        same key = replay; a key used for another step = 409. Onboarding/unknown steps → 404 unknown_step.
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: stepId, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TutorialMarkResult" } } } }
+        "404": { description: "unknown_step | character_not_found" }
+        "409": { description: idempotency_key_reused }
+  /tutorial/steps/{stepId}/skip:
+    post:
+      summary: Same as /done with status skipped (the player dismissed the step).
+      security: [{ bearer: [] }]
+      parameters:
+        - { name: stepId, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TutorialMarkResult" } } } }
+        "404": { description: "unknown_step | character_not_found" }
+        "409": { description: idempotency_key_reused }
+  /tutorial/skip-all:
+    post:
+      summary: '"Không nhắc lại": the guide offers no step on her own (the "?" button still summons her). Same key as the last settings action (skip-all/reset) = replay.'
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TutorialState" } } } }
+        "404": { description: character_not_found }
+  /tutorial/reset:
+    post:
+      summary: >-
+        Forget every seen step and un-mute the guide (Cài đặt › Xem lại hướng dẫn). Same key as the last settings action
+        = replay (a lost answer never wipes steps marked since on another device).
+      security: [{ bearer: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/TutorialState" } } } }
+        "404": { description: character_not_found }
   /lecture/scripts:
     get:
       summary: Tử Tiêu Cung lecture loop (public content). Clients play lines on the server clock — (now − cycleEpoch) mod cycleSeconds.
@@ -1810,6 +1898,7 @@ components:
               stageId: { type: string }
               avatarFrameId: { type: string, description: equipped cosmetic (display only) }
               titleId: { type: string, description: equipped cosmetic (display only) }
+              look: { $ref: "#/components/schemas/Look" }
         total: { type: integer }
         nextCursor: { type: [string, "null"] }
     FactionLock:
@@ -1988,6 +2077,7 @@ components:
         text: { type: string, description: Masked text }
         sentAt: { type: string, format: date-time }
         nameFx: { type: string, description: "chat_aura cosmetic worn at send time (display only; omitted when none)" }
+        look: { $ref: "#/components/schemas/Look", description: "sender look at send time (display only; absent on old messages)" }
     Listener:
       type: object
       properties:
@@ -1995,6 +2085,7 @@ components:
         name: { type: string }
         stageId: { type: string }
         seat: { type: integer, description: "-1 = listening outside the hall" }
+        look: { $ref: "#/components/schemas/Look", description: listener look (display only) }
     InsightSlot:
       type: object
       properties: { no: { type: integer, format: int64 }, opensAt: { type: string, format: date-time }, closesAt: { type: string, format: date-time } }
@@ -2541,7 +2632,14 @@ components:
           type: object
           properties:
             badge: { type: string }
-            aura: { type: string }
+            aura: { type: string, description: "design token --color-aura-<aura> (Vu: vu-ember … vu-ancestral, one per effect tier)" }
+            fxTier:
+              type: integer
+              minimum: 1
+              maximum: 6
+              description: >-
+                effect tier of the realm's tier (realms.yaml tiers[].visual.fx_tier; both paths share it). Display only:
+                celebration size, persistent aura, formation, sound.
         stages: { type: array, items: { $ref: "#/components/schemas/Stage" } }
     RealmCatalogue:
       type: object
@@ -2585,6 +2683,136 @@ components:
         avatarFrameId: { type: string }
         chatAuraId: { type: string }
         caveDecorationIds: { type: array, items: { type: string } }
+        look:
+          $ref: "#/components/schemas/Look"
+          description: >-
+            Response: the look shown for the character's current path (always present when appearances are served).
+            Equip request: optional — absent keeps the current look.
+    WorldAnnouncement:
+      type: object
+      required: [id, kind, tier, characterName, tribulation, text, createdAt]
+      properties:
+        id: { type: integer, format: int64, description: history row id (= WS envelope id) }
+        kind: { type: string, enum: [realm, tribulation, first_to_realm, rank_top10, digest] }
+        tier: { type: integer, minimum: 0, maximum: 6, description: effect tier of the realm (0 = none, e.g. rank news) }
+        characterId: { type: string, format: uuid }
+        characterName: { type: string, description: đạo hiệu (digest — the first of the folded) }
+        realmId: { type: string }
+        stageId: { type: string }
+        path: { type: string }
+        tribulation: { type: boolean }
+        rank: { type: integer }
+        count: { type: integer, description: "digest: how many others" }
+        text: { type: string, maxLength: 90 }
+        createdAt: { type: string, format: date-time }
+    TutorialLine:
+      type: object
+      required: [expr, text]
+      properties:
+        expr: { type: string, enum: [neutral, smile, point, worried, proud, surprised], description: "art slot characters/guide/<expr>" }
+        text: { type: string, maxLength: 200 }
+        spotlight: { type: string, description: 'data-tutorial="<id>" UI target to highlight' }
+    TutorialStep:
+      type: object
+      required: [id, flow, trigger, title, lines]
+      properties:
+        id: { type: string }
+        flow: { type: string, enum: [onboarding, play], description: onboarding = client-only (no character yet); play = stored }
+        trigger:
+          type: string
+          description: >-
+            onboarding.<step> | play.enter | fx.settled | fx.stage_up | fx.realm_reached | breakthrough.ready |
+            breakthrough.tribulation | window.faction | window.vip | window.companion | window.inventory.shop |
+            scene.tu_tieu_cung | mode.trial — server facts (fxBus after a server answer, server previews) or places the
+            player opened; never client guesses.
+        title: { type: string }
+        lines: { type: array, items: { $ref: "#/components/schemas/TutorialLine" } }
+    TutorialScript:
+      type: object
+      required: [guide, name, steps]
+      properties:
+        guide: { type: string, example: van_khe }
+        name: { type: string, example: Vân Khê }
+        steps: { type: array, items: { $ref: "#/components/schemas/TutorialStep" } }
+    TutorialState:
+      type: object
+      required: [done, skipped, muted]
+      properties:
+        done: { type: array, items: { type: string } }
+        skipped: { type: array, items: { type: string } }
+        muted: { type: boolean, description: '"không nhắc lại"' }
+    TutorialMarkResult:
+      type: object
+      required: [replayed, state]
+      properties:
+        replayed: { type: boolean }
+        state: { $ref: "#/components/schemas/TutorialState" }
+    Look:
+      type: object
+      description: >-
+        Body + painted outfit + meditation pose (content/catalog/appearances.yaml; decisions 2026-11-09 "Ngoại hình…" and
+        "Bộ trang phục vẽ sẵn…"). Hair accessory and robe colour are the outfit's parts, derived by the server.
+        Responses always carry every field (resolved for the current path). Requests send bodyId + outfitId + poseId;
+        hairId/robePaletteId are then ignored (an older client may send them instead of outfitId — they must be the
+        parts of one outfit of that body). An outfit of another body, or parts matching no outfit, = 400 unknown_look.
+        Display only — never changes tu vi, odds, rank or điểm duyên.
+      required: [bodyId, poseId]
+      properties:
+        bodyId: { type: string, example: tien_nu_y_su }
+        outfitId: { type: string, example: y_su_tu_yen, description: "one of the body's outfits (always present in responses)" }
+        hairId: { type: string, example: day_lua, description: "derived from the outfit (always present in responses)" }
+        robePaletteId: { type: string, example: tu, description: "derived from the outfit; web token --color-robe-<id>" }
+        poseId: { type: string, example: ban_gia }
+    AppearanceCatalog:
+      type: object
+      required: [settings, bodies, hairAccessories, robePalettes, poses]
+      properties:
+        settings: { type: object, properties: { bodyChangeCooldownSeconds: { type: integer, format: int64 } } }
+        bodies:
+          type: array
+          items:
+            type: object
+            required: [id, path, sex, name, svgHair, defaultHair, defaultRobe, defaultOutfit, defaultPose, pair, defaultFree, outfits]
+            properties:
+              id: { type: string }
+              path: { type: string, enum: [tien, vu] }
+              sex: { type: string, enum: [nam, nu] }
+              name: { type: string }
+              temperament: { type: string }
+              traits: { type: string }
+              svgHair: { type: string, description: hairstyle of the SVG fallback figure }
+              beard: { type: boolean }
+              defaultHair: { type: string, description: hair accessory of defaultOutfit }
+              defaultRobe: { type: string, description: robe colour of defaultOutfit }
+              defaultOutfit: { type: string }
+              defaultPose: { type: string }
+              outfits:
+                type: array
+                description: exactly 3 painted outfits (art slots characters/<bodyId>[/<outfitId>]/…)
+                items:
+                  type: object
+                  required: [id, name, robePaletteId, hairId]
+                  properties:
+                    id: { type: string, example: y_su_tu_yen }
+                    name: { type: string, example: Tử Yên Linh Thảo }
+                    robePaletteId: { type: string }
+                    hairId: { type: string }
+              pair: { type: string, description: same-sex body on the other path (shown after a path change) }
+              defaultFree: { type: boolean }
+        hairAccessories: { type: array, items: { $ref: "#/components/schemas/LookOption" } }
+        robePalettes: { type: array, items: { $ref: "#/components/schemas/LookOption" } }
+        poses:
+          type: array
+          items:
+            type: object
+            properties: { id: { type: string }, name: { type: string }, path: { type: string }, defaultFree: { type: boolean } }
+    LookOption:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        paths: { type: array, items: { type: string } }
+        defaultFree: { type: boolean }
     Cosmetic:
       type: object
       required: [id, slug, kind, series, name, rarity, source]
@@ -2627,6 +2855,7 @@ components:
               untilEra: { type: string }
               items: { type: array, items: { type: string } }
         cosmetics: { type: array, items: { $ref: "#/components/schemas/Cosmetic" } }
+        appearances: { $ref: "#/components/schemas/AppearanceCatalog" }
     CosmeticsView:
       type: object
       required: [balance, tier, season, eraId, owned, available, equipped]
@@ -2638,6 +2867,10 @@ components:
         owned: { type: array, items: { type: string } }
         available: { type: array, items: { type: string }, description: shop cosmetics inside their window now }
         equipped: { $ref: "#/components/schemas/Appearance" }
+        bodyRetryAt:
+          type: [string, "null"]
+          format: date-time
+          description: when the next body change is allowed (null = now; 24 h cooldown, free re-pick after a path change)
     FactionWorksView:
       type: object
       required: [settings, works, factions, balance, todayDonated, gameDay, resetsAt, mine]

@@ -15,6 +15,7 @@
 	import { mote, smokePuff } from '$lib/engine/fx/presets';
 	import { MediaQuery } from 'svelte/reactivity';
 	import Icon from '$lib/components/Icon.svelte';
+	import SeatFigure from '$lib/components/SeatFigure.svelte';
 	import { art } from '$lib/game/art';
 	import { hall } from '$lib/game/lecture.svelte';
 	import { game } from '$lib/game/store.svelte';
@@ -24,7 +25,6 @@
 	let { scene, quality }: SceneViewProps = $props();
 
 	const sage = art('characters/hong-quan');
-	const sitter = art('characters/listener');
 	const phone = new MediaQuery('max-width: 639px');
 
 	const cat = $derived(game.catalogue);
@@ -129,11 +129,7 @@
 					{#if mine}<span class="halo" aria-hidden="true"></span>{/if}
 					{#if !is3d || !scene.def.anchors[`seat.${s.seat}`]}<span class="cushion" aria-hidden="true"></span>{/if}
 					{#if l}
-						{#if sitter}
-							<img class="sitter" src={sitter.src} srcset={sitter.srcset} alt="" draggable="false" />
-						{:else}
-							<span class="sitter-fallback" aria-hidden="true"></span>
-						{/if}
+						<SeatFigure look={l.look} aura={cat?.realmOf(l.stageId)?.visual.aura ?? 'none'} />
 						{#if mine}
 							<span class="me-tag">Bạn · {me?.name}</span>
 						{:else}
@@ -244,22 +240,6 @@
 	}
 	[data-quality='full'] .halo {
 		animation: breathe 3s var(--ease-qi) infinite;
-	}
-	.sitter,
-	.sitter-fallback {
-		position: absolute;
-		inset: 0;
-		width: 100%;
-		filter: drop-shadow(0 0 2px color-mix(in oklab, var(--color-mist-100) 35%, transparent));
-	}
-	.sitter-fallback {
-		inset: 25% 25% 10%;
-		width: auto;
-		border-radius: 50% 50% 35% 35%;
-		background: var(--color-ink-800);
-	}
-	.seat.is-mine .sitter {
-		filter: drop-shadow(0 0 5px var(--color-gold-300));
 	}
 	.me-tag {
 		position: absolute;

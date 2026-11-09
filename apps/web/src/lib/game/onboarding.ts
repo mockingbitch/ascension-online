@@ -1,8 +1,9 @@
 // New-player flow (data-model §9.6): opening → Tử Tiêu Cung → faction → path (only when the faction allows several)
-// → đạo hiệu, ending in ONE intent POST /character {name, factionId, path}. Steps live client-side only; nothing is
+// → ngoại hình (body / accessory / robe / pose, decisions 2026-11-09 GĐ-A) → đạo hiệu, ending in ONE intent
+// POST /character {name, factionId, path, appearance}. Steps live client-side only; nothing is
 // written before the last step. Text is copied from content/story/onboarding/mo-dau.md (onboarding.test.ts checks
 // every line against it) — update both together.
-import type { FactionView, PathId } from './types';
+import type { FactionView, Look, PathId } from './types';
 
 /** Visual treatment of an opening scene (CSS composition in OpeningSequence.svelte, raster art when present). */
 export type SceneVisual = 'chaos' | 'split' | 'world' | 'dawn' | 'beasts' | 'powers' | 'sage' | 'hall';
@@ -76,13 +77,14 @@ export const sceneMs = (caption: string) => Math.max(5_000, Math.min(9_000, 2_50
 
 // ───── wizard steps ─────
 
-export type Step = 'mo-dau' | 'tu-tieu-cung' | 'the-luc' | 'dao-do' | 'dao-hieu';
+export type Step = 'mo-dau' | 'tu-tieu-cung' | 'the-luc' | 'dao-do' | 'ngoai-hinh' | 'dao-hieu';
 
 export const stepLabels: Record<Step, string> = {
 	'mo-dau': 'Mở đầu',
 	'tu-tieu-cung': 'Tử Tiêu Cung',
 	'the-luc': 'Thế lực',
 	'dao-do': 'Đạo đồ',
+	'ngoai-hinh': 'Ngoại hình',
 	'dao-hieu': 'Đạo hiệu'
 };
 
@@ -92,16 +94,20 @@ export interface Draft {
 	factionId: string | null;
 	path: PathId | null;
 	name: string;
+	/** picked look (validated by the server for the faction's path); null = not picked yet (the step shows the default) */
+	look: Look | null;
 	/** Idempotency-Key of the final POST, reused on retries of the same intent */
 	key: string | null;
 }
 
-export const emptyDraft = (): Draft => ({ step: 'mo-dau', factionId: null, path: null, name: '', key: null });
+export const emptyDraft = (): Draft => ({ step: 'mo-dau', factionId: null, path: null, name: '', look: null, key: null });
 
 /** Steps for the chosen faction: the path step only when it allows more than one path. */
 export function stepsFor(faction: Pick<FactionView, 'allowedPaths'> | undefined): Step[] {
 	const multi = (faction?.allowedPaths.length ?? 0) > 1;
-	return multi ? ['mo-dau', 'tu-tieu-cung', 'the-luc', 'dao-do', 'dao-hieu'] : ['mo-dau', 'tu-tieu-cung', 'the-luc', 'dao-hieu'];
+	return multi
+		? ['mo-dau', 'tu-tieu-cung', 'the-luc', 'dao-do', 'ngoai-hinh', 'dao-hieu']
+		: ['mo-dau', 'tu-tieu-cung', 'the-luc', 'ngoai-hinh', 'dao-hieu'];
 }
 
 export function nextStep(step: Step, faction: Pick<FactionView, 'allowedPaths'> | undefined): Step {
@@ -125,8 +131,8 @@ export function resolvePath(faction: Pick<FactionView, 'allowedPaths'> | undefin
 /** Repairs a restored draft against the live roster: an unknown/closed faction sends the player back to the faction step. */
 export function sanitizeDraft(d: Draft, factions: Pick<FactionView, 'id' | 'open' | 'allowedPaths'>[]): Draft {
 	const f = factions.find((x) => x.id === d.factionId && x.open);
-	const needsFaction = d.step === 'dao-do' || d.step === 'dao-hieu';
-	if (!f) return { ...d, factionId: null, path: null, step: needsFaction ? 'the-luc' : d.step };
+	const needsFaction = d.step === 'dao-do' || d.step === 'ngoai-hinh' || d.step === 'dao-hieu';
+	if (!f) return { ...d, factionId: null, path: null, look: null, step: needsFaction ? 'the-luc' : d.step };
 	const steps = stepsFor(f);
 	return { ...d, path: resolvePath(f, d.path), step: steps.includes(d.step) ? d.step : 'dao-hieu' };
 }

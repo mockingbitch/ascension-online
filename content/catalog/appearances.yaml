@@ -1,0 +1,395 @@
+# Appearances (decisions 2026-11-09 "Ngoại hình, hướng dẫn viên…", GĐ-A; "Bộ trang phục vẽ sẵn…"): the body a player
+# picks, one of its painted outfits (robe colour + hair accessory baked into the art) and the meditation pose. Loaded by internal/appearance; cross-checked in content.LoadAll (paths).
+#
+# DISPLAY ONLY. A look never changes cultivation rate, points, breakthrough/tribulation odds, ranking, merit, the
+# 150-point daily ceiling or điểm duyên. The loader REJECTS every field not listed below, with a dedicated message for
+# effect-like keys (`*_bp`, `*_milli`, `*_hours`, `*_seconds`, `*_points`, every items.yaml effect key).
+#
+# IDs are permanent ASCII slugs (character_appearance.body_id / hair_id / robe_palette_id / pose_id store them).
+# Art slots (web): default outfit = characters/<body_id>/{avatar,meditate[-<pose>],listener,body-b<fx tier>}; every other
+# outfit = characters/<body_id>/<outfit_id>/{same names} — see apps/web/src/lib/assets/art/README.md. Missing outfit art
+# falls back to the body's default-outfit art, then to the parameterised SVG CultivatorFigure (`sex`, `path`, `svg_hair`,
+# `beard` + the outfit's hair accessory and robe colour).
+#
+# bodies
+#   path          realms.yaml path id; a body is only wearable on its path
+#   sex           nam | nu (silhouette of the SVG fallback; art direction)
+#   pair          body of the SAME sex on the OTHER path: shown automatically when the character's path changes
+#                 (tiên ↔ Vu after a faction move), which also grants one body re-pick without cooldown (decision #4)
+#   svg_hair      hairstyle of the SVG fallback (the hairstyle is part of the body, decision #5)
+#   default_outfit / default_pose   shown until the player picks one (default_outfit is one of `outfits`)
+#   outfits       exactly 3 painted outfits (decision "Bộ trang phục vẽ sẵn"): id (unique across ALL bodies, permanent),
+#                 name, robe_palette + hair_accessory (allowed on the body's path; robe colours distinct within a body so
+#                 even the SVG fallback differs), art (one-line English art brief for the image model: fabric/cut/trim;
+#                 female bodies other than the guide keep the modest rule — closed collar, fully covering).
+#                 The DB stores the outfit as its (hair_id, robe_palette_id) pair, so an outfit's two parts are as
+#                 permanent as its id: re-colouring an outfit = a new outfit id.
+#   temperament, traits   designer text (art prompts, picker caption)
+# hair_accessories / robe_palettes: `paths` = where it may be worn. Robe colours are CSS tokens --color-robe-<id>
+#   (apps/web/src/app.css; a web test checks every id has one).
+# poses: one path each.
+# default_free: true = everyone owns it. GĐ-A ships only free looks; earned / linh thạch / Tiên Duyên looks (decision #2)
+#   arrive with their unlock source in a later phase, so `default_free: false` is refused for now.
+version: 1
+
+settings:
+  body_change_cooldown_seconds: 86400   # 24 h between two in-game body changes (decision #4)
+
+bodies:
+  # ── Đạo đồ tiên: nam ──
+  - id: tien_nam_thu_sinh
+    path: tien
+    sex: nam
+    name: Thư Sinh
+    temperament: Nho nhã, ôn hòa
+    traits: Mặt trái xoan, mắt dài hiền, dáng mảnh. Tóc búi nửa đầu, tóc dưới xõa. Ống bút trúc bên hông.
+    svg_hair: bui_nua
+    default_outfit: thu_sinh_ngoc_bich
+    default_pose: kiet_gia
+    pair: vu_nam_hanh_gia
+    default_free: true
+    outfits:
+      - id: thu_sinh_ngoc_bich
+        name: Ngọc Bích Thư Bào
+        robe_palette: ngoc
+        hair_accessory: day_lua
+        art: pale jade-green silk scholar robe with a crossed collar and wide sleeves, ivory hem embroidered with thin bamboo leaves, jade silk ribbon tied around the half-bun
+      - id: thu_sinh_thanh_lam
+        name: Thanh Lam Nho Phục
+        robe_palette: lam
+        hair_accessory: tram_go
+        art: deep azure fine-cotton scholar coat cut straight to the ankles, white crossed collar and white cuffs, soft grey silk sash, plain sandalwood hairpin through the half-bun
+      - id: thu_sinh_bach_van
+        name: Bạch Vân Sa Bào
+        robe_palette: bach
+        hair_accessory: tram_ngoc
+        art: layered translucent white gauze over-robe on a pale-blue inner robe, sleeves embroidered with silver cloud scrolls, white jade hairpin
+  - id: tien_nam_kiem_khach
+    path: tien
+    sex: nam
+    name: Kiếm Khách
+    temperament: Cương nghị, ít lời
+    traits: Hàm vuông, sẹo nhỏ đuôi mày, vai rộng. Tóc buộc đuôi ngựa cao. Tay áo bó, bao kiếm sau lưng.
+    svg_hair: duoi_ngua
+    default_outfit: kiem_khach_mac_y
+    default_pose: kiem_ngang
+    pair: vu_nam_chien_si
+    default_free: true
+    outfits:
+      - id: kiem_khach_mac_y
+        name: Mặc Y Kiếm Bào
+        robe_palette: mac
+        hair_accessory: khong
+        art: ink-black brocade swordsman robe with fitted sleeves, dark leather bracers and wide leather belt, thin silver-grey piping, nothing in the high ponytail
+      - id: kiem_khach_thanh_lam
+        name: Thanh Lam Hành Trang
+        robe_palette: lam
+        hair_accessory: day_lua
+        art: deep azure travelling outfit with side-slit coat panels for movement, wrapped cloth leggings, indigo belt, long azure silk ribbon binding the high ponytail
+      - id: kiem_khach_tu_yen
+        name: Tử Yên Kiếm Phục
+        robe_palette: tu
+        hair_accessory: kim_quan
+        art: smoky-violet stand-collar outer coat over thin silver scale armour on the chest, dark violet sash, small gold crown clasping the high ponytail
+  - id: tien_nam_an_si
+    path: tien
+    sex: nam
+    name: Ẩn Sĩ
+    temperament: Điềm đạm, từng trải
+    traits: Trung niên, râu ngắn tỉa gọn, cao gầy. Búi tóc cài trâm gỗ. Áo vải gai, hồ lô bên hông.
+    svg_hair: bui_cao
+    beard: true
+    default_outfit: an_si_hoang_tho
+    default_pose: ban_gia
+    pair: vu_nam_hanh_gia
+    default_free: true
+    outfits:
+      - id: an_si_hoang_tho
+        name: Hoàng Thổ Ma Y
+        robe_palette: tho
+        hair_accessory: tram_go
+        art: ochre-earth hemp robe with a short open over-cape, rope belt, neatly sewn patches at the elbows, wooden hairpin in the topknot
+      - id: an_si_mac_hac
+        name: Mặc Hạc Đạo Bào
+        robe_palette: mac
+        hair_accessory: khong
+        art: ash-black wide-sleeved Taoist robe with a white inner collar, small white cranes embroidered at the hem, bare topknot tied with black cord
+      - id: an_si_truc_ngoc
+        name: Trúc Ngọc Thanh Bào
+        robe_palette: ngoc
+        hair_accessory: tram_ngoc
+        art: moss-jade coarse-linen long robe with faint bamboo-leaf weave, dark green sash with a plain wooden toggle, green jade hairpin
+  - id: tien_nam_cong_tu
+    path: tien
+    sex: nam
+    name: Công Tử Thế Gia
+    temperament: Phong lưu, tự tin
+    traits: Mặt tròn, mày rậm, dáng cân đối. Kim quan nhỏ trên búi. Áo nhiều lớp thêu vân mây, ngọc bội.
+    svg_hair: bui_cao
+    default_outfit: cong_tu_co_kim
+    default_pose: kiet_gia
+    pair: vu_nam_chien_si
+    default_free: true
+    outfits:
+      - id: cong_tu_co_kim
+        name: Cổ Kim Cẩm Bào
+        robe_palette: kim
+        hair_accessory: kim_quan
+        art: layered antique-gold brocade robe embroidered with gold cloud patterns, white jade pendant on a jade belt, small gold crown on the topknot
+      - id: cong_tu_tu_yen
+        name: Tử Yên Hoa Phục
+        robe_palette: tu
+        hair_accessory: tram_ngoc
+        art: smoky-violet silk robe under a sheer lilac gauze coat with silver cloud embroidery, ivory inner collar, white jade hairpin
+      - id: cong_tu_bach_ngoc
+        name: Bạch Ngọc Công Tử Bào
+        robe_palette: bach
+        hair_accessory: day_lua
+        art: ivory white damask robe with a subtle woven floral pattern, pale-gold trim at collar and cuffs, white silk ribbon in the hair, folding fan with jade ribs at the waist
+  # ── Đạo đồ tiên: nữ ──
+  - id: tien_nu_tieu_thu
+    path: tien
+    sex: nu
+    name: Tiểu Thư Thế Gia
+    temperament: Đoan trang, kiêu hãnh nhẹ
+    traits: Mặt trái xoan. Tóc vấn cao nhiều trâm ngọc. Áo giao lĩnh nhiều lớp, quạt tròn lụa.
+    svg_hair: van_cao
+    default_outfit: tieu_thu_co_kim
+    default_pose: kiet_gia
+    pair: vu_nu_luc_si
+    default_free: true
+    outfits:
+      - id: tieu_thu_co_kim
+        name: Cổ Kim Giao Lĩnh
+        robe_palette: kim
+        hair_accessory: tram_ngoc
+        art: layered antique-gold crossed-collar gown with a high closed neckline, gold-thread peony embroidery, floor-length pleated skirt, light silk shawl over both shoulders, jade hairpins
+      - id: tieu_thu_tu_yen
+        name: Tử Yên Hoa Thường
+        robe_palette: tu
+        hair_accessory: hoa_mai
+        art: smoky-violet high-collar silk jacket with long sleeves over a pleated skirt fading from lilac to white, sheer violet shawl, plum-blossom hair ornament
+      - id: tieu_thu_ngoc_bich
+        name: Ngọc Bích Cung Trang
+        robe_palette: ngoc
+        hair_accessory: day_lua
+        art: pale jade court gown with a closed collar and long trailing sleeves, white sash embroidered with lotus, jade silk ribbon woven through the high coils
+  - id: tien_nu_kiem_khach
+    path: tien
+    sex: nu
+    name: Nữ Kiếm Khách
+    temperament: Lanh lợi, quyết đoán
+    traits: Mắt sắc, dáng thon khỏe. Tóc buộc cao dây đỏ. Áo bó tay, bao kiếm sau lưng.
+    svg_hair: duoi_ngua
+    default_outfit: nu_kiem_thanh_lam
+    default_pose: kiem_ngang
+    pair: vu_nu_tho_san
+    default_free: true
+    outfits:
+      - id: nu_kiem_thanh_lam
+        name: Thanh Lam Kình Trang
+        robe_palette: lam
+        hair_accessory: day_lua
+        art: azure fitted swordswoman outfit with a closed crossed collar and long sleeves, leather belt, tall boots, red silk cord tying the high ponytail
+      - id: nu_kiem_mac_y
+        name: Mặc Y Dạ Hành
+        robe_palette: mac
+        hair_accessory: khong
+        art: ink-black fitted travel outfit with a high closed collar, short hooded capelet over the shoulders, silver-studded bracers, plain high ponytail
+      - id: nu_kiem_bach_y
+        name: Bạch Y Kiếm Tiên
+        robe_palette: bach
+        hair_accessory: tram_ngoc
+        art: white closed-collar long-sleeved robe with pale-blue piping and a long flowing white gauze over-robe, small white jade hairpin at the ponytail
+  - id: tien_nu_y_su
+    path: tien
+    sex: nu
+    name: Y Sư
+    temperament: Dịu dàng, chu đáo
+    traits: Mặt tròn, mắt cười. Tóc tết lệch vai, khăn vấn. Giỏ dược thảo, túi kim.
+    svg_hair: tet_lech
+    default_outfit: y_su_ngoc_bich
+    default_pose: ban_gia
+    pair: vu_nu_tho_san
+    default_free: true
+    outfits:
+      - id: y_su_ngoc_bich
+        name: Ngọc Bích Y Phục
+        robe_palette: ngoc
+        hair_accessory: hoa_mai
+        art: pale jade closed-collar long-sleeved dress, white cloth apron embroidered with medicinal leaves, sleeves tied back with ribbons, plum-blossom ornament in the side braid
+      - id: y_su_hoang_tho
+        name: Hoàng Thổ Dược Bào
+        robe_palette: tho
+        hair_accessory: tram_go
+        art: warm earth-ochre cotton robe with a closed collar, brown headscarf, many-pocketed canvas satchel worn across the body, wooden hairpin
+      - id: y_su_tu_yen
+        name: Tử Yên Linh Thảo
+        robe_palette: tu
+        hair_accessory: day_lua
+        art: soft lilac closed-collar long dress embroidered with small aster flowers along the hem, pale violet sash, violet silk ribbon in the side braid
+  - id: tien_nu_an_tu
+    path: tien
+    sex: nu
+    name: Ẩn Tu
+    temperament: Tĩnh lặng, xa cách
+    traits: Gò má cao. Tóc dài xõa buộc thấp, mạng che tóc. Áo trắng nhiều lớp kín cổ. Đàn cổ cầm sau lưng.
+    svg_hair: xoa_buoc_thap
+    default_outfit: an_tu_bach_y
+    default_pose: kiet_gia
+    pair: vu_nu_luc_si
+    default_free: true
+    outfits:
+      - id: an_tu_bach_y
+        name: Bạch Y Ẩn Tu
+        robe_palette: bach
+        hair_accessory: khong
+        art: many-layered white robe with a high closed collar and long hanging sleeves, sheer white veil over the hair, no hair ornament
+      - id: an_tu_mac_nguyet
+        name: Mặc Nguyệt Sa
+        robe_palette: mac
+        hair_accessory: tram_go
+        art: charcoal-ink closed-collar robe under a sheer silver-grey gauze mantle embroidered with a crescent moon, ebony wood hairpin at the low tie
+      - id: an_tu_thanh_lam
+        name: Thanh Lam Sương Y
+        robe_palette: lam
+        hair_accessory: tram_ngoc
+        art: misty pale-azure layered robe with a high closed collar and silver hem, translucent outer layer like morning fog, small white jade hairpin
+  # ── Đạo đồ Vu (luyện thể) ──
+  - id: vu_nam_chien_si
+    path: vu
+    sex: nam
+    name: Vu Chiến Sĩ
+    temperament: Hào sảng, dũng mãnh
+    traits: To lớn, da rám. Tóc tết nhiều bím cài vòng đồng. Hoa văn mây sấm hình học trên cánh tay. Giáp vai da.
+    svg_hair: bim_nhieu
+    default_outfit: chien_si_huyet_giap
+    default_pose: trung_binh_tan
+    pair: tien_nam_kiem_khach
+    default_free: true
+    outfits:
+      - id: chien_si_huyet_giap
+        name: Huyết Sắc Chiến Y
+        robe_palette: huyet
+        hair_accessory: vong_dong
+        art: blood-red dyed leather war tunic, fur-trimmed hide shoulder guards, broad belt with bronze studs, bronze rings on the braids
+      - id: chien_si_thanh_dong
+        name: Thanh Đồng Lôi Giáp
+        robe_palette: dong
+        hair_accessory: day_da
+        art: verdigris bronze plate armour over a coarse undyed tunic, plates engraved with angular thunder-cloud bands, braids bound with leather thongs
+      - id: chien_si_mac_lang
+        name: Mặc Lang Bì
+        robe_palette: mac
+        hair_accessory: long_vu
+        art: ash-black wolf-pelt mantle over bare tattooed arms, dark indigo-black trousers and hide boots, black feathers tied into the braids
+  - id: vu_nam_hanh_gia
+    path: vu
+    sex: nam
+    name: Vu Hành Giả
+    temperament: Trầm, kiên nhẫn
+    traits: Gầy rắn, tóc cạo hai bên buộc chỏm. Chuỗi xương thú, gậy gỗ mộc, áo vải thô.
+    svg_hair: chom
+    default_outfit: hanh_gia_hoang_tho
+    default_pose: toa_thach
+    pair: tien_nam_an_si
+    default_free: true
+    outfits:
+      - id: hanh_gia_hoang_tho
+        name: Hoàng Thổ Hành Y
+        robe_palette: tho
+        hair_accessory: day_da
+        art: earth-ochre coarse-cloth tunic and wrap trousers, necklace of animal bones, leather thong tying the topknot
+      - id: hanh_gia_mac_thach
+        name: Mặc Thạch Tế Y
+        robe_palette: mac
+        hair_accessory: vong_dong
+        art: knee-length rough black shaman coat painted with white angular ward-patterns along the hem, rope belt, bronze ring on the topknot
+      - id: hanh_gia_thanh_dong
+        name: Thanh Đồng Tế Phục
+        robe_palette: dong
+        hair_accessory: long_vu
+        art: verdigris-green ritual robe with a woven geometric shoulder cloth, small bronze bells on the belt, single long feather in the topknot
+  - id: vu_nu_tho_san
+    path: vu
+    sex: nu
+    name: Nữ Thợ Săn
+    temperament: Nhanh nhẹn, thẳng thắn
+    traits: Dáng cao. Tóc tết đuôi dài. Áo da kín, khăn choàng lông. Cung sau lưng.
+    svg_hair: tet_duoi
+    default_outfit: tho_san_hoang_tho
+    default_pose: toa_thach
+    pair: tien_nu_kiem_khach
+    default_free: true
+    outfits:
+      - id: tho_san_hoang_tho
+        name: Hoàng Thổ Liệp Y
+        robe_palette: tho
+        hair_accessory: long_vu
+        art: earth-ochre fully covering leather hunting tunic with long sleeves, fur shawl over the shoulders, feather tied in the long braid
+      - id: tho_san_huyet_hoa
+        name: Huyết Hoa Liệp Trang
+        robe_palette: huyet
+        hair_accessory: day_da
+        art: cinnabar-red dyed leather hunting coat with a closed collar and long sleeves, fringed hem, wrapped leggings, leather thong at the end of the braid
+      - id: tho_san_mac_ung
+        name: Mặc Ưng Bì Bào
+        robe_palette: mac
+        hair_accessory: vong_dong
+        art: charcoal hawk-grey fur cloak with the hood lowered on the shoulders, long-sleeved dark leather coat fully covering, bronze ring at the end of the braid
+  - id: vu_nu_luc_si
+    path: vu
+    sex: nu
+    name: Nữ Lực Sĩ
+    temperament: Vững chãi, ấm áp
+    traits: Vạm vỡ, vai rộng. Tóc ngắn buộc khăn. Vòng đồng ở cổ tay, búa nhỏ đeo hông. Áo giáp da kín.
+    svg_hair: ngan_khan
+    default_outfit: luc_si_thanh_dong
+    default_pose: trung_binh_tan
+    pair: tien_nu_tieu_thu
+    default_free: true
+    outfits:
+      - id: luc_si_thanh_dong
+        name: Thanh Đồng Giáp Y
+        robe_palette: dong
+        hair_accessory: vong_dong
+        art: closed leather armour tunic edged with verdigris bronze plates, bronze cuffs on the wrists, bronze ring clasping the cloth band around the short hair
+      - id: luc_si_huyet_son
+        name: Huyết Sơn Chiến Bào
+        robe_palette: huyet
+        hair_accessory: day_da
+        art: thick blood-red closed-collar war coat with a hardened leather breastplate, broad belt, leather cord binding the headband
+      - id: luc_si_hoang_tho
+        name: Hoàng Thổ Lò Rèn
+        robe_palette: tho
+        hair_accessory: khong
+        art: earth-ochre heavy cotton work tunic fully covering, scorched leather smith's apron, sleeves bound with cord, plain ochre head cloth, no hair ornament
+
+hair_accessories:
+  - { id: khong,     name: Không đeo,  paths: [tien, vu], default_free: true }
+  - { id: tram_ngoc, name: Trâm ngọc,  paths: [tien],     default_free: true }
+  - { id: kim_quan,  name: Kim quan,   paths: [tien],     default_free: true }
+  - { id: day_lua,   name: Dải lụa,    paths: [tien],     default_free: true }
+  - { id: hoa_mai,   name: Hoa mai,    paths: [tien],     default_free: true }
+  - { id: tram_go,   name: Trâm gỗ,    paths: [tien],     default_free: true }
+  - { id: vong_dong, name: Vòng đồng,  paths: [vu],       default_free: true }
+  - { id: long_vu,   name: Lông vũ,    paths: [vu],       default_free: true }
+  - { id: day_da,    name: Dây da,     paths: [vu],       default_free: true }
+
+robe_palettes:
+  - { id: mac,   name: Mặc,      paths: [tien, vu], default_free: true }
+  - { id: ngoc,  name: Ngọc bích, paths: [tien],    default_free: true }
+  - { id: kim,   name: Cổ kim,   paths: [tien],     default_free: true }
+  - { id: lam,   name: Thanh lam, paths: [tien],    default_free: true }
+  - { id: tu,    name: Tử yên,   paths: [tien],     default_free: true }
+  - { id: bach,  name: Bạch y,   paths: [tien],     default_free: true }
+  - { id: tho,   name: Hoàng thổ, paths: [tien, vu], default_free: true }
+  - { id: huyet, name: Huyết sắc, paths: [vu],      default_free: true }
+  - { id: dong,  name: Thanh đồng, paths: [vu],     default_free: true }
+
+poses:
+  - { id: kiet_gia,       name: Kiết già,        path: tien, default_free: true }
+  - { id: ban_gia,        name: Bán già,         path: tien, default_free: true }
+  - { id: kiem_ngang,     name: Kiếm đặt ngang,  path: tien, default_free: true }
+  - { id: trung_binh_tan, name: Trung bình tấn,  path: vu,   default_free: true }
+  - { id: toa_thach,      name: Tọa thạch,       path: vu,   default_free: true }

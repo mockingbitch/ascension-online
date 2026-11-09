@@ -9,6 +9,8 @@
 	import { chat, loadOlder, markChatVisible, sendChat } from '$lib/game/chat.svelte';
 	import { hall, markHallChatVisible } from '$lib/game/lecture.svelte';
 	import { game } from '$lib/game/store.svelte';
+	import { news } from '$lib/game/news.svelte';
+	import { chatLines, type ChatLine } from '$lib/game/newsRules';
 	import { openWindow } from '$lib/game/windows';
 	import type { ChatMessage } from '$lib/game/types';
 	import Icon from './Icon.svelte';
@@ -26,6 +28,8 @@
 	const cat = $derived(game.catalogue);
 	const me = $derived(game.character);
 	const messages = $derived(tab === 'room' ? hall.messages : chat.messages);
+	// world tab: other players' news as client-side system lines (shown, never stored as chat — GĐ-D)
+	const lines = $derived<ChatLine[]>(tab === 'world' ? chatLines(chat.messages, news.items) : messages.map((m) => ({ kind: 'msg' as const, key: `m${m.id}`, at: 0, msg: m })));
 	const loaded = $derived(tab === 'room' ? hall.chatLoaded : chat.loaded);
 	const channel = $derived(tab === 'room' ? hall.chatChannel : chat.channel);
 	const draft = $derived(tab === 'room' ? hall.draft : chat.draft);
@@ -53,7 +57,7 @@
 
 	// Auto-scroll on new messages / tab switch when pinned to the bottom.
 	$effect(() => {
-		void messages.length;
+		void lines.length;
 		void tab;
 		if (!list || !stick) return;
 		void tick().then(() => list && (list.scrollTop = list.scrollHeight));
@@ -94,7 +98,7 @@
 	const time = (iso: string) => new Date(iso).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
 	const auraOf = (stageId: string) => cat?.realmOf(stageId)?.visual.aura ?? 'none';
 	const openProfile = (m: ChatMessage) =>
-		openWindow({ kind: 'profile', characterId: m.characterId, name: m.name, stageId: m.stageId, messageId: m.id, nameFx: m.nameFx });
+		openWindow({ kind: 'profile', characterId: m.characterId, name: m.name, stageId: m.stageId, messageId: m.id, nameFx: m.nameFx, look: m.look });
 </script>
 
 <section class="flex h-full min-h-0 flex-col" aria-label="Kênh trò chuyện">
@@ -134,7 +138,15 @@
 		{:else if !loaded}
 			<li class="py-6 text-center text-mist-300">Đang kết nối truyền âm…</li>
 		{/if}
-		{#each messages as m (m.id)}
+		{#each lines as l (l.key)}
+			{#if l.kind === 'news'}
+				<li class="sys leading-snug break-words" data-chat-news={l.news.kind}>
+					<span class="mr-1 text-xs text-mist-500 tabular-nums">{time(l.news.createdAt)}</span>
+					<Icon name={l.news.kind === 'rank_top10' ? 'rank' : 'bolt'} size={12} class="mr-0.5 inline align-[-1px] text-gold-500" />
+					<span class="text-gold-300">{l.news.text}</span>
+				</li>
+			{:else}
+			{@const m = l.msg}
 			<li class="msg leading-snug break-words" class:mine={m.characterId === me?.id}>
 				<span class="mr-1 text-xs text-mist-500 tabular-nums">{time(m.sentAt)}</span>
 				<button type="button" class="name font-semibold hover:underline" style:color="var(--color-aura-{auraOf(m.stageId)})" onclick={() => openProfile(m)}>
@@ -142,6 +154,7 @@
 				</button><span class="text-mist-500">:</span>
 				<span class="text-mist-100">{m.text}</span>
 			</li>
+			{/if}
 		{/each}
 	</ol>
 

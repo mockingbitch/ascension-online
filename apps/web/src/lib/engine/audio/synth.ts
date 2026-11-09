@@ -97,6 +97,37 @@ export const RECIPES: Record<string, Recipe> = {
 			{ wave: 'noise', f: 400, f1: 3000, decay: 0.6, len: 1.6, gain: 0.45, attack: 0.5, delay: 0.1 }
 		]
 	},
+	// effect tiers: each adds a layer — 2 jade bell, 3 + bronze khánh, 4 + low gong after the storm, 5 + cổ cầm
+	// arpeggio, 6 + a soft choir pad (original placeholders; recordings replace them)
+	'sfx.bt_tier2': { partials: [...bell(784, 1.0, 0.9), ...shimmer(1568, 0.6, 0.3, 0.15)] },
+	'sfx.bt_tier3': { partials: [...bell(659, 1.2, 0.9), ...bell(988, 1.0, 0.6, 0.18), { wave: 'sine', f: 165, decay: 0.6, len: 1.4, gain: 0.45, attack: 0.03 }] },
+	'sfx.bt_tier4': {
+		partials: [
+			{ wave: 'sine', f: 82, f1: 78, decay: 0.9, len: 2.0, gain: 1, attack: 0.03, trem: [2.5, 0.25] },
+			...bell(523, 1.4, 0.8, 0.1),
+			...bell(784, 1.2, 0.5, 0.3)
+		]
+	},
+	'sfx.bt_tier5': {
+		partials: [
+			{ wave: 'sine', f: 98, decay: 0.9, len: 2.0, gain: 0.9, attack: 0.03 },
+			{ wave: 'triangle', f: 392, decay: 0.4, len: 0.9, gain: 0.5, attack: 0.004 },
+			{ wave: 'triangle', f: 494, decay: 0.4, len: 0.9, gain: 0.5, attack: 0.004, delay: 0.12 },
+			{ wave: 'triangle', f: 587, decay: 0.4, len: 0.9, gain: 0.5, attack: 0.004, delay: 0.24 },
+			{ wave: 'triangle', f: 784, decay: 0.5, len: 1.1, gain: 0.5, attack: 0.004, delay: 0.36 },
+			...bell(1046, 1.4, 0.6, 0.5)
+		]
+	},
+	'sfx.bt_tier6': {
+		partials: [
+			{ wave: 'sine', f: 65, decay: 1.0, len: 2.0, gain: 1, attack: 0.05 },
+			{ wave: 'triangle', f: 262, decay: 1.0, len: 1.9, gain: 0.35, attack: 0.5, trem: [5, 0.15] },
+			{ wave: 'triangle', f: 330, decay: 1.0, len: 1.9, gain: 0.3, attack: 0.55, trem: [5.5, 0.15] },
+			{ wave: 'triangle', f: 392, decay: 1.0, len: 1.9, gain: 0.3, attack: 0.6, trem: [6, 0.15] },
+			...bell(784, 1.6, 0.7, 0.2),
+			...bell(1175, 1.4, 0.45, 0.45)
+		]
+	},
 	'sfx.thunder': {
 		partials: [
 			{ wave: 'noise', f: 6000, f1: 1500, decay: 0.05, len: 0.25, gain: 1, attack: 0.001 },

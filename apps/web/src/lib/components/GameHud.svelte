@@ -92,7 +92,7 @@
 				aria-label="Hồ sơ {ch.name}"
 				onclick={() => openWindow({ kind: 'profile', characterId: ch.id, name: ch.name, stageId: ch.stageId })}
 			>
-				<Portrait aura={realm?.visual.aura ?? 'none'} size={40} frameId={ch.appearance?.avatarFrameId} />
+				<Portrait aura={realm?.visual.aura ?? 'none'} size={40} frameId={ch.appearance?.avatarFrameId} look={ch.appearance?.look} fxTier={realm?.visual.fxTier} />
 			</button>
 			<span class="min-w-0">
 				<button
@@ -119,7 +119,7 @@
 		</div>
 
 		<!-- tu vi: the one progress the whole game is about, centred -->
-		<div class="qi hidden w-[min(22rem,30vw)] shrink-0 md:block" title="Tu vi tầng hiện tại (số liệu máy chủ)" data-fx-target="qi">
+		<div class="qi hidden w-[min(22rem,30vw)] shrink-0 md:block" title="Tu vi tầng hiện tại (số liệu máy chủ)" data-fx-target="qi" data-tutorial="qi">
 			<div class="flex items-baseline justify-between gap-2 text-xs">
 				<span class="text-mist-300"
 					>Tu vi <strong class="text-sm font-semibold text-mist-100 tabular-nums"

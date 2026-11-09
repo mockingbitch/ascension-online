@@ -6,8 +6,11 @@
 	import ReportDialog from '$lib/components/ReportDialog.svelte';
 	import { api } from '$lib/api/client';
 	import { session } from '$lib/api/session.svelte';
+	import { cosmetics } from '$lib/game/cosmetics.svelte';
 
 	let { data } = $props();
+	// the appearance catalogue draws each podium portrait's chosen look (display only)
+	$effect(() => void cosmetics.load(true));
 	const cat = $derived(data.catalogue);
 
 	const firstPage = $derived(data.page?.offset === 0);
@@ -62,7 +65,7 @@
 					style:--aura="var(--color-aura-{aura})"
 				>
 					<RankMedal rank={e.rank} size={e.rank === 1 ? 52 : 44} />
-					<div class="mt-4"><Portrait {aura} size={e.rank === 1 ? 112 : 88} /></div>
+					<div class="mt-4"><Portrait {aura} size={e.rank === 1 ? 112 : 88} look={e.look} /></div>
 					<p class="mt-4 w-full truncate font-display text-2xl font-bold text-mist-100">{e.name}</p>
 					<div class="mt-2">{#if realm}<RealmBadge name={realm.name} {aura} size="sm" />{/if}</div>
 					<p class="mt-2 text-sm text-mist-300">{stageOnly(e.stageId)}</p>

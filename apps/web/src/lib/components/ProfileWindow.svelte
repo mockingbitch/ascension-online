@@ -20,13 +20,18 @@
 	const avatarFrameId = $derived('avatarFrameId' in p ? p.avatarFrameId : undefined);
 	const titleId = $derived('titleId' in p ? p.titleId : undefined);
 	const nameFx = $derived('nameFx' in p ? p.nameFx : undefined);
+	const bodyLook = $derived('look' in p ? p.look : undefined);
 
 	const me = $derived(characterId === game.character?.id);
 	// My own card shows live data; others show the snapshot carried by the chat message / leaderboard row.
 	const stage = $derived(me && game.character ? game.character.stageId : stageId);
 	const realm = $derived(game.catalogue?.realmOf(stage));
 	// Cosmetics (looks only): live for me, the snapshot carried by the row/message for others.
-	const look = $derived(me && game.character?.appearance ? { ...game.character.appearance, nameFx: game.character.appearance.chatAuraId } : { avatarFrameId, titleId, nameFx });
+	const look = $derived(
+		me && game.character?.appearance
+			? { ...game.character.appearance, nameFx: game.character.appearance.chatAuraId }
+			: { avatarFrameId, titleId, nameFx, look: bodyLook }
+	);
 	const title = $derived(cosmetics.name(look.titleId));
 	const rank = $derived(me ? game.myRank : (game.top.find((e) => e.characterId === characterId)?.rank ?? null));
 	let reportTarget = $state<{ characterId: string; name: string; messageId?: number } | null>(null);
@@ -44,7 +49,7 @@
 </script>
 
 <div class="flex flex-col items-center text-center">
-	<Portrait aura={realm?.visual.aura ?? 'none'} size={104} frameId={look.avatarFrameId} />
+	<Portrait aura={realm?.visual.aura ?? 'none'} size={104} frameId={look.avatarFrameId} look={look.look} />
 	<p class="mt-3 font-display text-3xl font-bold text-mist-100"><NameFx fx={look.nameFx}>{name}</NameFx></p>
 	{#if title}<p class="mt-0.5 text-sm text-gold-300">「{title}」</p>{/if}
 	{#if realm}<div class="mt-2"><RealmBadge name={realm.name} aura={realm.visual.aura} size="sm" /></div>{/if}

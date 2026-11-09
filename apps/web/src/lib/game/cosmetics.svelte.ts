@@ -9,6 +9,8 @@ import type { CosmeticCatalog, CosmeticDef, CosmeticKind } from './types';
 class CosmeticsStore {
 	catalog = $state<CosmeticCatalog | null>(null);
 	readonly byId = $derived(new Map((this.catalog?.cosmetics ?? []).map((c) => [c.id, c])));
+	/** body / accessory / robe / pose catalogue (appearances.yaml), served with the cosmetics catalogue */
+	readonly looks = $derived(this.catalog?.appearances);
 	#loading: Promise<void> | null = null;
 
 	/**

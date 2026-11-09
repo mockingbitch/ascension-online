@@ -203,7 +203,7 @@
 		</div>
 		<div class="relative mx-auto flex max-w-2xl items-center justify-between gap-2">
 			<div class="flex min-w-0 flex-col items-center text-center">
-				<div class="ring" class:is-beat={!!partner && partnerHere} data-beat={!!partner && partnerHere}><Portrait aura={aura(ch.stageId)} size={96} /></div>
+				<div class="ring" class:is-beat={!!partner && partnerHere} data-beat={!!partner && partnerHere}><Portrait aura={aura(ch.stageId)} size={96} look={game.character?.appearance?.look} /></div>
 				<p class="mt-2 max-w-[9rem] truncate font-display text-xl font-bold text-mist-100">{ch.name}</p>
 				<p class="text-xs text-mist-300">{cat.stageLabel(ch.stageId)}</p>
 			</div>

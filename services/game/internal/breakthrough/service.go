@@ -386,7 +386,14 @@ func (s *Service) recordSuccess(ctx context.Context, q *db.Queries, ch db.Charac
 			return err
 		}
 	}
-	ann, _ := json.Marshal(map[string]any{"characterId": ch.ID.String(), "name": ch.Name, "realmId": to.RealmID, "stageId": to.ID, "tribulation": from.Tribulation})
+	// First character of the world to reach this realm id (decisions 2026-11-09 #7): race-free — the PK lets exactly
+	// one commit win; display only (the worker turns it into a first_to_realm announcement).
+	n, err := q.InsertRealmFirst(ctx, db.InsertRealmFirstParams{RealmID: to.RealmID, CharacterID: pgtype.UUID{Bytes: ch.ID, Valid: true}, Now: now})
+	if err != nil {
+		return fmt.Errorf("realm first: %w", err)
+	}
+	ann, _ := json.Marshal(map[string]any{"characterId": ch.ID.String(), "name": ch.Name, "realmId": to.RealmID, "stageId": to.ID,
+		"path": to.Path, "tribulation": from.Tribulation, "first": n == 1})
 	return q.InsertOutboxEvent(ctx, db.InsertOutboxEventParams{Topic: "announcement.major_breakthrough", AggregateID: ch.ID.String(), Payload: ann})
 }
 

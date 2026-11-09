@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
+	"tiendao/game/internal/announce"
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/chat"
 	"tiendao/game/internal/contribution"
 	"tiendao/game/internal/cosmetic"
@@ -53,6 +56,8 @@ type Bundle struct {
 	Payments     *payment.Catalogue     // nạp Tiên Duyên packages + framework settings (Phase 4)
 	DaoLu        *daolu.Config          // đạo lữ song tu (Phase 5.1)
 	Trade        *trade.Config          // trao đổi vật phẩm (Phase 5.2)
+	Appearances  *appearance.Catalogue  // ngoại hình nhân vật, display only (decisions 2026-11-09)
+	Announce     *announce.Settings     // pacing of world announcements, display only (decisions 2026-11-09 GĐ-D)
 }
 
 // LoadAll loads content/catalog/*.yaml from dir and validates cross-file references.
@@ -120,6 +125,12 @@ func LoadAll(dir string) (*Bundle, error) {
 		return nil, err
 	}
 	if b.Trade, err = trade.LoadFile(filepath.Join(dir, "trade.yaml")); err != nil {
+		return nil, err
+	}
+	if b.Appearances, err = appearance.LoadFile(filepath.Join(dir, "appearances.yaml")); err != nil {
+		return nil, err
+	}
+	if b.Announce, err = announce.LoadFile(filepath.Join(dir, "announcements.yaml")); err != nil {
 		return nil, err
 	}
 	if err := b.crossCheck(); err != nil {
@@ -190,6 +201,16 @@ func (b *Bundle) crossCheck() error {
 	}
 	if b.DailyTasks.MaxStreakPointsMilli() > b.Contribution.Buckets[contribution.Activity].CapMilli {
 		errs = append(errs, fmt.Errorf("daily task streak points exceed the activity bucket"))
+	}
+	// Appearances: paths exist, every path offers a free body of each sex.
+	if err := b.Appearances.CrossCheck(b.Realms); err != nil {
+		errs = append(errs, err)
+	}
+	// A path change grants one free body re-pick (decisions 2026-11-09 #4): faction switches (which can change the
+	// path) must not be more frequent than the body cooldown, or alternating factions would bypass it.
+	if bc := time.Duration(b.Appearances.Settings.BodyChangeCooldownSeconds) * time.Second; b.Factions.Settings.SwitchCooldown < bc {
+		errs = append(errs, fmt.Errorf("factions switch_cooldown_seconds (%s) is shorter than appearances body_change_cooldown_seconds (%s)",
+			b.Factions.Settings.SwitchCooldown, bc))
 	}
 	// Factions: paths, eras, split/migrate effect ids and era windows (data model §6.4, F7).
 	if err := b.Factions.CrossCheck(b.Realms, b.World); err != nil {

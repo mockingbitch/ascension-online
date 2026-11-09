@@ -49,12 +49,12 @@ func ResetTables() []string {
 		"faction_donations", "faction_donation_days", "faction_donors", "secret_realm_runs", "secret_realm_days",
 		"character_artifacts", "protector_invites", "protector_assists", "protector_days",
 		"dao_lu_proposals", "dao_lu_bonds", "dao_lu_members", "dao_lu_events", "dao_lu_song_tu_claims",
-		"trade_offers", "trade_lines", "trade_days", "trade_events",
+		"trade_offers", "trade_lines", "trade_days", "trade_events", "tutorial_progress", "tutorial_prefs",
 		// user-level game state + pipeline
 		"late_join_grants", "vip_entitlements", "outbox_events",
 		// world
 		"world_state", "world_daily_totals", "world_milestones_reached", "world_effects", "world_events",
-		"world_milestone_overrides", "faction_treasuries",
+		"world_milestone_overrides", "faction_treasuries", "realm_firsts", "world_announcements",
 	}
 }
 

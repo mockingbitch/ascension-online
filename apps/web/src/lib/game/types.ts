@@ -35,7 +35,9 @@ export interface Stage {
 export type Aura =
 	| 'none' | 'mist' | 'jade' | 'golden' | 'azure' | 'violet'
 	| 'void' | 'crimson' | 'radiant' | 'thunder' | 'celestial'
-	| 'earth' | 'aureate' | 'primal' | 'chaos' | 'saint' | 'blood';
+	| 'earth' | 'aureate' | 'primal' | 'chaos' | 'saint' | 'blood'
+	// Vu path: one token per effect tier (decisions 2026-11-09 #10)
+	| 'vu-ember' | 'vu-blood' | 'vu-crimson' | 'vu-storm' | 'vu-totem' | 'vu-ancestral';
 
 export interface Realm {
 	id: string;
@@ -45,7 +47,8 @@ export interface Realm {
 	namePlaceholder?: boolean;
 	title: string;
 	reserved?: boolean;
-	visual: { badge: string; aura: Aura };
+	/** fxTier 1–6: the effect tier of the realm's tier (realms.yaml tiers[].visual.fx_tier), shared by both paths */
+	visual: { badge: string; aura: Aura; fxTier: number };
 	stages: Stage[];
 }
 
@@ -459,8 +462,30 @@ interface Envelope<T extends string, D> {
 	data: D;
 }
 /** Feed items: every one carries a server-rendered `data.text` (packages/contracts/ws-messages.md). */
+/** A world announcement (GĐ-D, decisions 2026-11-09 #7 #8 #12): GET /announcements/recent and the WS
+ *  `announcement.*` data. Public fields only — the đạo hiệu names the player. */
+export interface WorldAnnouncement {
+	/** history row id (= WS envelope id) */
+	id: number;
+	kind: 'realm' | 'tribulation' | 'first_to_realm' | 'rank_top10' | 'digest';
+	/** effect tier of the realm (0 = none, e.g. rank news) */
+	tier: number;
+	characterId?: string;
+	characterName: string;
+	realmId?: string;
+	stageId?: string;
+	path?: PathId;
+	tribulation: boolean;
+	rank?: number;
+	/** digest: how many others */
+	count?: number;
+	text: string;
+	createdAt: string;
+}
+export type NewsType = 'announcement.major_breakthrough' | 'announcement.first_to_realm' | 'announcement.rank_top10' | 'announcement.digest';
+
 export type Announcement =
-	| Envelope<'announcement.major_breakthrough', { characterId: string; characterName: string; realmId: string; stageId: string; text: string }>
+	| Envelope<NewsType, WorldAnnouncement>
 	| Envelope<'world.milestone_reached', WorldMilestoneReachedData>
 	| Envelope<'world.event_ended', WorldEventEndedData>
 	| Envelope<'faction.announcement', FactionAnnouncementData>;
@@ -614,6 +639,8 @@ export interface ChatMessage {
 	sentAt: string;
 	/** chat_aura cosmetic the sender wore when posting (display only) */
 	nameFx?: string;
+	/** sender look at send time (display only; absent on old messages) */
+	look?: Look;
 }
 export interface ChatHistory {
 	channel: ChatChannel;
@@ -652,6 +679,8 @@ export interface Listener {
 	stageId: string;
 	/** -1 = listening outside the hall */
 	seat: number;
+	/** listener look (display only) */
+	look?: Look;
 }
 export interface InsightSlot {
 	no: number;
@@ -731,6 +760,8 @@ export interface LeaderboardEntry {
 	/** equipped cosmetics (display only, never part of the score) */
 	avatarFrameId?: string;
 	titleId?: string;
+	/** chosen look resolved for the row's path (display only) */
+	look?: Look;
 }
 export interface LeaderboardPage {
 	entries: LeaderboardEntry[];
@@ -814,6 +845,7 @@ export interface FactionMemberEntry {
 	stageId: string;
 	avatarFrameId?: string;
 	titleId?: string;
+	look?: Look;
 }
 export interface FactionMembersPage {
 	factionId: string;
@@ -999,6 +1031,85 @@ export interface Appearance {
 	avatarFrameId?: string;
 	chatAuraId?: string;
 	caveDecorationIds: string[];
+	/** body / accessory / robe / pose. Response: the look shown for the current path. Equip: optional (absent = keep). */
+	look?: Look;
+}
+
+// ───── appearances (content/catalog/appearances.yaml; decisions 2026-11-09 "Ngoại hình…") ─────
+// Display only: a look never changes tu vi, odds, rank or điểm duyên.
+
+/**
+ * A character's look: body + painted outfit + pose (decision "Bộ trang phục vẽ sẵn"). Served resolved: complete and
+ * valid for the path. hairId / robePaletteId are the outfit's parts (derived by the server; requests may carry them,
+ * the server takes them from the outfit).
+ */
+export interface Look {
+	bodyId: string;
+	/** one of the body's outfits; absent only on chat snapshots older than outfits (derive with `outfitOf`) */
+	outfitId?: string;
+	hairId: string;
+	/** web token --color-robe-<id> */
+	robePaletteId: string;
+	poseId: string;
+}
+export type BodySex = 'nam' | 'nu';
+/** SVG fallback hairstyles (CultivatorFigure); the server validates the same list. */
+export type SvgHair =
+	| 'bui_cao'
+	| 'bui_nua'
+	| 'duoi_ngua'
+	| 'van_cao'
+	| 'tet_lech'
+	| 'xoa_buoc_thap'
+	| 'bim_nhieu'
+	| 'chom'
+	| 'tet_duoi'
+	| 'ngan_khan';
+export interface BodyDef {
+	id: string;
+	path: PathId;
+	sex: BodySex;
+	name: string;
+	temperament: string;
+	traits: string;
+	svgHair: SvgHair;
+	beard?: boolean;
+	/** parts of defaultOutfit */
+	defaultHair: string;
+	defaultRobe: string;
+	defaultOutfit: string;
+	defaultPose: string;
+	/** same-sex body on the other path (shown after a path change) */
+	pair: string;
+	defaultFree: boolean;
+	/** exactly 3 painted outfits; art in characters/<body>[/<outfit>]/… (the default outfit = the body folder) */
+	outfits: OutfitDef[];
+}
+/** A painted outfit: robe colour + hair accessory baked into the body's art. */
+export interface OutfitDef {
+	id: string;
+	name: string;
+	robePaletteId: string;
+	hairId: string;
+}
+export interface LookOption {
+	id: string;
+	name: string;
+	paths: PathId[];
+	defaultFree: boolean;
+}
+export interface PoseDef {
+	id: string;
+	name: string;
+	path: PathId;
+	defaultFree: boolean;
+}
+export interface AppearanceCatalog {
+	settings: { bodyChangeCooldownSeconds: number };
+	bodies: BodyDef[];
+	hairAccessories: LookOption[];
+	robePalettes: LookOption[];
+	poses: PoseDef[];
 }
 export interface CosmeticDef {
 	id: string;
@@ -1039,6 +1150,8 @@ export interface CosmeticCatalog {
 	seasons: CosmeticSeason[];
 	series: CosmeticSeries[];
 	cosmetics: CosmeticDef[];
+	/** body / accessory / robe / pose catalogue (absent on an older server) */
+	appearances?: AppearanceCatalog;
 }
 export interface CosmeticsView {
 	balance: number;
@@ -1050,6 +1163,8 @@ export interface CosmeticsView {
 	/** shop cosmetics inside their season/era window right now */
 	available: string[];
 	equipped: Appearance;
+	/** when the next body change is allowed (null = now) */
+	bodyRetryAt?: string | null;
 }
 export interface CosmeticBuyResult {
 	cosmeticId: string;
@@ -1567,4 +1682,41 @@ export interface TradePeer {
 	receiveCap: number;
 	/** why they cannot receive now */
 	blockers: TradeBlocker[];
+}
+
+// ───── tutorial (Vân Khê; content/story/tutorial/*.yaml, decisions 2026-11-09 #1) ─────
+// Display only: a step never grants anything. Steps fire from server facts (fxBus after a server answer, server
+// previews) or places the player opened — never client guesses.
+
+/** Expression = art slot characters/guide/<expr> (SVG fallback draws each). */
+export type GuideExpr = 'neutral' | 'smile' | 'point' | 'worried' | 'proud' | 'surprised';
+export interface TutorialLine {
+	expr: GuideExpr;
+	/** ≤ 200 characters, numbers already filled from the catalogues */
+	text: string;
+	/** data-tutorial="<id>" target to highlight */
+	spotlight?: string;
+}
+export interface TutorialStep {
+	id: string;
+	/** onboarding = /create before a character exists (client-only); play = stored on the server */
+	flow: 'onboarding' | 'play';
+	trigger: string;
+	title: string;
+	lines: TutorialLine[];
+}
+export interface TutorialScript {
+	guide: string;
+	name: string;
+	steps: TutorialStep[];
+}
+export interface TutorialState {
+	done: string[];
+	skipped: string[];
+	/** "không nhắc lại" */
+	muted: boolean;
+}
+export interface TutorialMarkResult {
+	replayed: boolean;
+	state: TutorialState;
 }

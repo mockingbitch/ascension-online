@@ -19,6 +19,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"tiendao/game/internal/announce"
 	"tiendao/game/internal/artifact"
 	"tiendao/game/internal/auth"
 	"tiendao/game/internal/breakthrough"
@@ -44,6 +45,7 @@ import (
 	"tiendao/game/internal/shop"
 	"tiendao/game/internal/trade"
 	"tiendao/game/internal/trial"
+	"tiendao/game/internal/tutorial"
 	"tiendao/game/internal/vip"
 	"tiendao/game/internal/world"
 )
@@ -74,6 +76,8 @@ type Deps struct {
 	Fortune      *ritual.Fortune      // gieo quẻ
 	Trials       *trial.Service       // mini-game trials (Phase 3)
 	Cosmetics    *cosmetic.Service    // non-progress sinks: titles, frames, chat auras, cave decorations
+	Tutorial     *tutorial.Service    // Vân Khê's "lần đầu" progress (display only); nil → tutorial routes answer 503
+	Announce     *announce.Service    // world announcement history (GET /announcements/recent); nil → 503
 	FactionWorks *factionwork.Service // cúng góp thế lực (visual faction works)
 	SecretRealms *secretrealm.Service // bí cảnh thử luyện (Phase 3.4)
 	Artifacts    *artifact.Service    // pháp bảo slot (Phase 3.4)
@@ -129,6 +133,7 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/v1/world", worldLimit.byIP(http.HandlerFunc(d.getWorld)))
 	mux.Handle("GET /api/v1/factions", worldLimit.byIP(http.HandlerFunc(d.listFactions)))
 	mux.Handle("GET /api/v1/cosmetics/catalog", worldLimit.byIP(http.HandlerFunc(d.cosmeticCatalog)))
+	mux.Handle("GET /api/v1/announcements/recent", worldLimit.byIP(http.HandlerFunc(d.announcementsRecent)))
 
 	// Auth
 	mux.Handle("GET /api/v1/auth/google/start", authLimit.byIP(http.HandlerFunc(d.googleStart)))
@@ -183,6 +188,13 @@ func New(d Deps) http.Handler {
 	mux.Handle("POST /api/v1/factions/join", d.authn(gameLimit.byUser(d.factionChange("join"))))
 	mux.Handle("POST /api/v1/factions/switch", d.authn(gameLimit.byUser(d.factionChange("switch"))))
 	mux.Handle("POST /api/v1/factions/split-choice", d.authn(gameLimit.byUser(d.factionChange("split_choice"))))
+
+	mux.Handle("GET /api/v1/tutorial/script", worldLimit.byIP(http.HandlerFunc(d.tutorialScript)))
+	mux.Handle("GET /api/v1/tutorial", d.authn(gameLimit.byUser(http.HandlerFunc(d.tutorialState))))
+	mux.Handle("POST /api/v1/tutorial/steps/{stepId}/done", d.authn(gameLimit.byUser(d.tutorialMark("done"))))
+	mux.Handle("POST /api/v1/tutorial/steps/{stepId}/skip", d.authn(gameLimit.byUser(d.tutorialMark("skipped"))))
+	mux.Handle("POST /api/v1/tutorial/skip-all", d.authn(gameLimit.byUser(http.HandlerFunc(d.tutorialSkipAll))))
+	mux.Handle("POST /api/v1/tutorial/reset", d.authn(gameLimit.byUser(http.HandlerFunc(d.tutorialReset))))
 
 	mux.Handle("GET /api/v1/lecture/scripts", http.HandlerFunc(d.lectureScripts))
 	mux.Handle("GET /api/v1/lecture/state", d.authn(gameLimit.byUser(http.HandlerFunc(d.lectureState))))

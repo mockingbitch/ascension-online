@@ -25,6 +25,8 @@ export interface SfxContext {
 	rarityOf: (itemId: string) => Rarity | undefined;
 	/** my character id: my own chat lines make no sound */
 	selfId: string | null;
+	/** effect tier of a stage's realm (realms.yaml visual.fx_tier) — picks the breakthrough cue of the tier */
+	tierOf?: (stageId: string) => number | undefined;
 }
 
 export const RARITY_ORDER: Rarity[] = ['pham', 'linh', 'huyen', 'dia', 'thien', 'tien'];
@@ -61,24 +63,23 @@ export function sfxFor(e: SfxInput, c: SfxContext): SfxCue[] {
 			return r ? [cue(`sfx.item_${r}`)] : [];
 		}
 		case 'announcement':
-			return [cue('sfx.announcement')];
+			// other players' breakthrough news sound only when its large banner asked (settings.others.sound)
+			return e.kind === 'breakthrough' && !e.sound ? [] : [cue('sfx.announcement')];
 		case 'trialResult':
 			return [cue(e.verdict === 'pass' ? 'sfx.stage_up' : 'sfx.fail')];
 		case 'fortune':
 			return e.lucky ? [cue('sfx.item_linh')] : [];
 		case 'breakthrough': {
-			const plan = planBreakthrough(e, c.quality, c.reducedMotion);
+			const plan = planBreakthrough({ ...e, fxTier: c.tierOf?.(e.to) }, c.quality, c.reducedMotion);
 			const strikes = plan.steps.filter((s) => s.beat === 'strike');
 			const out = strikes.map((s) => cue('sfx.thunder', s.at));
 			const after = strikes.at(-1)?.at ?? -1;
 			const success = e.result === 'success';
-			// the reveal: the first beat after the strikes that shows the outcome (flash / pillar / aura, or the crack),
-			// else the static result
-			const reveal = plan.steps.find(
-				(s) => s.at > after && (success ? s.beat === 'flash' || s.beat === 'pillar' || s.beat === 'aura' : s.beat === 'crack')
-			);
+			// the reveal: the first beat after the strikes that shows the outcome (clouds clearing / pillar, or the crack),
+			// else the static result. Success sounds grow with the tier: bell → khánh → cổ cầm → choir (sfx.bt_tier2..6)
+			const reveal = plan.steps.find((s) => s.at > after && (success ? s.beat === 'clear' || s.beat === 'pillar' : s.beat === 'crack'));
 			const at = reveal?.at ?? plan.totalMs;
-			out.push(cue(success ? 'sfx.breakthrough' : 'sfx.fail', at));
+			out.push(cue(success ? (plan.tier >= 2 ? `sfx.bt_tier${plan.tier}` : 'sfx.breakthrough') : 'sfx.fail', at));
 			return out;
 		}
 		// the breakthrough start/stall/cancel, purchases (a reward follows), equips, item use and milestones (an

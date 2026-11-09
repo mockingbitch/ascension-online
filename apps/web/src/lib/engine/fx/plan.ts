@@ -3,7 +3,7 @@
 // information (a "+X tu vi" label) — never motion. Breakthrough / lôi kiếp open the breakthrough MODE (GĐ5): a gather
 // loop on `breakthroughStart`, the outcome timeline (breakthrough.ts) only on the server's `breakthrough` answer.
 import { formatPoints } from '$lib/game/format';
-import { planBreakthrough, planGather, type BtPlan, type GatherPlan } from './breakthrough';
+import { planBreakthrough, planGather, planStageUp, type BtPlan, type GatherPlan } from './breakthrough';
 import type { FxEvent, FxEventMap } from './events';
 import type { Quality } from './particles';
 import { isRare, motesForEarned, orbFlightMs, rewardFlights } from './presets';
@@ -28,6 +28,8 @@ export type FxCommand =
 	| { kind: 'ring'; at: 'primary'; tone: 'jade' | 'gold' }
 	| { kind: 'scroll'; id: string; title: string; text: string }
 	| { kind: 'firework'; count: number }
+	/** stage-up(s) inside a realm: one toast (the information) + a light burst/sweep on the tu vi bar */
+	| { kind: 'stageUp'; text: string; fxTier: number; particles: number; sweepMs: number }
 	| { kind: 'mode'; mode: 'breakthrough'; step: 'gather'; gather: GatherPlan; tribulation: boolean }
 	| { kind: 'mode'; mode: 'breakthrough'; step: 'outcome'; plan: BtPlan; result: FxEventMap['breakthrough'] }
 	| { kind: 'mode'; mode: 'breakthrough'; step: 'stall'; message: string }
@@ -43,11 +45,18 @@ const SCROLL_TITLE: Record<string, string> = {
 	faction: 'Thế lực truyền tin'
 };
 
+/** Catalogue lookups the plan needs (display only): the effect tier of a stage's realm and a stage's name. */
+export interface FxContext {
+	tierOf?: (stageId: string) => number | undefined;
+	stageName?: (stageId: string) => string;
+}
+
 export function planFx(
 	e: FxEvent,
 	q: Quality,
 	rarityOf: (itemId: string) => string | undefined = () => undefined,
-	reducedMotion = false
+	reducedMotion = false,
+	ctx: FxContext = {}
 ): FxCommand[] {
 	switch (e.type) {
 		// the mode always opens (even off: a static card) — information never depends on an animation
@@ -55,7 +64,16 @@ export function planFx(
 			return [{ kind: 'mode', mode: 'breakthrough', step: 'gather', gather: planGather(e, q), tribulation: e.tribulation }];
 		case 'breakthrough': {
 			const { type: _t, ...result } = e;
-			return [{ kind: 'mode', mode: 'breakthrough', step: 'outcome', plan: planBreakthrough(e, q, reducedMotion), result }];
+			// the tier of the realm the SERVER's answer reached (`to`; on failure the stage tried for is still `to`)
+			const fxTier = ctx.tierOf?.(e.to) ?? undefined;
+			return [{ kind: 'mode', mode: 'breakthrough', step: 'outcome', plan: planBreakthrough({ ...e, fxTier }, q, reducedMotion), result }];
+		}
+		case 'stageUp': {
+			// one settle that passed several stages emits ONE stageUp (from → last): one toast, one light effect
+			const name = (id: string) => ctx.stageName?.(id) || id;
+			const fxTier = ctx.tierOf?.(e.to) ?? 1;
+			const p = planStageUp(fxTier, q, reducedMotion);
+			return [{ kind: 'stageUp', text: `Lên tầng: ${name(e.from)} → ${name(e.to)}`, fxTier, ...p }];
 		}
 		case 'breakthroughStalled':
 			return [{ kind: 'mode', mode: 'breakthrough', step: 'stall', message: e.message }];
@@ -92,6 +110,8 @@ export function planFx(
 			});
 		}
 		case 'announcement':
+			// other players' breakthroughs have their own banners (news store, by tier) — never the mid-screen scroll
+			if (e.kind === 'breakthrough') return [];
 			return q === 'off' ? [] : [{ kind: 'scroll', id: e.id, title: SCROLL_TITLE[e.kind] ?? 'Thiên hạ truyền tin', text: e.text }];
 		case 'worksLevelUp':
 			return q === 'off' ? [] : [{ kind: 'firework', count: q === 'lite' ? 1 : 3 }];

@@ -41,11 +41,11 @@ describe('fxBus → effect commands', () => {
 		expect(lite).toHaveLength(2);
 		expect(lite[0]).toMatchObject({ rare: false });
 	});
-	it('announcement → scroll; works level up → fireworks; stageUp alone → nothing', () => {
+	it('announcement → scroll; works level up → fireworks; stageUp → one light stage-up command', () => {
 		expect(planFx({ type: 'announcement', id: 'a:1', text: 'T', kind: 'milestone' }, 'full')).toEqual([{ kind: 'scroll', id: 'a:1', title: 'Thiên Đạo Sử', text: 'T' }]);
 		expect(planFx({ type: 'worksLevelUp', factionId: 'f', unlocked: 2 }, 'full')).toEqual([{ kind: 'firework', count: 3 }]);
 		expect(planFx({ type: 'worksLevelUp', factionId: 'f', unlocked: 2 }, 'lite')).toEqual([{ kind: 'firework', count: 1 }]);
-		expect(planFx({ type: 'stageUp', from: 'a', to: 'b' }, 'full')).toEqual([]);
+		expect(planFx({ type: 'stageUp', from: 'a', to: 'b' }, 'full')).toEqual([{ kind: 'stageUp', text: 'Lên tầng: a → b', fxTier: 1, particles: 6, sweepMs: 700 }]);
 	});
 	it('effects off: no motion at all — only the static "+X tu vi" label stays', () => {
 		const off = (e: FxEvent) => planFx(e, 'off', () => 'tien');

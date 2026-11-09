@@ -10,11 +10,17 @@
 	import { trialRoutes } from '$lib/game/nav';
 	import { useIdleClock } from '$lib/game/idle.svelte';
 	import { game } from '$lib/game/store.svelte';
+	import { tutorial } from '$lib/game/tutorial.svelte';
 
 	const clock = useIdleClock();
 	const ch = $derived(game.character!);
 	const cat = $derived(game.catalogue!);
 	const pv = $derived(game.preview);
+	// Vân Khê's first breakthrough / tribulation steps fire from the SERVER preview shown here (never a client guess)
+	$effect(() => {
+		if (pv?.tribulation) tutorial.trigger('breakthrough.tribulation');
+		else if (pv?.ready) tutorial.trigger('breakthrough.ready');
+	});
 	const fromRealm = $derived(cat.realmOf(ch.stageId));
 	const toRealm = $derived(pv?.to ? cat.realmOf(pv.to) : undefined);
 	const toStage = $derived(pv?.to ? cat.stages.get(pv.to) : undefined);

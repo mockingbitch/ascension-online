@@ -9,6 +9,8 @@
 	import type { Fallback3dReason } from '$lib/engine/render/select';
 	import type { RendererKind } from '$lib/engine/render/types';
 	import { settings } from '$lib/engine/settings.svelte';
+	import { toast } from '$lib/game/toasts.svelte';
+	import { tutorial } from '$lib/game/tutorial.svelte';
 	import Icon from './Icon.svelte';
 
 	const fxOptions: { value: Quality; label: string; hint: string }[] = [
@@ -100,6 +102,33 @@
 			</label>
 		{/each}
 		<p class="mt-2 text-xs text-mist-500">Âm thanh chỉ phát sau lần chạm đầu tiên. Hiện là bộ âm tạm; nhạc nền đang được soạn.</p>
+	</fieldset>
+
+	<fieldset data-setting-news>
+		<legend class="panel-title text-lg">Thông báo của đạo hữu khác</legend>
+		<label class="row mt-3">
+			<span>Băng thông báo (đột phá, Thiên Bảng)</span>
+			<input type="checkbox" class="ml-auto size-5 accent-jade-500" checked={settings.others.banner}
+				onchange={(e) => settings.setOthers({ banner: e.currentTarget.checked })} data-setting-others-banner />
+		</label>
+		<label class="row mt-2">
+			<span>Âm thanh băng thông báo lớn</span>
+			<input type="checkbox" class="ml-auto size-5 accent-jade-500" checked={settings.others.sound}
+				onchange={(e) => settings.setOthers({ sound: e.currentTarget.checked })} data-setting-others-sound />
+		</label>
+		<p class="mt-2 text-xs text-mist-500">Dòng chữ chạy trên HUD, danh sách Thông báo và kênh Thế Giới luôn giữ tin.</p>
+	</fieldset>
+
+	<fieldset data-setting-tutorial>
+		<legend class="panel-title text-lg">Hướng dẫn</legend>
+		<div class="row mt-3">
+			<span>Vân Khê {tutorial.state?.muted ? '· đang tắt nhắc' : ''}</span>
+			<button type="button" class="btn btn-ghost ml-auto h-10 px-3 text-sm" disabled={tutorial.busy} aria-busy={tutorial.busy || undefined}
+				onclick={() => void tutorial.reset().then(() => toast('ok', 'Vân Khê sẽ dẫn lại từ đầu những chỗ đạo hữu ghé.'), () => toast('err', 'Chưa đặt lại được, thử lại sau.'))}>
+				<Icon name="help" size={16} /> Xem lại hướng dẫn
+			</button>
+		</div>
+		<p class="mt-2 text-xs text-mist-500">Nút “?” ở mỗi màn hình cũng gọi được Vân Khê giải thích lại.</p>
 	</fieldset>
 
 	<fieldset>

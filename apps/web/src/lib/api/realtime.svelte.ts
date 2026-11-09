@@ -5,14 +5,14 @@ import { onHallChat, onHallEvent } from '$lib/game/lecture.svelte';
 import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
 import { loadWorld } from '$lib/game/world.svelte';
 import { fxBus } from '$lib/engine/fx/bus';
-import type { Announcement, ChatEvent, LectureEvent } from '$lib/game/types';
+import { news } from '$lib/game/news.svelte';
+import type { Announcement, ChatEvent, LectureEvent, WorldAnnouncement } from '$lib/game/types';
 
 export const feed = $state<{ items: Announcement[]; connected: boolean }>({ items: [], connected: false });
 
 const MAX_ITEMS = 5;
 
 const KIND = {
-	'announcement.major_breakthrough': 'breakthrough',
 	'world.milestone_reached': 'milestone',
 	'world.event_ended': 'event',
 	'faction.announcement': 'faction'
@@ -21,7 +21,12 @@ const KIND = {
 function pushFeed(msg: Announcement) {
 	if (feed.items.some((m) => m.id === msg.id && m.type === msg.type)) return;
 	feed.items = [msg, ...feed.items].slice(0, MAX_ITEMS);
-	// the server's text, as sent: effects unroll it as a scroll (the HUD ticker shows it either way)
+	// other players' news (GĐ-D): ticker + history + banner by tier (news store); never the mid-screen scroll
+	if (msg.type.startsWith('announcement.')) {
+		news.push(msg.data as WorldAnnouncement);
+		return;
+	}
+	// world / faction news: the server's text, as sent — effects unroll it as a scroll (the HUD ticker shows it too)
 	fxBus.emit('announcement', { id: `${msg.type}:${msg.id}`, text: msg.data.text, kind: KIND[msg.type as keyof typeof KIND] ?? 'event' });
 	if (msg.type === 'world.milestone_reached') fxBus.emit('milestone', { id: String(msg.id) });
 }
@@ -44,6 +49,7 @@ export function startRealtime(withChat = false) {
 			attempt = 0;
 			feed.connected = true;
 			if (chatEnabled) void loadChat();
+			void news.load(); // backfill the news missed while disconnected (at-most-once delivery)
 		};
 		ws.onmessage = (e) => {
 			let msg: Announcement | ChatEvent | LectureEvent;
@@ -54,6 +60,9 @@ export function startRealtime(withChat = false) {
 			}
 			switch (msg.type) {
 				case 'announcement.major_breakthrough':
+				case 'announcement.first_to_realm':
+				case 'announcement.rank_top10':
+				case 'announcement.digest':
 					pushFeed(msg);
 					break;
 				case 'world.milestone_reached':

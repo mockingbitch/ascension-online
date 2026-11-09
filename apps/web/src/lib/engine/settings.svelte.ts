@@ -18,6 +18,13 @@ export interface StoredSettings {
 	renderer?: RendererKind;
 	/** remembered 3D → 2D fallback (reason + when); absent = none */
 	fallback3d?: Fallback3d;
+	/** other players' news (decisions 2026-11-09 #8): banners / their sound; absent = both on. The ticker always stays. */
+	others?: OthersNews;
+}
+
+export interface OthersNews {
+	banner: boolean;
+	sound: boolean;
 }
 
 export interface SettingsEnv {
@@ -57,6 +64,7 @@ function parse(raw: string | null): StoredSettings {
 		if (v.renderer === '3d') out.renderer = '3d';
 		const fb = v.fallback3d;
 		if (fb && FALLBACK_REASONS.includes(fb.reason) && typeof fb.at === 'number') out.fallback3d = { reason: fb.reason, at: fb.at };
+		if (v.others) out.others = { banner: v.others.banner !== false, sound: v.others.sound !== false };
 		return out;
 	} catch {
 		return d;
@@ -77,6 +85,8 @@ export class Settings {
 	/** `?fpsguard=0` disables the 3D fps watchdog (headless tests on software GL only) */
 	fpsGuard = true;
 	reducedMotion = $state(false);
+	/** Cài đặt › Thông báo: other players' banners and their sound (default on; the ticker always stays) */
+	others = $state<OthersNews>({ banner: true, sound: true });
 
 	constructor(env: SettingsEnv = browserEnv()) {
 		this.#env = env;
@@ -92,6 +102,7 @@ export class Settings {
 		this.reducedMotion = env.reducedMotion?.() ?? false;
 		this.rendererChoice = s.renderer ?? '2d';
 		this.fallback3d = s.fallback3d ?? null;
+		this.others = s.others ?? { banner: true, sound: true };
 		const q = new URLSearchParams(env.search ?? '');
 		this.rendererRequested = q.get('renderer');
 		this.fpsGuard = q.get('fpsguard') !== '0';
@@ -125,6 +136,11 @@ export class Settings {
 		this.#save();
 	}
 
+	setOthers(o: Partial<OthersNews>) {
+		this.others = { ...this.others, ...o };
+		this.#save();
+	}
+
 	setFx(q: Quality | null) {
 		this.fxChoice = q;
 		this.#save();
@@ -146,6 +162,7 @@ export class Settings {
 			// renderer fields only when not default: a 2D player's stored settings stay as before GĐ7
 			if (this.rendererChoice === '3d') v.renderer = '3d';
 			if (this.fallback3d) v.fallback3d = this.fallback3d;
+			if (!this.others.banner || !this.others.sound) v.others = this.others;
 			this.#env.storage?.setItem(SETTINGS_KEY, JSON.stringify(v));
 		} catch {
 			/* storage full / blocked: the setting still applies for this session */

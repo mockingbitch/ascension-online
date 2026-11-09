@@ -89,7 +89,12 @@ const (
 type Visual struct {
 	Badge string `yaml:"badge" json:"badge"`
 	Aura  string `yaml:"aura" json:"aura"`
+	// FxTier (1–6) comes from the realm's TIER (tiers[].visual.fx_tier), so both paths share it. Display only.
+	FxTier int `yaml:"-" json:"fxTier"`
 }
+
+// MaxFxTier is the top effect tier (decisions 2026-11-09: six tiers).
+const MaxFxTier = 6
 
 // Path is a cultivation path.
 type Path struct {

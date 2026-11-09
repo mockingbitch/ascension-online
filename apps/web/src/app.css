@@ -79,6 +79,14 @@
 	--color-aura-chaos: #e8956f;
 	--color-aura-saint: #fff1c7;
 	--color-aura-blood: #c2443d;
+	/* Vu path, one per effect tier (decisions 2026-11-09 #10): ember → blood → crimson → storm → totem → ancestral,
+	   brighter and more saturated with each tier (a web test checks the lightness never drops) */
+	--color-aura-vu-ember: #a9573f;
+	--color-aura-vu-blood: #c2443d;
+	--color-aura-vu-crimson: #d6443f;
+	--color-aura-vu-storm: #e0605a;
+	--color-aura-vu-totem: #e98c4f;
+	--color-aura-vu-ancestral: #f6b860;
 
 	/* Item rarity — keyed by items.yaml rarity */
 	--color-rarity-pham: #c3baa5;
@@ -87,6 +95,18 @@
 	--color-rarity-dia: #9b82d5;
 	--color-rarity-thien: #e3bf6a;
 	--color-rarity-tien: #e9876a;
+
+	/* Robe colours — keyed by appearances.yaml robe_palettes (display only; a web test checks every id has one).
+	   Muted mixes of existing tokens so a robe never outshines the realm aura (decisions 2026-11-09 #2). */
+	--color-robe-mac: var(--color-ink-600);
+	--color-robe-ngoc: var(--color-jade-700);
+	--color-robe-kim: var(--color-gold-700);
+	--color-robe-lam: color-mix(in oklab, var(--color-spirit-cyan) 50%, var(--color-ink-900));
+	--color-robe-tu: color-mix(in oklab, var(--color-spirit-violet) 55%, var(--color-ink-900));
+	--color-robe-bach: color-mix(in oklab, var(--color-mist-100) 78%, var(--color-ink-700));
+	--color-robe-tho: color-mix(in oklab, var(--color-aura-earth) 65%, var(--color-ink-900));
+	--color-robe-huyet: color-mix(in oklab, var(--color-aura-blood) 62%, var(--color-ink-900));
+	--color-robe-dong: color-mix(in oklab, var(--color-bronze-500) 72%, var(--color-ink-900));
 }
 
 @layer base {

@@ -71,7 +71,7 @@
 	<SceneSlot class="scene-box" />
 
 	<div class="ui controls panel">
-		<div class="px-3 pt-3" data-fx-target="qi">
+		<div class="px-3 pt-3" data-fx-target="qi" data-tutorial="qi">
 			<QiBar current={clock.shown} required={ch.requiredMilli} cap={ch.capMilli} {aura} label="Tu vi · ước tính" />
 		</div>
 		<dl class="stats stagger mt-3 grid grid-cols-3 gap-2 px-3 text-center">

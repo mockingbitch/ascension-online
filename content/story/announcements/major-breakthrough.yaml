@@ -1,12 +1,52 @@
-# World announcement templates (GDD §6.4). Placeholders: {name}, {realm}, {stage}, {rank}
-# Server picks one template at random per event. Keep ≤ 90 chars after substitution.
+# World announcement templates (GDD §6.4; decisions 2026-11-09 GĐ-D: by effect tier). Placeholders: {name} (đạo hiệu
+# only — never any other personal data), {realm}, {rank}, {count}. The server picks one variant at random per event.
+# Every line is ≤ 90 characters after substitution with the longest đạo hiệu (24) and realm name — checked at worker
+# start and by `make content-check` (internal/announce).
+#
+# Keys
+#   realm.t<2|3>               a realm breakthrough without tribulation into effect tier 2 / 3 (Trúc Cơ … Hóa Thần)
+#   tribulation.<path>.t<4..6> a tribulation passed into effect tier 4 / 5 / 6 (tiên: Lôi Kiếp, Vu: Huyết Kiếp)
+#   first_to_realm             the first character of the whole world to reach that realm
+#   rank_top10 / rank_first    entering the top of Thiên Bảng / reaching rank 1
+#   digest                     several breakthroughs at once, folded into one line ({name} = the first, {count} others)
+#   major_breakthrough         fallback
 version: 1
 templates:
-  major_breakthrough:
-    - "Thiên địa chấn động! {name} đã đột phá {realm}!"
+  realm.t2:
     - "Linh khí cuồn cuộn, {name} bước vào cảnh giới {realm}."
-    - "Một luồng hào quang xé mây — {name} chính thức thành tựu {realm}."
+    - "{name} đột phá thành công, chính thức đạt {realm}."
+  realm.t3:
+    - "Thiên địa chấn động! {name} đã đột phá {realm}."
+    - "Một luồng hào quang xé mây: {name} thành tựu {realm}."
+  tribulation.tien.t4:
+    - "Lôi Kiếp tan, mây đen rẽ lối: {name} bước vào {realm}."
+    - "{name} vượt qua Lôi Kiếp, đặt chân lên {realm}."
+  tribulation.tien.t5:
+    - "Mây lành ngũ sắc kéo về: {name} vượt kiếp, đạt {realm}!"
+    - "Cổng trời rộng mở đón {name} bước vào {realm}!"
+  tribulation.tien.t6:
+    - "Tinh hà chuyển động, pháp tướng hiện: {name} đạt {realm}!"
+    - "Cả Hồng Hoang ngước nhìn: {name} chứng {realm}!"
+  tribulation.vu.t4:
+    - "Huyết Kiếp qua đi, {name} rèn thân thành {realm}."
+    - "{name} đứng vững trước Huyết Kiếp, bước vào {realm}."
+  tribulation.vu.t5:
+    - "Huyết khí ngút trời: {name} vượt kiếp, đạt {realm}!"
+    - "Đất rung dưới chân {name}: cảnh giới {realm} đã thành!"
+  tribulation.vu.t6:
+    - "Như Tổ Vu thuở trước, {name} chứng {realm}!"
+    - "Cả Hồng Hoang chấn động: {name} đạt {realm}!"
   first_to_realm:
-    - "Thiên Bảng khắc tên: {name} là người đầu tiên đạt {realm} trong thiên hạ!"
+    - "Thiên Bảng khắc tên: {name} là người đầu tiên đạt {realm}!"
+    - "Người đầu tiên của thiên hạ đạt {realm}: {name}!"
   rank_top10:
     - "{name} leo lên hạng {rank} Thiên Bảng."
+    - "Thiên Bảng đổi chữ: {name} giữ hạng {rank}."
+  rank_first:
+    - "{name} đứng đầu Thiên Bảng!"
+    - "Đỉnh Thiên Bảng nay khắc tên {name}."
+  digest:
+    - "{name} và {count} đạo hữu khác vừa đột phá cảnh giới."
+    - "Linh khí dậy sóng: {name} cùng {count} đạo hữu khác đột phá."
+  major_breakthrough:
+    - "Thiên địa chấn động! {name} đã đột phá {realm}!"

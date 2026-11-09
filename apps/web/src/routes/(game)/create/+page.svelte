@@ -1,7 +1,8 @@
 <!--
 	Onboarding (data-model §9.6, plan "Luồng người mới"): opening → Tử Tiêu Cung (Hồng Quân's opening words) →
-	faction → path (only when the faction allows several) → đạo hiệu. The steps are client-side; the last one sends ONE
-	intent, POST /character {name, factionId, path}, which creates the character and joins the faction in one server
+	faction → path (only when the faction allows several) → ngoại hình (body / accessory / robe / pose with a live
+	preview, decisions 2026-11-09 GĐ-A) → đạo hiệu. The steps are client-side; the last one sends ONE
+	intent, POST /character {name, factionId, path, appearance}, which creates the character and joins the faction in one server
 	transaction, then lands in Tử Tiêu Cung. The draft (step, choices, Idempotency-Key) lives in sessionStorage so a
 	reload doesn't replay the opening and a retry reuses the same key.
 -->
@@ -13,7 +14,11 @@
 	import FactionEmblem from '$lib/components/FactionEmblem.svelte';
 	import FactionPicker from '$lib/components/FactionPicker.svelte';
 	import Icon from '$lib/components/Icon.svelte';
+	import GuideInline from '$lib/components/GuideInline.svelte';
+	import LookPicker from '$lib/components/LookPicker.svelte';
 	import OpeningSequence from '$lib/components/OpeningSequence.svelte';
+	import Portrait from '$lib/components/Portrait.svelte';
+	import { bodyOf, defaultLook, normalizeLook, outfitOf } from '$lib/game/looks';
 	import { art } from '$lib/game/art';
 	import { factionColor, factionError } from '$lib/game/faction.svelte';
 	import {
@@ -72,6 +77,19 @@
 		error = null;
 	};
 	const forward = () => go(nextStep(draft.step, faction));
+
+	// ── ngoại hình: the look is a draft for the faction's path (the server validates it with the intent) ──
+	const lookPath = $derived(faction ? resolvePath(faction, draft.path) : null);
+	const startAura = $derived(
+		[...data.catalogue.realms.values()].find((r) => r.path === lookPath && r.tier === 1)?.visual.aura ?? 'mist'
+	);
+	// a look for another path (faction/path changed) is replaced by the new path's default
+	$effect(() => {
+		if (!data.looks || !lookPath) return;
+		if (!draft.look || bodyOf(data.looks, draft.look.bodyId)?.path !== lookPath) draft.look = defaultLook(data.looks, lookPath) ?? null;
+		// a draft saved before outfits: give it its outfit (accessory + robe follow the outfit)
+		else if (!draft.look.outfitId) draft.look = normalizeLook(data.looks, draft.look);
+	});
 	const back = () => go(prevStep(draft.step, faction));
 
 	// ── Tử Tiêu Cung: Hồng Quân's opening words, one tap per line ──
@@ -101,7 +119,9 @@
 		error = null;
 		draft.key ??= newIdempotencyKey();
 		try {
-			await api.onboard(draft.name.trim(), faction.id, draft.key, resolvePath(faction, draft.path) ?? undefined);
+			const path = resolvePath(faction, draft.path) ?? undefined;
+			const look = data.looks && draft.look && bodyOf(data.looks, draft.look.bodyId)?.path === path ? draft.look : undefined;
+			await api.onboard(draft.name.trim(), faction.id, draft.key, path, look);
 			try {
 				sessionStorage.removeItem(STORE);
 			} catch {
@@ -114,7 +134,11 @@
 				error = 'Không kết nối được máy chủ, hãy thử lại.'; // keep the key: the retry replays the same intent
 			} else {
 				draft.key = null;
-				if (['faction_closed', 'unknown_faction', 'path_not_allowed'].includes(err.code)) {
+				if (['unknown_look', 'wrong_path', 'not_owned'].includes(err.code)) {
+					draft.look = null; // the step re-offers the path default
+					go('ngoai-hinh');
+					error = 'Ngoại hình này không còn dùng được, hãy chọn lại.';
+				} else if (['faction_closed', 'unknown_faction', 'path_not_allowed'].includes(err.code)) {
 					draft.factionId = null;
 					go('the-luc');
 					error = factionError(err);
@@ -158,6 +182,8 @@
 
 		{#key draft.step}
 			<main class="relative mx-auto max-w-7xl px-4 pb-10 sm:px-8" in:fly={{ y: 16, duration: dur(450) }}>
+				<!-- Vân Khê (onboarding lines, the visual-novel overlay on top) -->
+				<GuideInline step={draft.step} />
 				{#if draft.step === 'tu-tieu-cung'}
 					<section class="hall mx-auto flex max-w-2xl flex-col items-center text-center sm:min-h-[calc(100dvh-8rem)] sm:justify-center">
 						<p class="eyebrow mt-2">Tử Tiêu Cung · buổi giảng đầu tiên</p>
@@ -223,6 +249,25 @@
 						</div>
 						<button type="button" class="btn btn-jade mt-6 h-12 w-full" disabled={!draft.path} onclick={forward}>Xác nhận</button>
 					</section>
+				{:else if draft.step === 'ngoai-hinh' && faction}
+					<section class="mx-auto max-w-5xl" data-testid="onboarding-look">
+						<header class="mb-5 text-center">
+							<p class="eyebrow">Bên hồ Thủy Nguyệt</p>
+							<h1 class="mt-1 text-3xl font-bold text-gold-300 sm:text-4xl">Soi bóng, chọn dáng hình</h1>
+							<p class="mx-auto mt-2 max-w-xl text-sm text-mist-300">
+								Chỉ là dáng vẻ người khác nhìn thấy — không đổi tu vi, tỉ lệ đột phá hay thứ hạng. Vào game vẫn đổi lại được ở Nhân Vật › Trang phục.
+							</p>
+						</header>
+						{#if error}<p role="alert" class="mb-4 text-center text-cinnabar-300">{error}</p>{/if}
+						{#if data.looks && draft.look && lookPath}
+							<LookPicker catalog={data.looks} path={lookPath} bind:look={draft.look} aura={startAura} />
+						{:else}
+							<p class="panel p-6 text-center text-mist-300">Chưa tải được tủ ngoại hình — đạo hữu sẽ mang dáng mặc định, vào game có thể đổi.</p>
+						{/if}
+						<div class="sticky bottom-0 mt-5 flex justify-center pb-2">
+							<button type="button" class="btn btn-jade h-12 w-full max-w-md" onclick={forward}>Giữ dáng này</button>
+						</div>
+					</section>
 				{:else if draft.step === 'dao-hieu' && faction}
 					<form onsubmit={submit} class="mx-auto max-w-md space-y-5">
 						<header class="text-center">
@@ -241,6 +286,18 @@
 							</div>
 							<button type="button" class="btn btn-ghost h-10 shrink-0 px-3 text-sm" onclick={() => go('the-luc')}>Đổi</button>
 						</div>
+						{#if data.looks && draft.look}
+							{@const b = bodyOf(data.looks, draft.look.bodyId)}
+							<div class="chosen panel flex items-center gap-4 p-4" data-testid="chosen-look">
+								<Portrait aura={startAura} size={56} look={draft.look} />
+								<div class="min-w-0 flex-1">
+									<p class="eyebrow">Dáng hình</p>
+									<p class="truncate font-display text-xl font-bold text-mist-100">{b?.name ?? ''}</p>
+									<p class="text-sm text-mist-300">{outfitOf(data.looks, draft.look)?.name ?? b?.temperament ?? ''}</p>
+								</div>
+								<button type="button" class="btn btn-ghost h-10 shrink-0 px-3 text-sm" onclick={() => go('ngoai-hinh')}>Đổi</button>
+							</div>
+						{/if}
 						<label class="block">
 							<span class="text-sm text-mist-300">Đạo hiệu (2–24 chữ cái)</span>
 							<!-- svelte-ignore a11y_autofocus -->
@@ -294,8 +351,9 @@
 		inset: 0;
 		background: linear-gradient(180deg, color-mix(in oklab, var(--color-ink-950) 40%, transparent), var(--color-ink-950) 85%);
 	}
+	/* opaque enough that content scrolled beneath never shows through the step labels (look step on landscape phones) */
 	nav {
-		background: linear-gradient(180deg, var(--color-ink-950), color-mix(in oklab, var(--color-ink-950) 0%, transparent));
+		background: linear-gradient(180deg, var(--color-ink-950) 70%, color-mix(in oklab, var(--color-ink-950) 85%, transparent));
 	}
 	.dot {
 		display: grid;

@@ -1,5 +1,6 @@
 <!-- One shell window: GameWindow frame from the registry + its lazily loaded content. -->
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import GameWindow from '$lib/components/GameWindow.svelte';
 	import { closeWindow, openWindow, updateWindow } from '$lib/game/windows';
 	import type { WindowState } from '$lib/game/windowStack';
@@ -10,6 +11,11 @@
 	const meta = $derived(windowMeta(win));
 	// svelte-ignore state_referenced_locally
 	let tab = $state(meta.tab ?? '');
+	// the window state can switch the tab itself (e.g. Nhân Vật's "Trang phục" button, a Túi Đồ shortcut)
+	$effect(() => {
+		const t = meta.tab;
+		if (t !== undefined && t !== untrack(() => tab)) tab = t;
+	});
 	// keyed by kind only: a state change of the same window (its tab) must not reload or remount the content
 	const kind = $derived(win.kind);
 	const content = $derived(windowContent[kind]());
@@ -17,7 +23,7 @@
 
 	function ontab(id: string) {
 		// keep the tab in the history entry (Back/forward and reload of a shared link restore it)
-		if (top && (win.kind === 'inventory' || win.kind === 'ranking')) updateWindow({ ...win, tab: id } as WindowState);
+		if (top && (win.kind === 'inventory' || win.kind === 'ranking' || win.kind === 'character')) updateWindow({ ...win, tab: id } as WindowState);
 	}
 </script>
 

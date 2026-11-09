@@ -57,17 +57,17 @@ describe('sfxFor (fxBus → SFX)', () => {
 			['sfx.thunder', 500],
 			['sfx.thunder', 1050],
 			['sfx.thunder', 1600],
-			['sfx.breakthrough', 1950]
+			['sfx.bt_tier4', 1900]
 		]);
 		const fail = sfxFor(bt('failure', 'major', true), ctx());
 		expect(fail.at(-1)).toEqual({ id: 'sfx.fail', ch: 'sfx', at: 1950 });
 		const lite = sfxFor(bt('success', 'major', true), ctx({ quality: 'lite' }));
-		expect(lite.map((c) => c.at)).toEqual([300, 630, 960, 1170]);
+		expect(lite.map((c) => c.at)).toEqual([300, 630, 960, 1140]);
 		// effects off: the static result at once — one sound, no strikes
-		expect(sfxFor(bt('success', 'major', true), ctx({ quality: 'off' }))).toEqual([{ id: 'sfx.breakthrough', ch: 'sfx', at: 0 }]);
-		// minor success lands on the flash; reduced motion (no flash) on the aura
-		expect(sfxFor(bt('success', 'auto', false), ctx())[0]!.at).toBe(800);
-		expect(sfxFor(bt('success', 'auto', false), ctx({ reducedMotion: true }))[0]!.at).toBe(880);
+		expect(sfxFor(bt('success', 'major', true), ctx({ quality: 'off' }))).toEqual([{ id: 'sfx.bt_tier4', ch: 'sfx', at: 0 }]);
+		// a plain major lands on the pillar, with or without reduced motion
+		expect(sfxFor(bt('success', 'major', false), ctx())[0]).toEqual({ id: 'sfx.bt_tier2', ch: 'sfx', at: 1100 });
+		expect(sfxFor(bt('success', 'major', false), ctx({ reducedMotion: true }))[0]!.at).toBe(1100);
 	});
 
 	it('every cue id is a declared slot', () => {
@@ -118,7 +118,7 @@ describe('audio router', () => {
 		bus.emit('stageUp', { from: 'a', to: 'b' });
 		expect(played).toEqual([]);
 		advance(2000);
-		expect(played).toEqual(['sfx.thunder', 'sfx.thunder', 'sfx.thunder', 'sfx.breakthrough']);
+		expect(played).toEqual(['sfx.thunder', 'sfx.thunder', 'sfx.thunder', 'sfx.bt_tier4']);
 		advance(STAGE_UP_QUIET_MS);
 		bus.emit('stageUp', { from: 'b', to: 'c' });
 		expect(played.at(-1)).toBe('sfx.stage_up');
@@ -149,5 +149,15 @@ describe('audio router', () => {
 		advance(5000);
 		bus.emit('insight', { earnedMilli: 1, takeaway: '' });
 		expect(played).toEqual([]);
+	});
+});
+
+describe('breakthrough cues per effect tier (decisions 2026-11-09)', () => {
+	it('picks the tier of the server\'s `to` stage; higher tiers have their own, richer cue', () => {
+		const tiers: Record<string, number> = { b: 6 };
+		const six = sfxFor(bt('success', 'major', true), ctx({ tierOf: (s) => tiers[s] }));
+		expect(six.filter((c) => c.id === 'sfx.thunder')).toHaveLength(1);
+		expect(six.at(-1)!.id).toBe('sfx.bt_tier6');
+		for (const t of [2, 3, 4, 5, 6]) expect(AUDIO_SLOTS.some((s) => s.id === `sfx.bt_tier${t}` && s.synth)).toBe(true);
 	});
 });

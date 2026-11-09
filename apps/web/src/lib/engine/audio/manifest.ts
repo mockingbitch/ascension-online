@@ -32,6 +32,12 @@ export const AUDIO_SLOTS: AudioSlot[] = [
 	s('sfx.item_tien', 'sfx'),
 	s('sfx.stage_up', 'sfx'),
 	s('sfx.breakthrough', 'sfx'),
+	// breakthrough success per effect tier (decisions 2026-11-09): bell → khánh → cổ cầm → choir, one cue each
+	s('sfx.bt_tier2', 'sfx'),
+	s('sfx.bt_tier3', 'sfx'),
+	s('sfx.bt_tier4', 'sfx'),
+	s('sfx.bt_tier5', 'sfx'),
+	s('sfx.bt_tier6', 'sfx'),
 	s('sfx.thunder', 'sfx'),
 	s('sfx.fail', 'sfx'),
 	s('sfx.insight', 'sfx'),

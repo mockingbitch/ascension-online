@@ -16,6 +16,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"tiendao/game/internal/announce"
 	"tiendao/game/internal/artifact"
 	"tiendao/game/internal/auth"
 	"tiendao/game/internal/breakthrough"
@@ -46,6 +47,7 @@ import (
 	"tiendao/game/internal/shop"
 	"tiendao/game/internal/trade"
 	"tiendao/game/internal/trial"
+	"tiendao/game/internal/tutorial"
 	"tiendao/game/internal/vip"
 	"tiendao/game/internal/world"
 )
@@ -119,9 +121,10 @@ func run(log *slog.Logger) error {
 		deps.Pool = pool
 		deps.Cultivation = cult
 		deps.Auth = &auth.Service{Pool: pool, Issuer: issuer, RefreshTTL: cfg.RefreshTokenTTL, Now: time.Now}
-		deps.Characters = &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation, Cosmetics: cb.Cosmetics, VIP: cb.VIP}
+		deps.Characters = &character.Service{Pool: pool, Cultivation: cult, Names: cb.Moderation, Cosmetics: cb.Cosmetics, VIP: cb.VIP,
+			Looks: cb.Appearances}
 		deps.Chat = &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: time.Now,
-			NameFx: cb.Cosmetics.NameFxFilter(cb.VIP.TierForPoints)}
+			NameFx: cb.Cosmetics.NameFxFilter(cb.VIP.TierForPoints), Looks: cb.Appearances}
 		deps.Reports = &report.Service{Pool: pool, Cat: cb.Moderation, Now: time.Now}
 		deps.Protectors = &protector.Service{Pool: pool, Cfg: cb.Protector, Realms: cb.Realms, Project: cult.ProjectedStage, Now: time.Now, Log: log}
 		deps.Breakthrough = &breakthrough.Service{Pool: pool, Cultivation: cult, RNG: breakthrough.NewRNG(), Trials: cb.Trials, Items: cb.Items,
@@ -158,8 +161,16 @@ func run(log *slog.Logger) error {
 		deps.Trades = &trade.Service{Pool: pool, Cfg: cb.Trade, Items: cb.Items, Realms: cb.Realms, Net: deps.NetSig, Now: time.Now, Log: log} // Phase 5.2
 		deps.DailyTasks = &dailytask.Service{Pool: pool, Cat: cb.DailyTasks, VIP: cb.VIP, Now: time.Now}
 		deps.Shop = &shop.Service{Pool: pool, Cat: cb.Shop, Items: cb.Items, VIP: cb.VIP, Now: time.Now}
-		deps.Cosmetics = &cosmetic.Service{Pool: pool, Cat: cb.Cosmetics, VIP: cb.VIP, Eras: cb.World, Now: time.Now}
+		deps.Cosmetics = &cosmetic.Service{Pool: pool, Cat: cb.Cosmetics, VIP: cb.VIP, Eras: cb.World, Now: time.Now,
+			Looks: cb.Appearances, Realms: cb.Realms}
 		deps.FactionWorks = &factionwork.Service{Pool: pool, Cat: cb.FactionWorks, Now: time.Now}
+		// Vân Khê's tutorial (content/story/tutorial; numbers from realms.yaml): display-only progress
+		tut, err := tutorial.Load(filepath.Join(cfg.StoryDir, "tutorial"), tutorial.Vars(cb.Realms))
+		if err != nil {
+			return err
+		}
+		deps.Tutorial = &tutorial.Service{Pool: pool, Script: tut, Now: time.Now}
+		deps.Announce = &announce.Service{Pool: pool, Realms: cb.Realms, Cfg: cb.Announce, Now: time.Now, Log: log} // history only
 		deps.Rituals = &ritual.Service{Pool: pool, Tasks: cb.DailyTasks, Cultivation: cult, VIP: cb.VIP, Now: time.Now}
 		deps.Fortune = &ritual.Fortune{Pool: pool, Cat: cb.Fortunes, Cultivation: cult, RNG: breakthrough.NewRNG(), Now: time.Now}
 		deps.World = &world.Service{Pool: pool, Realms: cb.Realms, Cat: cb.World, Contribution: cb.Contribution, Now: time.Now}
@@ -174,13 +185,14 @@ func run(log *slog.Logger) error {
 			}
 			defer rdb.Close()
 			metrics.RegisterRedis(reg, rdb)
-			deps.Leaderboard = &leaderboard.Service{Pool: pool, Redis: rdb, Realms: cb.Realms, Look: cb.Cosmetics.BoardFilter(cb.VIP.TierForPoints)}
+			deps.Leaderboard = &leaderboard.Service{Pool: pool, Redis: rdb, Realms: cb.Realms, Look: cb.Cosmetics.BoardFilter(cb.VIP.TierForPoints),
+				Looks: cb.Appearances}
 			deps.Redis = rdb
 			deps.Protectors.Presence = &protector.RedisPresence{R: rdb, TTL: cb.Protector.PresenceTTL(), Activity: cb.Protector.ActivityWindow()} // hộ pháp "online"
 			deps.DaoLu.Presence = deps.Protectors.Presence
 			deps.DaoLu.Session = &bond.Session{R: rdb, Cfg: cb.DaoLu} // song tu overlap accrual
 			deps.Factions.Ranking = &faction.Ranking{Pool: pool, Redis: rdb, Realms: cb.Realms, Cat: cb.Factions,
-				Look: cb.Cosmetics.BoardFilter(cb.VIP.TierForPoints)}
+				Look: cb.Cosmetics.BoardFilter(cb.VIP.TierForPoints), Looks: cb.Appearances}
 			deps.Chat.Publish = func(ctx context.Context, typ, id string, data any) error {
 				return realtime.Publish(ctx, rdb, realtime.Envelope{Type: typ, ID: id, TS: time.Now().UTC(), Data: data})
 			}
@@ -189,7 +201,8 @@ func run(log *slog.Logger) error {
 				return err
 			}
 			deps.Lectures = &hall.Service{Pool: pool, Hall: &hall.Hall{R: rdb, Cfg: cb.Lectures}, Cfg: cb.Lectures, Scripts: scripts,
-				Cultivation: cult, VIP: cb.VIP, Now: time.Now, Log: log, Publish: hall.Publisher(deps.Chat.Publish)}
+				Cultivation: cult, VIP: cb.VIP, Now: time.Now, Log: log, Publish: hall.Publisher(deps.Chat.Publish),
+				Looks: cb.Appearances}
 			origin, err := url.Parse(cfg.PublicBaseURL)
 			if err != nil {
 				return err

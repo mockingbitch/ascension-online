@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/db"
 	"tiendao/game/internal/realm"
 )
@@ -34,6 +35,8 @@ type Entry struct {
 	// never part of the score.
 	AvatarFrameID string `json:"avatarFrameId,omitempty"`
 	TitleID       string `json:"titleId,omitempty"`
+	// Chosen look (appearances.yaml) resolved for the row's path. Display only.
+	Look *appearance.Look `json:"look,omitempty"`
 }
 
 // Service reads/writes the global realm leaderboard.
@@ -45,6 +48,8 @@ type Service struct {
 	// Look filters the frame/title shown on a row by the player's điểm duyên (cosmetic.Catalogue.BoardFilter): Tiên
 	// Duyên perks above the current level are hidden. nil → shown as equipped. Display only, never the score.
 	Look func(frame, title string, vipPoints int64) (string, string)
+	// Looks resolves each row's body / accessory / robe / pose for its path. nil → rows carry no look.
+	Looks *appearance.Catalogue
 }
 
 func (s *Service) key() string {
@@ -190,8 +195,16 @@ func (s *Service) hydrate(ctx context.Context, zs []redis.Z) ([]Entry, error) {
 		if s.Look != nil {
 			frame, title = s.Look(frame, title, r.VipPoints)
 		}
-		out = append(out, Entry{CharacterID: r.ID, Name: r.Name, StageID: r.StageID, Score: scores[r.ID], StageReachedAt: r.StageReachedAt,
-			AvatarFrameID: frame, TitleID: title})
+		e := Entry{CharacterID: r.ID, Name: r.Name, StageID: r.StageID, Score: scores[r.ID], StageReachedAt: r.StageReachedAt,
+			AvatarFrameID: frame, TitleID: title}
+		if s.Looks != nil {
+			if st, err := s.Realms.Stage(r.StageID); err == nil {
+				l := s.Looks.Resolve(appearance.Look{BodyID: r.BodyID.String, HairID: r.HairID.String,
+					RobePaletteID: r.RobePaletteID.String, PoseID: r.PoseID.String}, st.Path)
+				e.Look = &l
+			}
+		}
+		out = append(out, e)
 	}
 	return out, nil
 }

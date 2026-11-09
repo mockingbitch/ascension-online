@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/db"
 	"tiendao/game/internal/moderation"
 	"tiendao/game/internal/platform/postgres"
@@ -57,6 +58,9 @@ type Message struct {
 	Text        string    `json:"text"`
 	SentAt      time.Time `json:"sentAt"`
 	NameFx      string    `json:"nameFx,omitempty"` // chat_aura cosmetic worn at send time (cosmetics.yaml id; display only)
+	// Look at send time (appearances.yaml, resolved for the sender's path; display only): the portrait card opened
+	// from this message shows it.
+	Look *appearance.Look `json:"look,omitempty"`
 }
 
 // Publisher fans an event out to every API instance (realtime.Publish in production). Best effort.
@@ -73,6 +77,8 @@ type Service struct {
 	// NameFx filters the chat aura snapshot by the sender's điểm duyên (cosmetic.Catalogue.NameFxFilter): a Tiên Duyên
 	// perk above the current level is not shown. nil → stored as equipped.
 	NameFx func(fx string, vipPoints int64) string
+	// Looks resolves the sender's look snapshot. nil → messages carry no look.
+	Looks *appearance.Catalogue
 }
 
 // CanPost reports whether a character at stageID may post in ch. Stages on another path compare by tier/order.
@@ -153,9 +159,17 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 			v := s.NameFx(fx.String, sender.VipPoints)
 			fx = pgtype.Text{String: v, Valid: v != ""}
 		}
+		var look []byte
+		if s.Looks != nil {
+			if st, err := s.Realms.Stage(sender.StageID); err == nil {
+				l := s.Looks.Resolve(appearance.Look{BodyID: sender.BodyID.String, HairID: sender.HairID.String,
+					RobePaletteID: sender.RobePaletteID.String, PoseID: sender.PoseID.String}, st.Path)
+				look, _ = json.Marshal(l)
+			}
+		}
 		row, err := q.InsertChatMessage(ctx, db.InsertChatMessageParams{
 			Channel: channel, UserID: userID, CharacterID: sender.CharacterID, CharacterName: sender.Name,
-			StageID: sender.StageID, Body: body, RawBody: raw, IdempotencyKey: key, Now: now, NameFx: fx,
+			StageID: sender.StageID, Body: body, RawBody: raw, IdempotencyKey: key, Now: now, NameFx: fx, Look: look,
 		})
 		if err != nil {
 			return err
@@ -174,7 +188,20 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 }
 
 func fromRow(r db.ChatMessage) Message {
-	return Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName, StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt, NameFx: r.NameFx.String}
+	return Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName, StageID: r.StageID, Text: r.Body,
+		SentAt: r.CreatedAt, NameFx: r.NameFx.String, Look: lookOf(r.Look)}
+}
+
+// lookOf decodes the look snapshot (nil when absent or unreadable — display only).
+func lookOf(b []byte) *appearance.Look {
+	if len(b) == 0 {
+		return nil
+	}
+	var l appearance.Look
+	if json.Unmarshal(b, &l) != nil || l.BodyID == "" {
+		return nil
+	}
+	return &l
 }
 
 // History returns up to history_size visible messages before beforeID (0 = newest), oldest first.
@@ -189,7 +216,7 @@ func (s *Service) History(ctx context.Context, channel string, beforeID int64) (
 	out := make([]Message, len(rows))
 	for i, r := range rows { // rows are newest first → reverse
 		out[len(rows)-1-i] = Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName,
-			StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt, NameFx: r.NameFx.String}
+			StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt, NameFx: r.NameFx.String, Look: lookOf(r.Look)}
 	}
 	return out, nil
 }

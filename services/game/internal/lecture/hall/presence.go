@@ -11,6 +11,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/lecture"
 )
 
@@ -32,6 +33,8 @@ type Listener struct {
 	Name        string `json:"name"`
 	StageID     string `json:"stageId"`
 	Seat        int    `json:"seat"` // -1 = outside the hall
+	// Look resolved for the listener's path (appearances.yaml; display only): the seat shows the chosen figure.
+	Look *appearance.Look `json:"look,omitempty"`
 }
 
 // ErrNotPresent: the character has no recent heartbeat in the hall.
@@ -110,7 +113,7 @@ return out
 
 // Enter seats the listener (idempotent: keeps an existing seat). isNew reports a new arrival.
 func (h *Hall) Enter(ctx context.Context, l Listener, now time.Time) (seat int, isNew bool, err error) {
-	who, _ := json.Marshal(Listener{CharacterID: l.CharacterID, Name: l.Name, StageID: l.StageID})
+	who, _ := json.Marshal(Listener{CharacterID: l.CharacterID, Name: l.Name, StageID: l.StageID, Look: l.Look})
 	res, err := enterScript.Run(ctx, h.R, []string{keyBeat, keySeat, keySeatOf, keyWho, keyAcc(l.CharacterID)},
 		l.CharacterID, now.Unix(), h.Cfg.Seats, string(who), int64(h.Cfg.MaxGap/time.Second), int64(accTTL/time.Second)).Int64Slice()
 	if err != nil {

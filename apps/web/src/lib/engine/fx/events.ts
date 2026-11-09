@@ -23,7 +23,13 @@ export interface FxEventMap {
 	};
 	reward: { items: RewardLine[]; currencies: RewardLine[]; source: RewardSource; vipPoints?: number };
 	/** a world announcement / story milestone arrived over the socket (text as the server sent it) */
-	announcement: { id: string; text: string; kind: 'breakthrough' | 'milestone' | 'event' | 'faction' };
+	announcement: {
+		id: string;
+		text: string;
+		kind: 'breakthrough' | 'milestone' | 'event' | 'faction';
+		/** other players' news (kind breakthrough): its large banner asked for the cue (Cài đặt › thông báo) */
+		sound?: boolean;
+	};
 	/** the attempt was sent (the mode opens and gathers qi until the answer); kind/tribulation from the server preview */
 	breakthroughStart: { kind: BreakthroughKind; tribulation: boolean };
 	/** the attempt's answer (server values): outcome, stages and the tu vi lost (0 = intact) */

@@ -20,17 +20,21 @@ const two = { allowedPaths: ['tien' as const, 'vu' as const] };
 
 describe('onboarding steps', () => {
 	it('skips the path step unless the faction allows several paths', () => {
-		expect(stepsFor(undefined)).toEqual(['mo-dau', 'tu-tieu-cung', 'the-luc', 'dao-hieu']);
+		expect(stepsFor(undefined)).toEqual(['mo-dau', 'tu-tieu-cung', 'the-luc', 'ngoai-hinh', 'dao-hieu']);
 		expect(stepsFor(one)).not.toContain('dao-do');
-		expect(stepsFor(two)).toEqual(['mo-dau', 'tu-tieu-cung', 'the-luc', 'dao-do', 'dao-hieu']);
+		expect(stepsFor(two)).toEqual(['mo-dau', 'tu-tieu-cung', 'the-luc', 'dao-do', 'ngoai-hinh', 'dao-hieu']);
 	});
 	it('moves forward and back within bounds', () => {
 		expect(nextStep('mo-dau', undefined)).toBe('tu-tieu-cung');
-		expect(nextStep('the-luc', one)).toBe('dao-hieu');
+		// the look step sits after faction/path, before đạo hiệu (decisions 2026-11-09, GĐ-A)
+		expect(nextStep('the-luc', one)).toBe('ngoai-hinh');
 		expect(nextStep('the-luc', two)).toBe('dao-do');
+		expect(nextStep('dao-do', two)).toBe('ngoai-hinh');
+		expect(nextStep('ngoai-hinh', one)).toBe('dao-hieu');
 		expect(nextStep('dao-hieu', one)).toBe('dao-hieu');
-		expect(prevStep('dao-hieu', one)).toBe('the-luc');
-		expect(prevStep('dao-hieu', two)).toBe('dao-do');
+		expect(prevStep('dao-hieu', one)).toBe('ngoai-hinh');
+		expect(prevStep('ngoai-hinh', one)).toBe('the-luc');
+		expect(prevStep('ngoai-hinh', two)).toBe('dao-do');
 		expect(prevStep('mo-dau', one)).toBe('mo-dau');
 		expect(nextStep('dao-do', one)).toBe('mo-dau'); // not a step for this faction → restart (never sticks)
 	});
@@ -50,6 +54,12 @@ describe('onboarding steps', () => {
 			factionId: null
 		});
 		expect(sanitizeDraft({ ...emptyDraft(), step: 'tu-tieu-cung', factionId: 'gone' }, roster).step).toBe('tu-tieu-cung');
+		const look = { bodyId: 'vu_nu_tho_san', hairId: 'long_vu', robePaletteId: 'tho', poseId: 'toa_thach' };
+		expect(sanitizeDraft({ ...emptyDraft(), step: 'ngoai-hinh', factionId: 'gone', look }, roster)).toMatchObject({
+			step: 'the-luc',
+			look: null
+		});
+		expect(sanitizeDraft({ ...emptyDraft(), step: 'ngoai-hinh', factionId: 'vu_toc', look }, roster)).toMatchObject({ step: 'ngoai-hinh', look });
 		expect(sanitizeDraft({ ...emptyDraft(), step: 'dao-do', factionId: 'vu_toc' }, roster)).toMatchObject({
 			step: 'dao-hieu',
 			path: 'vu'

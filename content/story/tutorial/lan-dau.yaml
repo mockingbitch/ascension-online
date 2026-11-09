@@ -1,0 +1,107 @@
+# Vân Khê giải thích những "lần đầu" trong game (/play). Tiến độ lưu ở máy chủ (tutorial_progress) để đổi máy vẫn nhớ.
+# Mỗi bước bật khi có sự kiện từ máy chủ (fxBus, sau phản hồi server) hoặc khi người chơi mở đúng chỗ (cửa sổ, cảnh) —
+# client không tự đoán. Không bước nào cho phần thưởng.
+# Placeholder lấy từ realms.yaml (tribulation): {loss_pct} {guarantee_after} {cooldown_hours}.
+# spotlight = data-tutorial="<id>" trên giao diện: qi (thanh tu vi HUD), primary (nút chính của cảnh), bt-attempt
+# (nút Đột phá trong cửa sổ Đột Phá), bt-odds (tỉ lệ thành công), bt-loss (tổn thất + bảo hiểm của lôi kiếp).
+version: 1
+guide: van_khe
+name: Vân Khê
+
+steps:
+  - id: welcome
+    flow: play
+    trigger: play.enter
+    title: Chỗ của đạo hữu
+    lines:
+      - { expr: smile, text: "Đạo hữu đã có chỗ ngồi rồi. Từ giờ, kể cả lúc rời game, tu vi vẫn lặng lẽ tích lại cho tới giới hạn bế quan." }
+      - { expr: point, spotlight: qi, text: "Thanh này là tu vi của tầng hiện tại. Đầy thì tự lên tầng, đến tầng cuối của cảnh giới thì cần đột phá." }
+
+  - id: first_settle
+    flow: play
+    trigger: fx.settled
+    title: Thu nhận tu vi
+    lines:
+      - { expr: proud, text: "Vậy là lần thu nhận đầu tiên. Máy chủ đã kết toán phần tu vi tích được, con số trên thanh giờ là thật." }
+      - { expr: neutral, spotlight: primary, text: "Lúc nào ghé qua thì bấm Thu nhận. Mỗi ngày có hạn mức chung, nên không cần canh liên tục đâu." }
+
+  - id: first_stage_up
+    flow: play
+    trigger: fx.stage_up
+    title: Lên tầng
+    lines:
+      - { expr: surprised, text: "Lên tầng rồi đấy! Tầng nhỏ tự lên khi đủ tu vi, chẳng cần làm gì thêm." }
+      - { expr: smile, spotlight: qi, text: "Cứ thế đến tầng cuối của cảnh giới, gọi là bình cảnh. Tới đó tu vi dừng lại, chờ đạo hữu tự tay đột phá." }
+
+  - id: first_breakthrough
+    flow: play
+    trigger: breakthrough.ready
+    title: Lần đột phá đầu
+    lines:
+      - { expr: point, spotlight: bt-odds, text: "Đây là tỉ lệ thành công, máy chủ công bố trước khi đạo hữu thử. Kết quả cũng do máy chủ quyết định." }
+      - { expr: smile, spotlight: bt-attempt, text: "Thất bại không tụt tầng đâu. Tâm cảnh vững thêm, lần sau tỉ lệ cao hơn. Sẵn sàng thì bấm Đột phá." }
+
+  - id: first_realm
+    flow: play
+    trigger: fx.realm_reached
+    title: Cảnh giới mới
+    lines:
+      - { expr: proud, text: "Đạo hữu đã bước sang cảnh giới mới! Cả Hồng Hoang có thể đã nghe tin. Ta mừng thật đấy." }
+      - { expr: neutral, text: "Cảnh giới càng cao, đường càng dài. Đi chậm mà đều vẫn hơn vội vàng, Hồng Quân cũng giảng vậy." }
+
+  - id: first_tribulation
+    flow: play
+    trigger: breakthrough.tribulation
+    title: Lôi kiếp
+    lines:
+      - { expr: worried, text: "Từ đây mỗi lần đột phá phải vượt kiếp. Ta nói trước để đạo hữu không bất ngờ, ta từng hỏng một lần rồi." }
+      - { expr: point, spotlight: bt-loss, text: "Hỏng kiếp thì mất {loss_pct}% tu vi đang tích ở tầng hiện tại, không tụt tầng, nghỉ {cooldown_hours} giờ rồi thử lại. Con số chính xác hiện ngay đây." }
+      - { expr: smile, text: "Hỏng liền {guarantee_after} lần thì lần sau chắc chắn qua. Tu vi dư, pháp bảo từ bí cảnh và đồng môn hộ pháp đều giúp thêm tỉ lệ." }
+
+  - id: first_faction
+    flow: play
+    trigger: window.faction
+    title: Thế lực
+    lines:
+      - { expr: neutral, text: "Đây là nhà của đạo hữu. Cùng đồng môn góp công trình, giữ thứ hạng thế lực, và hộ pháp cho nhau khi độ kiếp." }
+      - { expr: worried, text: "Đổi phe được, nhưng phải chờ một thời gian giữa hai lần. Qua các đại kiếp, thế lực cũng có thể chia tách." }
+
+  - id: first_lecture
+    flow: play
+    trigger: scene.tu_tieu_cung
+    title: Nghe giảng
+    lines:
+      - { expr: smile, text: "Ngồi trong điện là đang nghe giảng, máy chủ tự đo thời gian. Ta hay ngủ gật đoạn giữa, đạo hữu đừng học ta." }
+      - { expr: point, spotlight: primary, text: "Khi Hồng Quân đặt câu hỏi, thời khắc ngộ đạo mở ra ít phút. Bấm Ngộ đạo để nhận tu vi theo thời gian đã nghe." }
+
+  - id: first_shop
+    flow: play
+    trigger: window.inventory.shop
+    title: Cửa hàng
+    lines:
+      - { expr: neutral, text: "Linh thạch đổi được đan dược, phù và trang phục. Đan tăng tốc vẫn nằm trong hạn mức mỗi ngày, ăn nhiều cũng không vượt." }
+      - { expr: smile, text: "Trang phục chỉ đẹp thôi, không thêm sức mạnh. Còn vật phẩm tăng tỉ lệ vượt kiếp thì không bày bán ở đây." }
+
+  - id: first_minigame
+    flow: play
+    trigger: mode.trial
+    title: Thử luyện
+    lines:
+      - { expr: point, text: "Thử luyện là thử chính tay đạo hữu: Tâm Ma, Hóa Phàm, bí cảnh. Một số cảnh giới cần vượt thử luyện trước khi đột phá." }
+      - { expr: smile, text: "Bí cảnh có thể rơi linh thạch và pháp bảo. Trượt thì thử lại, ta cũng không qua Tâm Ma ngay lần đầu." }
+
+  - id: first_tien_duyen
+    flow: play
+    trigger: window.vip
+    title: Tiên Duyên
+    lines:
+      - { expr: neutral, text: "Tiên Duyên tích từ việc chăm chỉ mỗi ngày, và từ nạp nếu đạo hữu muốn ủng hộ. Cấp càng cao, bế quan càng được lâu." }
+      - { expr: smile, text: "Nó không tăng tốc tu luyện, không tăng tỉ lệ đột phá hay thứ hạng. Người không nạp vẫn đi đến cuối đường như ai." }
+
+  - id: first_dao_lu
+    flow: play
+    trigger: window.companion
+    title: Đạo lữ
+    lines:
+      - { expr: smile, text: "Đào Hoa Đình là nơi kết đạo lữ. Hai người cùng tu và cùng mở bảng song tu thì tích thêm tu vi cho nhau, vẫn trong hạn mức ngày." }
+      - { expr: worried, text: "Đạo lữ là kết trọn đời, cả hai phải cùng đồng ý. Nghĩ kỹ rồi hãy ngỏ lời nhé." }

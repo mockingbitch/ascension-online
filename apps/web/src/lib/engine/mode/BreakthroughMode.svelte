@@ -7,12 +7,21 @@
 	           (tap / Esc / Back / "Bỏ qua"), then the static result card with the server's numbers and text.
 	Effects off = the static card at once; reduced motion = no flash or shake. Only transform/opacity animate.
 	History: the mode replaces the window's entry (or pushes one), so Back skips the animation, then closes the mode.
+	Six effect tiers (decisions 2026-11-09 D): the plan carries the tier of the realm the server's answer reached;
+	beats ring / ring2 / nascent / clear / auspicious / gate / galaxy / avatar draw the tier's layers. A successful
+	realm breakthrough ends on the static achievement card (realmCard.ts) with an optional image export (lazy).
 -->
 <script lang="ts">
 	import { onDestroy, onMount, untrack } from 'svelte';
 	import { pushState, replaceState } from '$app/navigation';
 	import { page } from '$app/state';
+	import CultivatorFigure from '$lib/components/CultivatorFigure.svelte';
 	import FormationCircle from '$lib/components/FormationCircle.svelte';
+	import { charArtFirst } from '$lib/game/charArt.svelte';
+	import { cosmetics } from '$lib/game/cosmetics.svelte';
+	import { myFaction } from '$lib/game/faction.svelte';
+	import { bodySlots, figureOf } from '$lib/game/looks';
+	import { hasChiTonSeal, realmCard } from '../fx/realmCard';
 	import Icon from '$lib/components/Icon.svelte';
 	import { formatPoints } from '$lib/game/format';
 	import { game } from '$lib/game/store.svelte';
@@ -35,6 +44,49 @@
 	const stageName = $derived(cat.stages.get(toStage)?.name ?? '');
 	const tribName = $derived(game.preview?.tribulation?.name ?? 'Lôi Kiếp');
 	const success = $derived(res?.result === 'success');
+	// effect tier played (from the plan = the server's `to` realm), else the target realm's tier while gathering
+	const tier = $derived(plan?.tier ?? realm?.visual.fxTier ?? 2);
+	const gold = $derived(tier >= 5);
+	// the player's own figure for the nascent soul / pháp tướng / the card (display only)
+	const look = $derived(game.character?.appearance?.look);
+	const figure = $derived(figureOf(cosmetics.looks, look));
+	// ── achievement card (static end state of a successful realm breakthrough) ──
+	const chain = $derived(
+		realm ? [...cat.realms.values()].filter((r) => r.path === realm.path && r.tier <= realm.tier).sort((a, b) => b.tier - a.tier).map((r) => r.id) : []
+	);
+	const bodyArt = $derived(look && realm ? charArtFirst(bodySlots(look, chain, realm.visual.fxTier)) : undefined);
+	const card = $derived.by(() => {
+		if (!res || !success || !realm) return null;
+		const ch = game.character;
+		const fac = myFaction();
+		return realmCard({
+			name: ch?.name ?? '',
+			realmName: realm.name,
+			stageName,
+			fxTier: realm.visual.fxTier,
+			// the server's stage date once the character reloaded onto the new stage
+			reachedAt: ch && ch.stageId === res.to ? ch.stageReachedAt : null,
+			rank: game.myRank,
+			title: cosmetics.name(ch?.appearance?.titleId) || undefined,
+			faction: fac.state === 'member' ? fac.view?.name : undefined,
+			seal: hasChiTonSeal(game.vip?.benefits.cosmetics)
+		});
+	});
+	let cardFig = $state<HTMLElement>();
+	let saving = $state(false);
+	async function saveCard(e: Event) {
+		e.stopPropagation();
+		if (!card || saving) return;
+		saving = true;
+		try {
+			const { exportCard } = await import('../fx/cardExport');
+			await exportCard(card, cardFig?.querySelector('img, svg') ?? null, aura);
+		} catch {
+			/* nothing saved: the card stays */
+		} finally {
+			saving = false;
+		}
+	}
 
 	// ── timeline ──
 	let t = $state(0);
@@ -81,7 +133,7 @@
 	let burstDone = -1;
 	// reveal burst in the new realm's aura colour (pooled fxLayer; 0 when off)
 	$effect(() => {
-		if (!plan || !success || !(has('flash') || has('pillar') || has('aura'))) return;
+		if (!plan || !success || !(has('pillar') || has('clear'))) return;
 		untrack(() => {
 			if (burstDone === btMode.seq) return;
 			burstDone = btMode.seq;
@@ -96,16 +148,17 @@
 				size: [1.4, 3.4],
 				gravity: 30,
 				drag: 0.5,
-				colors: [`var(--color-aura-${aura})`, 'var(--color-gold-300)']
+				// tiers 5–6 add the auspicious colours to the burst
+				colors: tier >= 5 ? [`var(--color-aura-${aura})`, 'var(--color-gold-300)', 'var(--color-spirit-violet)', 'var(--color-spirit-cyan)'] : [`var(--color-aura-${aura})`, 'var(--color-gold-300)']
 			};
 			fxOverlay.raised++;
 			fxLayer.burst(preset, innerWidth / 2, innerHeight * 0.45, plan.particles);
 		});
 	});
-	// gather loop: motes converge on the cultivator while waiting (and during a minor's 0.8 s gather)
+	// gather loop: motes converge on the cultivator while waiting
 	$effect(() => {
 		const g = btMode.gather;
-		const gathering = btMode.phase === 'gather' || (btMode.phase === 'outcome' && has('gather'));
+		const gathering = btMode.phase === 'gather';
 		if (!g || !gathering || g.motesPerSec <= 0) return;
 		const color = `var(--color-aura-${untrack(() => aura)})`;
 		return gatherQi(() => ({ x: innerWidth / 2, y: innerHeight * 0.45 }), settings.fx, color, g.motesPerSec);
@@ -164,7 +217,7 @@
 	const lossText = $derived(res && res.result === 'failure' ? (res.lossMilli > 0 ? `Mất ${formatPoints(res.lossMilli)} tu vi` : 'Tu vi vẫn còn nguyên') : '');
 	let cardBtn = $state<HTMLButtonElement>();
 	$effect(() => {
-		if (done) cardBtn?.focus();
+		if (done) cardBtn?.focus({ preventScroll: true }); // the card reads from its top (badge, figure, realm)
 	});
 </script>
 
@@ -178,6 +231,7 @@
 	data-fx-mode="breakthrough"
 	data-bt-phase={done ? 'result' : btMode.phase}
 	data-bt-outcome={plan?.outcome}
+	data-bt-tier={tier}
 	style:--aura="var(--color-aura-{aura})"
 	role="dialog"
 	aria-modal="true"
@@ -187,8 +241,20 @@
 >
 	<div class="stage" class:is-shake={has('shake')}>
 		<div class="sky" aria-hidden="true"></div>
+		{#if has('galaxy')}<span class="galaxy" style:--ms="{stepMs('galaxy')}ms" aria-hidden="true"></span>{/if}
+		{#if has('avatar')}
+			<div class="avatar" style:--ms="{stepMs('avatar')}ms" aria-hidden="true"><CultivatorFigure {aura} {figure} still class="size-full" /></div>
+		{/if}
+		{#if has('auspicious')}<div class="auspicious" style:--ms="{stepMs('auspicious')}ms" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>{/if}
+		{#if has('gate')}
+			<svg class="gate" class:is-fail={res?.result === 'failure'} viewBox="0 0 240 200" style:--ms="{stepMs('gate')}ms" aria-hidden="true">
+				<path class="arch" d="M20 196 V70 Q120 -10 220 70 V196" />
+				<rect class="door l" x="30" y="70" width="90" height="126" />
+				<rect class="door r" x="120" y="70" width="90" height="126" />
+			</svg>
+		{/if}
 		{#if btMode.tribulation}
-			<div class="clouds" class:is-roll={btMode.phase !== 'outcome' || has('darken') || has('strike')} aria-hidden="true">
+			<div class="clouds" class:is-roll={btMode.phase !== 'outcome' || has('darken') || has('strike')} class:is-clear={has('clear') || (done && success)} style:--ms="{stepMs('clear') || 500}ms" aria-hidden="true">
 				<span class="cloud c1"></span><span class="cloud c2"></span><span class="cloud c3"></span>
 			</div>
 		{/if}
@@ -200,10 +266,17 @@
 				class:is-spin={has('spin')}
 				style:--turn="{btMode.gather?.turnMs || 6000}ms"
 				style:--ms="{stepMs('spin')}ms"
-			><FormationCircle color="var(--aura)" class="size-full" /></span>
-			<span class="aura" class:is-gather={(btMode.phase === 'gather' && btMode.gather?.motion) || has('gather')} class:is-new={has('aura') || (done && success)} style:--ms="{stepMs('gather') || 800}ms"></span>
+			><FormationCircle color="var(--aura)" {tier} class="size-full" /></span>
+			{#if has('ring2')}
+				<span class="formation f2" style:--ms="{stepMs('ring2')}ms"><FormationCircle color="var(--color-gold-300)" {tier} class="size-full" /></span>
+			{/if}
+			{#if has('ring')}<span class="ring-wave" style:--ms="{stepMs('ring')}ms"></span>{/if}
+			{#if has('nascent')}
+				<span class="nascent" style:--ms="{stepMs('nascent')}ms"><CultivatorFigure {aura} {figure} crop="bust" still class="size-full" /></span>
+			{/if}
+			<span class="aura" class:is-gather={btMode.phase === 'gather' && btMode.gather?.motion} class:is-new={has('pillar') || (done && success)} style:--ms="800ms"></span>
 			<span class="dantian"></span>
-			{#if has('pillar') || (done && success && plan?.outcome !== 'minor')}<span class="pillar" class:is-static={done} style:--ms="{stepMs('pillar')}ms"></span>{/if}
+			{#if has('pillar') || (done && success)}<span class="pillar" class:is-static={done} style:--ms="{stepMs('pillar')}ms"></span>{/if}
 		</div>
 
 		{#if has('strike')}
@@ -232,8 +305,8 @@
 		{/if}
 
 		{#if has('title') && !done}
-			<p class="title-anim font-display" class:is-cal={plan?.outcome !== 'minor'} style:--ms="{stepMs('title')}ms" aria-hidden="true">
-				{plan?.outcome === 'minor' ? stageName : (realm?.name ?? '')}
+			<p class="title-anim font-display is-cal" class:is-gold={gold} style:--ms="{stepMs('title')}ms" aria-hidden="true">
+				{realm?.name ?? ''}
 			</p>
 		{/if}
 	</div>
@@ -267,7 +340,25 @@
 				{success ? 'Thành công' : 'Thất bại'}
 			</p>
 			<p class="mt-3 text-sm font-medium tracking-[0.3em] text-gold-300 uppercase">{outcomeTitle}</p>
-			{#if success}
+			{#if success && card}
+				<div class="achv mt-3" data-realm-card data-card-tier={card.fxTier}>
+					<div bind:this={cardFig} class="achv-fig" style:--aura="var(--color-aura-{aura})">
+						{#if bodyArt}
+							<img src={bodyArt.src} srcset={bodyArt.srcset} alt="" class="size-full object-contain" draggable="false" />
+						{:else}
+							<CultivatorFigure {aura} {figure} still class="size-full" />
+						{/if}
+					</div>
+					<p class="realm font-display text-5xl font-bold sm:text-6xl">{card.realmName}</p>
+					<p class="mt-1 font-display text-2xl text-mist-100">{card.stageName}</p>
+					<p class="mt-2 font-display text-xl text-mist-100">{card.name}{card.title ? ` 「${card.title}」` : ''}</p>
+					<p class="mt-1 text-sm text-mist-300">{[card.faction, card.rank, card.date].filter(Boolean).join(' · ')}</p>
+					{#if card.seal}<span class="seal font-display" title="Ấn Chí Tôn (Tiên Duyên) — chỉ là dấu trang trí" data-chi-ton-seal>Chí<br />Tôn</span>{/if}
+				</div>
+				<button type="button" class="btn btn-ghost mt-4 h-11 w-full text-sm" onclick={saveCard} disabled={saving} aria-busy={saving || undefined} data-card-save>
+					<Icon name="scroll" size={16} /> {saving ? 'Đang lưu…' : 'Lưu ảnh thẻ thành tựu'}
+				</button>
+			{:else if success}
 				<p class="realm mt-2 font-display text-5xl font-bold sm:text-6xl">{realm?.name ?? ''}</p>
 				<p class="mt-2 font-display text-2xl text-mist-100">{stageName}</p>
 			{:else}
@@ -275,7 +366,7 @@
 				<p class="mt-2 text-mist-300">Cảnh giới giữ nguyên{res.failStreak > 0 ? ` · thất bại ${res.failStreak} lần liên tiếp` : ''}.</p>
 				{#if !res.tribulation}<p class="mt-1 text-sm text-mist-500">Tâm cảnh vững hơn: lần sau tỉ lệ sẽ tăng.</p>{/if}
 			{/if}
-			<button bind:this={cardBtn} type="button" class="btn btn-gold mt-5 h-12 w-full" onclick={(e) => (e.stopPropagation(), close())} data-bt-close>Tiếp tục</button>
+			<button bind:this={cardBtn} type="button" class="btn btn-gold mt-3 h-12 w-full" onclick={(e) => (e.stopPropagation(), close())} data-bt-close>Tiếp tục</button>
 			<span class="sr-only" aria-live="polite">{outcomeTitle}. {success ? `${realm?.name ?? ''} ${stageName}` : lossText}</span>
 		</div>
 	{/if}
@@ -638,5 +729,219 @@
 	.realm {
 		color: var(--aura);
 		text-shadow: 0 0 24px color-mix(in oklab, var(--aura) 50%, transparent);
+	}
+
+	/* ── effect tiers (decisions 2026-11-09 D): transient layers, only while their beat runs ── */
+	.formation.f2 {
+		opacity: 0.5;
+		transform: perspective(600px) rotateX(58deg) scale(0.72);
+	}
+	.formation.f2 :global(svg) {
+		animation: turn-back var(--ms) linear forwards;
+	}
+	@keyframes turn-back {
+		to {
+			transform: rotate(-540deg);
+		}
+	}
+	.ring-wave {
+		position: absolute;
+		inset: 10%;
+		border-radius: 50%;
+		border: 3px solid color-mix(in oklab, var(--aura) 80%, var(--color-mist-100));
+		box-shadow: 0 0 22px var(--aura);
+		opacity: 0;
+		animation: ring-wave var(--ms) var(--ease-qi);
+	}
+	@keyframes ring-wave {
+		from {
+			opacity: 0.9;
+			transform: scale(0.35);
+		}
+		to {
+			opacity: 0;
+			transform: scale(1.6);
+		}
+	}
+	.nascent {
+		position: absolute;
+		left: 34%;
+		top: -38%;
+		width: 32%;
+		aspect-ratio: 1;
+		opacity: 0.45;
+		filter: drop-shadow(0 0 16px var(--aura));
+		animation: rise var(--ms) var(--ease-out-back);
+	}
+	@keyframes rise {
+		from {
+			opacity: 0;
+			transform: translateY(30%) scale(0.6);
+		}
+	}
+	.galaxy {
+		position: absolute;
+		left: 50%;
+		top: 45%;
+		width: min(150vw, 150vh);
+		aspect-ratio: 1;
+		border-radius: 50%;
+		transform: translate(-50%, -50%);
+		background:
+			radial-gradient(circle, transparent 18%, color-mix(in oklab, var(--color-ink-950) 20%, transparent) 60%, transparent 70%),
+			conic-gradient(from 0deg, color-mix(in oklab, var(--color-spirit-violet) 40%, transparent), transparent 25%, color-mix(in oklab, var(--aura) 45%, transparent) 50%, transparent 75%, color-mix(in oklab, var(--color-spirit-violet) 40%, transparent));
+		opacity: 0.38;
+		/* soft vignette: the swirl fades into the night instead of reading as a grey bubble (raster fx art later) */
+		mask: radial-gradient(circle, black 12%, transparent 52%);
+		animation: galaxy var(--ms) linear forwards;
+	}
+	@keyframes galaxy {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -50%) rotate(0deg) scale(0.6);
+		}
+		20% {
+			opacity: 0.38;
+		}
+		to {
+			transform: translate(-50%, -50%) rotate(200deg) scale(1);
+		}
+	}
+	.avatar {
+		position: absolute;
+		left: 50%;
+		bottom: 18%;
+		width: min(120vw, 95vh);
+		aspect-ratio: 1;
+		transform: translateX(-50%);
+		opacity: 0.16;
+		filter: drop-shadow(0 0 40px var(--aura));
+		animation: avatar var(--ms) var(--ease-qi);
+	}
+	@keyframes avatar {
+		from {
+			opacity: 0;
+			transform: translateX(-50%) scale(0.5);
+		}
+	}
+	.auspicious {
+		position: absolute;
+		inset: auto 0 0;
+		height: 34%;
+		animation: drift var(--ms) var(--ease-qi);
+	}
+	.auspicious i {
+		position: absolute;
+		bottom: 0;
+		width: 46%;
+		height: 60%;
+		border-radius: 50%;
+		filter: blur(10px);
+		opacity: 0.55;
+	}
+	.auspicious i:nth-child(1) { left: -6%; background: color-mix(in oklab, var(--color-aura-jade) 60%, transparent); }
+	.auspicious i:nth-child(2) { left: 16%; bottom: 10%; background: color-mix(in oklab, var(--color-aura-golden) 60%, transparent); }
+	.auspicious i:nth-child(3) { left: 36%; background: color-mix(in oklab, var(--color-aura-azure) 60%, transparent); }
+	.auspicious i:nth-child(4) { left: 56%; bottom: 8%; background: color-mix(in oklab, var(--color-aura-violet) 60%, transparent); }
+	.auspicious i:nth-child(5) { left: 74%; background: color-mix(in oklab, var(--color-aura-crimson) 55%, transparent); }
+	@keyframes drift {
+		from {
+			opacity: 0;
+			transform: translateY(30%);
+		}
+	}
+	.gate {
+		position: absolute;
+		left: 50%;
+		top: 4%;
+		width: min(70vw, 420px);
+		transform: translateX(-50%);
+		fill: none;
+		stroke: var(--color-gold-300);
+		stroke-width: 2;
+		filter: drop-shadow(0 0 14px var(--color-gold-300));
+	}
+	.gate .door {
+		fill: color-mix(in oklab, var(--color-gold-500) 22%, var(--color-ink-900));
+		transform-box: fill-box;
+		animation: door-open var(--ms) var(--ease-qi) forwards;
+	}
+	.gate .door.l {
+		transform-origin: 0 50%;
+	}
+	.gate .door.r {
+		transform-origin: 100% 50%;
+	}
+	.gate.is-fail .door {
+		animation-name: door-shut;
+	}
+	@keyframes door-open {
+		to {
+			transform: scaleX(0.12);
+		}
+	}
+	@keyframes door-shut {
+		from {
+			transform: scaleX(0.6);
+		}
+		to {
+			transform: scaleX(1);
+		}
+	}
+	.clouds.is-clear .cloud {
+		animation: cloud-clear var(--ms) var(--ease-qi) forwards;
+	}
+	.clouds.is-clear .c1 { --dx: -60%; }
+	.clouds.is-clear .c2 { --dx: 0%; }
+	.clouds.is-clear .c3 { --dx: 60%; }
+	@keyframes cloud-clear {
+		to {
+			opacity: 0;
+			transform: translate(var(--dx), -40%);
+		}
+	}
+	:global(:root[data-fx='off']) .clouds.is-clear .cloud {
+		opacity: 0;
+	}
+	.title-anim.is-gold {
+		top: 14%;
+		font-size: clamp(3rem, 12vw, 8rem);
+		color: var(--color-gold-300);
+		text-shadow: 0 0 30px color-mix(in oklab, var(--color-gold-300) 70%, transparent), 0 0 60px color-mix(in oklab, var(--aura) 50%, transparent);
+	}
+	/* ── achievement card ── */
+	.achv {
+		position: relative;
+	}
+	.achv-fig {
+		margin: 0 auto 0.5rem;
+		width: min(52vw, 15rem);
+		height: min(36vh, 15rem);
+		filter: drop-shadow(0 0 22px color-mix(in oklab, var(--aura) 55%, transparent));
+	}
+	.seal {
+		position: absolute;
+		right: 0.25rem;
+		bottom: 0;
+		display: grid;
+		place-items: center;
+		width: 3.4rem;
+		height: 3.4rem;
+		font-size: 0.95rem;
+		font-weight: 700;
+		line-height: 1.05;
+		color: var(--color-gold-300);
+		border: 2px solid var(--color-gold-300);
+		transform: rotate(-7deg);
+		opacity: 0.85;
+	}
+	/* landscape phones: a compact card (figure and realm name smaller) so most of it fits without scrolling */
+	@media (max-height: 520px) {
+		.achv-fig {
+			height: 24vh;
+		}
+		.achv .realm {
+			font-size: 2.25rem;
+		}
 	}
 </style>

@@ -6,10 +6,12 @@ import type { IconName } from '$lib/components/Icon.svelte';
 import { art } from '$lib/game/art';
 import { hall } from '$lib/game/lecture.svelte';
 import { game } from '$lib/game/store.svelte';
+import { toast } from '$lib/game/toasts.svelte';
 import { btMode } from '../mode/breakthrough.svelte';
 import { HALL_DEFAULT_SEATS, hallSeats } from '../scene/defs/tu_tieu_cung';
 import { sceneStage } from '../scene/stage.svelte';
 import { settings } from '../settings.svelte';
+import { STAGE_UP_QUIET_MS } from '../audio/sfxMap';
 import { fxBus } from './bus';
 import type { FxEventType } from './events';
 import { hudFx } from './hud.svelte';
@@ -24,6 +26,7 @@ const EVENTS: FxEventType[] = [
 	'reward',
 	'announcement',
 	'worksLevelUp',
+	'stageUp',
 	'breakthroughStart',
 	'breakthrough',
 	'breakthroughStalled',
@@ -156,6 +159,19 @@ export function startDirector(): () => void {
 				else btMode.close();
 				return;
 			}
+			case 'stageUp': {
+				// the toast carries the information at every level; motion only when the plan asks for it
+				toast('ok', c.text, 3500);
+				const t = qiTarget();
+				if (!t) return;
+				const r = t.getBoundingClientRect();
+				if (c.particles > 0) {
+					fxOverlay.raised++;
+					fxLayer.burst(landSpark, r.left + r.width / 2, r.top + r.height / 2, c.particles);
+				}
+				if (c.sweepMs > 0) sweep(r, c.fxTier, c.sweepMs);
+				return;
+			}
 			case 'firework': {
 				const p = from('pointer');
 				for (let i = 0; i < c.count; i++)
@@ -168,11 +184,44 @@ export function startDirector(): () => void {
 		}
 	}
 
+	// a light sweep along the tu vi bar: one temporary fixed box (transform/opacity only), removed when it ends
+	function sweep(r: DOMRect, fxTier: number, ms: number) {
+		const box = document.createElement('div');
+		box.setAttribute('aria-hidden', 'true');
+		box.dataset.fxSweep = String(fxTier);
+		Object.assign(box.style, {
+			position: 'fixed', left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px`,
+			overflow: 'hidden', pointerEvents: 'none', zIndex: 'var(--z-toast)', borderRadius: '4px'
+		});
+		const bar = document.createElement('div');
+		const aura = game.catalogue?.realmOf(game.character?.stageId ?? '')?.visual.aura ?? 'jade';
+		Object.assign(bar.style, {
+			position: 'absolute', inset: '0', width: '40%',
+			background: `linear-gradient(90deg, transparent, color-mix(in oklab, var(--color-aura-${aura}) 70%, var(--color-mist-100)), transparent)`
+		});
+		box.appendChild(bar);
+		document.body.appendChild(box);
+		const anim = bar.animate([{ transform: 'translateX(-110%)', opacity: 0.9 }, { transform: 'translateX(260%)', opacity: 0 }], { duration: ms, easing: 'ease-out' });
+		const done = () => box.remove();
+		anim.onfinish = done;
+		later(ms + 60, done);
+	}
+
 	const rarityOf = (id: string) => game.catalogue?.items.get(id)?.rarity;
+	// display lookups for the plans: the effect tier of a stage's realm (realms.yaml visual.fx_tier) and its name
+	const ctx = {
+		tierOf: (id: string) => game.catalogue?.realmOf(id)?.visual.fxTier,
+		stageName: (id: string) => game.catalogue?.stages.get(id)?.name ?? ''
+	};
 	const wanted = new Set<FxEventType>(EVENTS);
+	let lastBreakthrough = -Infinity;
 	const offs = [
 		fxBus.onAny((e) => {
-			if (wanted.has(e.type)) for (const c of planFx(e, settings.fx, rarityOf, settings.reducedMotion)) run(c);
+			if (!wanted.has(e.type)) return;
+			if (e.type === 'breakthrough') lastBreakthrough = performance.now();
+			// the stageUp a breakthrough also emits is part of that moment (the mode shows it)
+			if (e.type === 'stageUp' && performance.now() - lastBreakthrough < STAGE_UP_QUIET_MS) return;
+			for (const c of planFx(e, settings.fx, rarityOf, settings.reducedMotion, ctx)) run(c);
 		})
 	];
 

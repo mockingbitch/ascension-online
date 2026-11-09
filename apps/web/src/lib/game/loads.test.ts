@@ -5,7 +5,7 @@ import { isRedirect } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { api, ensureSession } = vi.hoisted(() => ({
-	api: { realms: vi.fn(), items: vi.fn(), character: vi.fn(), factions: vi.fn() },
+	api: { realms: vi.fn(), items: vi.fn(), character: vi.fn(), factions: vi.fn(), cosmeticCatalog: vi.fn() },
 	ensureSession: vi.fn()
 }));
 vi.mock('$lib/api/client', () => {
@@ -72,6 +72,7 @@ beforeEach(() => {
 	api.realms.mockResolvedValue({ realms: [] });
 	api.items.mockResolvedValue({ items: [] });
 	api.factions.mockResolvedValue({ factions: [] });
+	api.cosmeticCatalog.mockResolvedValue({ appearances: undefined });
 });
 
 describe('(game) layout load', () => {

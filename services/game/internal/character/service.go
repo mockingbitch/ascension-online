@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/cosmetic"
 	"tiendao/game/internal/cultivation"
 	"tiendao/game/internal/db"
@@ -69,6 +70,9 @@ type Service struct {
 	// strips them on a level drop). nil → shown as stored.
 	Cosmetics *cosmetic.Catalogue
 	VIP       *vip.Table
+	// Looks: body / accessory / robe / pose (appearances.yaml, display only). nil → no look in the view and an
+	// onboarding appearance is refused.
+	Looks *appearance.Catalogue
 }
 
 // Onboarding is the faction part of the new-player intent POST /character {name, factionId, path} (data-model §9.6).
@@ -76,7 +80,13 @@ type Onboarding struct {
 	IdempotencyKey string
 	FactionID      string
 	Path           realm.PathID // "" = the faction's first allowed path
+	// Look picked in the onboarding step (optional; nil = the path default). Validated for the resolved path; the
+	// pick does not start the body-change cooldown.
+	Look *appearance.Look
 }
+
+// ErrNoLooks: an onboarding appearance was sent but the appearance catalogue is not wired.
+var ErrNoLooks = errors.New("character: appearances unavailable")
 
 // ValidName normalises the format, then applies the moderation filter.
 func ValidName(raw string, names NameChecker) (string, error) {
@@ -107,6 +117,10 @@ func Rename(ctx context.Context, q *db.Queries, id uuid.UUID, raw string, names 
 	}
 	if ch.Name == newName {
 		return ch.Name, newName, nil
+	}
+	// The old đạo hiệu leaves the public news history with the rename (moderation; GĐ-D review M3).
+	if _, err := q.DeleteWorldAnnouncementsOfCharacter(ctx, pgtype.UUID{Bytes: id, Valid: true}); err != nil {
+		return "", "", err
 	}
 	// A unique violation aborts the caller's transaction: it must roll back (the whole resolution fails).
 	if err := q.RenameCharacter(ctx, db.RenameCharacterParams{ID: id, Name: newName}); err != nil {
@@ -150,6 +164,17 @@ func (s *Service) create(ctx context.Context, userID uuid.UUID, rawName string, 
 		if path, err = faction.ResolvePath(f, "", o.Path); err != nil {
 			return View{}, err
 		}
+		if o.Look != nil {
+			if s.Looks == nil {
+				return View{}, ErrNoLooks
+			}
+			// body + outfit + pose; accessory and robe come from the outfit (decision "Bộ trang phục vẽ sẵn")
+			l := s.Looks.Normalize(*o.Look)
+			o.Look = &l
+			if err := s.Looks.Validate(*o.Look, path); err != nil {
+				return View{}, err
+			}
+		}
 	}
 	replayed := false
 	err = postgres.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
@@ -164,6 +189,16 @@ func (s *Service) create(ctx context.Context, userID uuid.UUID, rawName string, 
 			}
 			if !joined {
 				return ErrAlreadyExists
+			}
+			// A replay must carry the same look as the original intent (like Equip's key check).
+			if o.Look != nil {
+				stored, _, err := cosmetic.LoadLook(ctx, q, old.ID)
+				if err != nil {
+					return err
+				}
+				if s.Looks.Normalize(stored) != *o.Look {
+					return faction.ErrIdempotencyReused
+				}
 			}
 			replayed = true
 			return nil
@@ -201,6 +236,12 @@ func (s *Service) create(ctx context.Context, userID uuid.UUID, rawName string, 
 		}
 		if o == nil {
 			return nil
+		}
+		if o.Look != nil {
+			if err := q.InsertOnboardingLook(ctx, db.InsertOnboardingLookParams{CharacterID: ch.ID, BodyID: text(o.Look.BodyID),
+				HairID: text(o.Look.HairID), RobePaletteID: text(o.Look.RobePaletteID), PoseID: text(o.Look.PoseID), Now: now}); err != nil {
+				return fmt.Errorf("onboarding look: %w", err)
+			}
 		}
 		// Same tx: the faction checks (open in this era, path) run on the row just created; any refusal rolls the
 		// character back too, so the player never ends up half-onboarded.
@@ -276,6 +317,14 @@ func (s *Service) Get(ctx context.Context, userID uuid.UUID) (View, error) {
 		}
 		look = s.Cosmetics.VisibleLook(look, s.VIP.TierForPoints(points))
 	}
+	if s.Looks != nil {
+		stored, _, err := cosmetic.LoadLook(ctx, q, ch.ID)
+		if err != nil {
+			return View{}, err
+		}
+		resolved := s.Looks.Resolve(stored, proj.Credit.After.Stage.Path)
+		look.Look = &resolved
+	}
 	return View{
 		FactionID: factionID, Appearance: look,
 		ID: ch.ID, Name: ch.Name, CreatedAt: ch.CreatedAt, RealmID: proj.Credit.After.Stage.RealmID, Snapshot: proj.Snapshot,
@@ -297,3 +346,5 @@ func mapUnique(err error) error {
 	}
 	return err
 }
+
+func text(s string) pgtype.Text { return pgtype.Text{String: s, Valid: s != ""} }

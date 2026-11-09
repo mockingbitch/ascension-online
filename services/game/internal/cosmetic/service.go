@@ -11,10 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tiendao/game/internal/appearance"
 	"tiendao/game/internal/db"
 	"tiendao/game/internal/economy"
 	"tiendao/game/internal/gameday"
 	"tiendao/game/internal/platform/postgres"
+	"tiendao/game/internal/realm"
 	"tiendao/game/internal/vip"
 )
 
@@ -30,6 +32,8 @@ type View struct {
 	Owned     []string   `json:"owned"`     // purchased + Tiên Duyên perks the level reaches
 	Available []string   `json:"available"` // shop cosmetics inside their season/era window now
 	Equipped  Appearance `json:"equipped"`
+	// BodyRetryAt: when the next body change is allowed (null = now; 24 h cooldown, free re-pick after a path change).
+	BodyRetryAt *time.Time `json:"bodyRetryAt"`
 }
 
 // BuyResult is POST /cosmetics/buy.
@@ -50,9 +54,13 @@ type EquipResult struct {
 type Service struct {
 	Pool *pgxpool.Pool
 	Cat  *Catalogue
-	VIP  *vip.Table
-	Eras EraIndex
-	Now  func() time.Time
+	// Looks + Realms: body / hair accessory / robe / pose (appearances.yaml). nil Looks → looks are not served and an
+	// equip carrying one is refused.
+	Looks  *appearance.Catalogue
+	Realms *realm.Catalogue
+	VIP    *vip.Table
+	Eras   EraIndex
+	Now    func() time.Time
 }
 
 func character(ctx context.Context, q *db.Queries, userID uuid.UUID) (db.Character, error) {
@@ -124,6 +132,43 @@ func LoadAppearance(ctx context.Context, q *db.Queries, charID uuid.UUID) (Appea
 	return AppearanceFromRow(&r), nil
 }
 
+// StoredLook is the look part of the DB row as chosen (empty fields = not chosen). nil-safe.
+func StoredLook(r *db.CharacterAppearance) (appearance.Look, *time.Time) {
+	if r == nil {
+		return appearance.Look{}, nil
+	}
+	return appearance.Look{BodyID: r.BodyID.String, HairID: r.HairID.String, RobePaletteID: r.RobePaletteID.String,
+		PoseID: r.PoseID.String}, r.BodyChangedAt
+}
+
+// LoadLook reads the stored look and the time of the last in-game body change (no lock).
+func LoadLook(ctx context.Context, q *db.Queries, charID uuid.UUID) (appearance.Look, *time.Time, error) {
+	r, err := q.GetAppearance(ctx, charID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return appearance.Look{}, nil, nil
+	} else if err != nil {
+		return appearance.Look{}, nil, err
+	}
+	l, at := StoredLook(&r)
+	return l, at, nil
+}
+
+// pathOf is the character's current realm path (the look is shown and validated for it). Deliberately NOT locked:
+// Equip holds the appearance row lock, and faction moves lock progression without touching appearance — taking the
+// progression lock here would invert that order. A conversion committing in between only means the stored body is on
+// the old path, which shows its pair and keeps the free re-pick (same outcome as the other order).
+func (s *Service) pathOf(ctx context.Context, q *db.Queries, charID uuid.UUID) (realm.PathID, error) {
+	p, err := q.GetProgression(ctx, charID)
+	if err != nil {
+		return "", fmt.Errorf("read progression: %w", err)
+	}
+	st, err := s.Realms.Stage(p.StageID)
+	if err != nil {
+		return "", err
+	}
+	return st.Path, nil
+}
+
 // View returns the caller's cosmetics state (read-only).
 func (s *Service) View(ctx context.Context, userID uuid.UUID) (View, error) {
 	q := db.New(s.Pool)
@@ -157,6 +202,19 @@ func (s *Service) view(ctx context.Context, q *db.Queries, userID, charID uuid.U
 	}
 	v := View{Balance: balance, Tier: tier, Season: s.Cat.SeasonOf(w.Month), EraID: era, Owned: []string{}, Available: []string{},
 		Equipped: s.Cat.VisibleLook(eq, tier)}
+	if s.Looks != nil {
+		stored, changedAt, err := LoadLook(ctx, q, charID)
+		if err != nil {
+			return View{}, err
+		}
+		path, err := s.pathOf(ctx, q, charID)
+		if err != nil {
+			return View{}, err
+		}
+		look := s.Looks.Resolve(stored, path)
+		v.Equipped.Look = &look
+		v.BodyRetryAt = s.Looks.BodyRetryAt(stored, changedAt, path, now)
+	}
 	for i := range s.Cat.All() {
 		cm := &s.Cat.All()[i]
 		if Owns(cm, bought, tier) {
@@ -244,6 +302,11 @@ func (s *Service) Equip(ctx context.Context, userID uuid.UUID, want Appearance, 
 	if want.CaveDecorationIDs == nil {
 		want.CaveDecorationIDs = []string{}
 	}
+	if want.Look != nil && s.Looks != nil {
+		// body + outfit + pose; accessory and robe come from the outfit (decision "Bộ trang phục vẽ sẵn")
+		l := s.Looks.Normalize(*want.Look)
+		want.Look = &l
+	}
 	var out EquipResult
 	err := postgres.InTx(ctx, s.Pool, func(tx pgx.Tx) error {
 		q := db.New(tx)
@@ -254,13 +317,21 @@ func (s *Service) Equip(ctx context.Context, userID uuid.UUID, want Appearance, 
 		if err := q.EnsureAppearance(ctx, ch.ID); err != nil {
 			return err
 		}
-		if _, err := q.GetAppearanceForUpdate(ctx, ch.ID); err != nil {
+		row, err := q.GetAppearanceForUpdate(ctx, ch.ID)
+		if err != nil {
 			return fmt.Errorf("lock appearance: %w", err)
 		}
 		now := s.Now()
 		if prev, err := q.GetCosmeticEquipByKey(ctx, db.GetCosmeticEquipByKeyParams{CharacterID: ch.ID, IdempotencyKey: idemKey}); err == nil {
 			got := Appearance{TitleID: prev.TitleID.String, AvatarFrameID: prev.AvatarFrameID.String, ChatAuraID: prev.ChatAuraID.String,
 				CaveDecorationIDs: prev.CaveDecorationIds}
+			if prev.LookSet {
+				got.Look = &appearance.Look{BodyID: prev.BodyID.String, HairID: prev.HairID.String,
+					RobePaletteID: prev.RobePaletteID.String, PoseID: prev.PoseID.String}
+				if s.Looks != nil {
+					*got.Look = s.Looks.Normalize(*got.Look) // the log stores the outfit as its parts
+				}
+			}
 			if got.CaveDecorationIDs == nil {
 				got.CaveDecorationIDs = []string{}
 			}
@@ -284,6 +355,35 @@ func (s *Service) Equip(ctx context.Context, userID uuid.UUID, want Appearance, 
 		if err := s.Cat.Validate(want, func(cm *Cosmetic) bool { return Owns(cm, bought, tier) }); err != nil {
 			return err
 		}
+		// Look (display only): valid for the current path, free/owned, body cooldown (24 h; free re-pick after a
+		// path change). The stored body is kept when the requested one is already shown (Plan).
+		var lookLog db.InsertCosmeticEquipParams
+		if want.Look != nil {
+			if s.Looks == nil {
+				return fmt.Errorf("%w: looks are not available", ErrBadLoadout)
+			}
+			path, err := s.pathOf(ctx, q, ch.ID)
+			if err != nil {
+				return err
+			}
+			if err := s.Looks.Validate(*want.Look, path); err != nil {
+				return err
+			}
+			stored, changedAt := StoredLook(&row)
+			plan, err := s.Looks.Plan(stored, changedAt, *want.Look, path, now)
+			if err != nil {
+				return err
+			}
+			if plan.BodyChanged {
+				changedAt = &now
+			}
+			if err := q.SetLook(ctx, db.SetLookParams{CharacterID: ch.ID, BodyID: text(plan.Store.BodyID), HairID: text(plan.Store.HairID),
+				RobePaletteID: text(plan.Store.RobePaletteID), PoseID: text(plan.Store.PoseID), BodyChangedAt: changedAt, Now: now}); err != nil {
+				return fmt.Errorf("set look: %w", err)
+			}
+			lookLog = db.InsertCosmeticEquipParams{LookSet: true, BodyID: text(want.Look.BodyID), HairID: text(want.Look.HairID),
+				RobePaletteID: text(want.Look.RobePaletteID), PoseID: text(want.Look.PoseID)}
+		}
 		if err := q.SetAppearance(ctx, db.SetAppearanceParams{
 			CharacterID: ch.ID, TitleID: text(want.TitleID), AvatarFrameID: text(want.AvatarFrameID), ChatAuraID: text(want.ChatAuraID),
 			CaveDecorationIds: want.CaveDecorationIDs, Now: now,
@@ -293,6 +393,7 @@ func (s *Service) Equip(ctx context.Context, userID uuid.UUID, want Appearance, 
 		if err := q.InsertCosmeticEquip(ctx, db.InsertCosmeticEquipParams{
 			CharacterID: ch.ID, TitleID: text(want.TitleID), AvatarFrameID: text(want.AvatarFrameID), ChatAuraID: text(want.ChatAuraID),
 			CaveDecorationIds: want.CaveDecorationIDs, IdempotencyKey: idemKey, Now: now,
+			LookSet: lookLog.LookSet, BodyID: lookLog.BodyID, HairID: lookLog.HairID, RobePaletteID: lookLog.RobePaletteID, PoseID: lookLog.PoseID,
 		}); err != nil {
 			return fmt.Errorf("equip log: %w", err)
 		}
