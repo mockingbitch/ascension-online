@@ -138,6 +138,9 @@ export const api = {
 
 	// character
 	character: (f: Fetch = fetch) => request<CharacterView>(f, '/character', { auth: true }),
+	/** null when the account has no character yet (204 instead of a 404 — no console error before onboarding) */
+	characterOrNull: async (f: Fetch = fetch) =>
+		(await request<CharacterView | undefined>(f, '/character?optional=1', { auth: true })) ?? null,
 	createCharacter: (name: string, f: Fetch = fetch) =>
 		request<CharacterView>(f, '/character', {
 			method: 'POST',

@@ -106,6 +106,7 @@ func TestEndToEnd(t *testing.T) {
 
 	// 3. No character yet → 404; create; duplicate → 409.
 	do(t, c, "GET", srv.URL+"/api/v1/character", tok, "", nil, 404, nil)
+	do(t, c, "GET", srv.URL+"/api/v1/character?optional=1", tok, "", nil, 204, nil) // shell guard: "none yet" is not an error
 	var blocked struct {
 		Error struct{ Code, Message string }
 	}

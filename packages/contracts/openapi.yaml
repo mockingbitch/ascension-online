@@ -68,8 +68,15 @@ paths:
     get:
       summary: Character view (cultivation projected to now, read-only)
       security: [{ bearer: [] }]
+      parameters:
+        - name: optional
+          in: query
+          required: false
+          description: "`1` → answer 204 (no body) instead of 404 when the account has no character yet (game-shell guard)."
+          schema: { type: string, enum: ["1"] }
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/CharacterView" } } } }
+        "204": { description: "No character yet (only with optional=1)" }
         "404": { $ref: "#/components/responses/Error" }
     post:
       summary: >-

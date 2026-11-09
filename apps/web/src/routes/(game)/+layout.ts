@@ -1,5 +1,5 @@
 import { redirect } from '@sveltejs/kit';
-import { api, ApiError } from '$lib/api/client';
+import { api } from '$lib/api/client';
 import { ensureSession } from '$lib/api/session.svelte';
 import { CatalogueIndex } from '$lib/game/catalogue';
 import type { CharacterView } from '$lib/game/types';
@@ -18,11 +18,6 @@ export const load: LayoutLoad = async ({ fetch, url, untrack, depends }) => {
 		redirect(307, `/login?return=${encodeURIComponent(untrack(() => url.pathname))}`);
 	}
 	const [cat, items] = await Promise.all([api.realms(fetch), api.items(fetch)]);
-	let character: CharacterView | null = null;
-	try {
-		character = await api.character(fetch);
-	} catch (e) {
-		if (!(e instanceof ApiError && e.status === 404)) throw e;
-	}
+	const character: CharacterView | null = await api.characterOrNull(fetch);
 	return { catalogue: new CatalogueIndex(cat, items.items), character };
 };

@@ -5,7 +5,7 @@ import { isRedirect } from '@sveltejs/kit';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { api, ensureSession } = vi.hoisted(() => ({
-	api: { realms: vi.fn(), items: vi.fn(), character: vi.fn(), factions: vi.fn(), cosmeticCatalog: vi.fn() },
+	api: { realms: vi.fn(), items: vi.fn(), character: vi.fn(), characterOrNull: vi.fn(), factions: vi.fn(), cosmeticCatalog: vi.fn() },
 	ensureSession: vi.fn()
 }));
 vi.mock('$lib/api/client', () => {
@@ -77,7 +77,7 @@ beforeEach(() => {
 
 describe('(game) layout load', () => {
 	it('reads nothing from the URL, so scene/screen/window changes never re-run it', async () => {
-		api.character.mockResolvedValue({ id: 'c', factionId: 'vu_toc' });
+		api.characterOrNull.mockResolvedValue({ id: 'c', factionId: 'vu_toc' });
 		for (const path of ['/play', '/play/tu-luyen', '/play/tu-tieu-cung', '/play/nhan-vat']) {
 			const { ev, tracked, deps } = event(path);
 			const data = await run(gameLoad, ev);

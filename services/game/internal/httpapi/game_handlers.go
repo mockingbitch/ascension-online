@@ -62,6 +62,12 @@ func (d Deps) getCharacter(w http.ResponseWriter, r *http.Request) {
 	}
 	v, err := d.Characters.Get(r.Context(), userFrom(r.Context()))
 	if errors.Is(err, character.ErrNotFound) {
+		// ?optional=1: "none yet" is a normal answer for the game shell's guard, not an error (no red 404 in the
+		// browser console before onboarding). Without the flag the old 404 contract stays.
+		if r.URL.Query().Get("optional") == "1" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		writeError(w, 404, "character_not_found", "create a character first")
 		return
 	} else if err != nil {
