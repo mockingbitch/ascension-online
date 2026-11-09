@@ -3,6 +3,114 @@
 Product/architecture decisions that refine or deviate from the GDD
 ([design/tien-dao-online-gdd-architecture.md](design/tien-dao-online-gdd-architecture.md)). Newest first.
 
+## 2026-11-09 — Bộ trang phục vẽ sẵn thay cho trộn màu áo + phụ kiện tóc
+Owner choice. Painted art cannot follow free mix-and-match (tiên: 6 hair accessories × 7 robe colours per image),
+so on /create and in Trang phục the picker offered choices that changed nothing on the painted figure.
+- Each body gets **3 painted outfits** (default + 2), each = one robe colour + one hair accessory baked into the art.
+  The look picks body + outfit + pose; hair/robe are derived from the outfit (no free mixing). All outfits free.
+- Art per outfit: avatar, meditate (every allowed pose), listener, body-b1..b6; missing outfit art falls back to the
+  body's default outfit art, then to the SVG figure (which still renders the outfit's hair/robe).
+- Budget ≈ 250 images (~2.5 USD). Poses keep their own painted images per body.
+- **Done (2026-11-09).** `appearances.yaml`: every body has `default_outfit` + exactly 3 `outfits` (id unique across
+  bodies, name, `robe_palette`, `hair_accessory`, one-line English `art` brief); `default_hair/default_robe` became the
+  default outfit's parts (still served as `defaultHair/defaultRobe`). Loader: 3 per body, ids unique, parts allowed on
+  the path, robe colours distinct within a body, default among them. **No migration:** the outfit is stored as its
+  (hair_id, robe_palette_id) pair in the existing columns (unique within a body), so an outfit's parts are as permanent
+  as its id; `Resolve` serves `outfitId` + derived parts (by id → by stored pair → body default — pre-outfit free mixes
+  show the default outfit). Requests send `{bodyId, outfitId, poseId}`; `Normalize` fills the parts (or finds the
+  outfit from parts for an older client); an outfit of another body / parts of no outfit = 400 `unknown_look`.
+  Idempotency, onboarding and the 24 h body cooldown unchanged; changing only the outfit never hits the cooldown. Art:
+  default outfit = the body folder, alternates `characters/<body>/<outfit>/…` (same names), chain outfit → body → SVG.
+  Web: LookPicker + Trang phục show an outfit row of 3 cards instead of the accessory / robe chips; the preview and
+  cards use only the exact outfit's art, else the SVG in its colours (so a choice is visible before its art exists —
+  in game the chain still falls back to the default painting, recoloured by `avatar-robe` where a mask exists).
+- Guide overlay (same day, owner): Vân Khê's tutorial is a large visual-novel overlay (~half the screen, top layer,
+  dim backdrop, focus trap) with a spotlight hole for targets; supersedes "never cover the control it points at".
+
+## 2026-11-09 — Ngoại hình, hướng dẫn viên, hiệu ứng theo bậc, thông báo toàn server
+Brief: [design/visual-progression-prompt.md](design/visual-progression-prompt.md). Proposal (owner accepted every
+recommendation): [design/visual-progression-proposal.md](design/visual-progression-proposal.md).
+1. **Guide = Vân Khê**: welcomes newcomers at Tử Tiêu Cung, belongs to no faction; says "ta", calls the player "đạo hữu".
+   Original character. **Amended 2026-11-09 (owner):** her look is alluring — option C2 (strapless silk gown with a
+   sweetheart neckline showing a little cleavage, bust B–C, high side slit, shawl at the elbows; jade/gold earrings,
+   necklace, arm cuff, bracelets, waist chain, gold bộ diêu). Sheet `art-work/refs/van_khe-sheet-c2.png`; earlier sets
+   kept in `art-work/old-guide/` (modest) and `art-work/old-guide-c/` (C). The "modest" rule no longer applies to her; hard limits stay:
+   clearly adult (late 20s), no nudity, fully opaque, no sexual poses, nothing explicit. Other female bodies keep the
+   modest rule. Note for licensing: her look may affect the game's age rating — check with counsel.
+2. **Appearance economy:** all 12 bodies free (tiên 4 nam + 4 nữ, Vu 2 + 2). Special robe colours / accessories are earned
+   in game or bought with linh thạch; Tiên Duyên unlocks only 1–2 neutral items. **Realm auras are never purchasable.**
+   Every appearance field is display-only (loader rejects anything else).
+3. **Full-body art per effect tier** (6 per body), not per realm.
+4. **Body re-pick:** free, 24 h cooldown. A path change (tiên ↔ Vu) auto-switches to the paired body and grants one
+   re-pick without cooldown.
+5. **Hair** is fixed per body; players choose a hair accessory (overlay).
+6. **`breakthrough_fx:chi_ton`** (Tiên Duyên 12) becomes a static seal on the realm achievement card: no particles, no
+   extra time (test-enforced). It must never rival a realm effect.
+7. **First-to-realm** is counted per realm id (race-free `realm_firsts`).
+8. **Other players' banners default ON**, grouped and rate-limited (≤ 3 separate per 10 s, rest as one digest; top-10 at
+   most once per 6 h per player); players can turn banners/sound off (ticker always stays).
+9. **Trang phục** moves to the Nhân Vật window; Túi Đồ keeps a shortcut, old links redirect.
+10. **Vu auras:** 6 new tokens, one per effect tier.
+11. **Tier 6** may use a light 200 ms screen shake, full effects only, never under reduced motion.
+12. **Announcements in chat:** shown client-side + a short `world_announcements` history, not stored as chat messages.
+13. World name stays **Hồng Hoang** (D2 reversal of 2026-11-07).
+14. Optional fifth body per sex: later.
+Effect tiers map realm tiers 1 / 2–3 / 4–5 / 6–9 / 10–12 / 13–15 (both paths) via `realms.yaml visual.fx_tier`; each tier
+is at least as strong as the previous one (test), ≤ 3 s, budgets per `settings.fx`.
+- **GĐ-A done (2026-11-09).** `content/catalog/appearances.yaml` (12 bodies, 9 accessories, 9 robe colours, 5 poses;
+  loader `internal/appearance` rejects every non-display field) · migration 000019 (`character_appearance` body/hair/robe/
+  pose + `body_changed_at`, equip log look columns, `chat_messages.look` snapshot) · look on `POST /character`
+  (onboarding, no cooldown) and in the existing `POST /cosmetics/equip` (optional `look`; 24 h body cooldown; the shown
+  body after a path change is the stored body's `pair`, and the stored body stays until the player re-picks, which is
+  free once) · resolved `look` on GET /character, Thiên Bảng/thế lực rows, chat messages, Tử Tiêu Cung seats. Web:
+  parameterised SVG `CultivatorFigure`, per-body art slots loaded lazily (`charArt.svelte.ts`, not in the initial
+  bundle), onboarding step "Ngoại hình", Trang phục moved to Nhân Vật (Túi Đồ shortcut, old links redirect). Initial
+  `/play` JS +4.4 kB gz. **Choices made without the owner:** GĐ-A ships free looks only (earned / linh thạch / Tiên
+  Duyên looks wait for their unlock source; the loader refuses `default_free: false`); robe colour "theo thế lực" left
+  out (others' rows don't carry the faction); a character with a look never shows another figure's shared raster (SVG
+  until its own art exists); accessories on raster bodies wait for per-body head anchors (GĐ-E); đạo lữ partner cards
+  still show no look (their payload has none). Content cross-check: faction switch cooldown ≥ body cooldown.
+- **GĐ-B done (2026-11-09).** Vân Khê: lore `content/story/characters/van-khe.md`, scripts
+  `content/story/tutorial/{onboarding,lan-dau}.yaml` (4 onboarding + 12 "lần đầu" steps, ≤ 200 chars, tribulation numbers
+  are placeholders filled from `realms.yaml`), loader `internal/tutorial` · migration 000020 (`tutorial_progress`,
+  `tutorial_prefs` — also the per-character lock; settings actions replay by their last key) · `GET /tutorial/script`,
+  `GET /tutorial`, `POST /tutorial/steps/{id}/done|skip`, `POST /tutorial/skip-all`, `POST /tutorial/reset`. Web:
+  `TutorialHost` (triggers = fxBus events after server answers, the server's breakthrough preview, windows/scenes/mini
+  games the player opened), lazy `TutorialGuide` (panel placed by the pure `placeGuide` so it never covers its
+  spotlight; spotlight = `data-tutorial` targets; skip / "Không nhắc lại" / keyboard / screen reader), SVG `GuideFigure`
+  + lazy `characters/guide/<expr>` slots, in-flow guide in the onboarding wizard, "?" → "Nhờ Vân Khê giải thích",
+  Cài đặt › "Xem lại hướng dẫn". **Choices made without the owner:** onboarding steps are client-only (no character
+  exists yet); while a modal window is open the guide layer moves into that `<dialog>` (outside it everything is inert);
+  an old Mark key replayed after a reset marks its step again (accepted, display only); "Vân Khê" / "van khe" are blocked
+  as player names; lore details (three days at the gate, she copies the Sổ Đạo Ngộ) are project prose for owner review.
+- **GĐ-C done (2026-11-09).** `realms.yaml tiers[].visual.fx_tier` (loader: 1–6, non-decreasing; served as
+  `visual.fxTier` on both paths) and six Vu aura tokens (`vu-ember` … `vu-ancestral`, brighter per tier, test).
+  `fx/breakthrough.ts`: tier timelines (2 jade ring · 3 + second ring + nascent soul · 4 lôi kiếp + clouds clear · 5 +
+  auspicious clouds + heaven gate + gold name · 6 + galaxy + pháp tướng + one 200 ms shake, full only) with the tier of
+  the server's `to` realm; the dead `minor` outcome is gone (server kinds are auto/major; an attempt is always major);
+  particles 48/90/140/180/240/300 (lite ≤ 80), durations 1.8–3.0 s, layers non-decreasing — all test-enforced. Auto
+  stage-ups: one toast + bar sweep + ≤ 20 particles per settle. Persistent aura (`RealmAura` + scene motes ≤ 24 / ≤ 8),
+  per-tier `FormationCircle`, Portrait glow per tier, `sfx.bt_tier2..6` synth cues, the realm achievement card with a
+  PNG export of display data only and the `chi_ton` seal as a static stamp (test: no particles, no time). Art slots
+  `characters/<body>/body-b<1..6>` and `fx/aura-<1..6>` load lazily. **Choices made without the owner:** effect
+  timings/particle counts live in `fx/breakthrough.ts` (presentation constants, unit-tested) rather than a new YAML;
+  the card's date shows only once the character reloaded onto the new stage (server value); the eight-point star of
+  the tier-6 formation is a generic motif (no pentagram/hexagram).
+- **GĐ-D done (2026-11-09).** Migration 000021: `realm_firsts` (PK realm id, written in the breakthrough tx with
+  ON CONFLICT DO NOTHING — race-free, per realm id; SET NULL on character delete so a slot never reopens) and
+  `world_announcements` (short public history, pruned after `history_keep_days`). Worker (`internal/announce`): after the
+  outbox batch commits it renders the tier template (`realm.t2|t3`, `tribulation.<path>.t4–t6`, `first_to_realm`,
+  `rank_top10|rank_first`, `digest`; every line ≤ 90 chars with the longest đạo hiệu, checked at start and in
+  content-check), paces it (`content/catalog/announcements.yaml`: ≤ 3 separate per 10 s window, the rest one digest;
+  first-to-realm never folded; rank news shares the budget and is ≤ once per player per 6 h, and a first appearance on
+  the board is never news), stores and publishes (`announcement.major_breakthrough|first_to_realm|rank_top10|digest`).
+  `GET /announcements/recent`. Web: ticker (tier 2), sliding banner (3–4, top-10, digest), large top-layer banner with
+  sound (5–6, first, rank 1), never my own news, never the mid-screen scroll for other players, Cài đặt › "Thông báo
+  của đạo hữu khác" (banner / sound, default on; ticker + list always), the notification list from the history, and
+  client-side system lines in the world chat. A moderated rename deletes that character's history rows.
+  **Choices made without the owner:** no particles on the large banner (a CSS light sweep instead); banners hide during
+  full-screen modes and news older than 30 s only reaches the ticker/list; a lone folded item is announced plainly.
+
 ## 2026-11-09 — UI regions & layers (UI polish U0–U5)
 Spec: [design/ui-polish-refactor-prompt.md](design/ui-polish-refactor-prompt.md). No game rules, API or catalogue
 changed — layout, layers and interaction only. Audit (2026-11-08) found Đột phá unreachable on phones (A1), chat
