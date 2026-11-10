@@ -12,6 +12,7 @@
 	import CosmeticArt from './CosmeticArt.svelte';
 	import CultivatorFigure from './CultivatorFigure.svelte';
 	import FormationCircle from './FormationCircle.svelte';
+	import RealmAura from './RealmAura.svelte';
 
 	interface Props {
 		aura: Aura;
@@ -62,6 +63,7 @@
 	{#if ready}<div class="pillar absolute inset-y-0 left-1/2" aria-hidden="true"></div>{/if}
 
 	{#if meditate}
+		<div class="aura-box absolute inset-x-0 bottom-0 mx-auto h-[92%]" aria-hidden="true"><RealmAura tier={fxTier} {aura} {figure} /></div>
 		<img src={meditate.src} srcset={meditate.srcset} alt="" class="art absolute inset-x-0 bottom-0 mx-auto h-[92%] object-contain" draggable="false" />
 	{:else}
 		<!-- formation on the floor, in perspective -->
@@ -121,7 +123,21 @@
 	}
 	.art {
 		filter: drop-shadow(0 0 18px color-mix(in oklab, var(--aura) 45%, transparent));
-		animation: var(--animate-qi-breathe);
+		transform-origin: 50% 100%;
+	}
+	.aura-box {
+		aspect-ratio: 1;
+	}
+	:global(:root[data-fx='full']) .art {
+		animation: med-breathe 4.6s var(--ease-in-out-sine) infinite;
+	}
+	:global(:root[data-fx='lite']) .art {
+		animation: med-breathe 7s var(--ease-in-out-sine) infinite;
+	}
+	@keyframes med-breathe {
+		50% {
+			transform: scale(1.012);
+		}
 	}
 	.halo {
 		background:

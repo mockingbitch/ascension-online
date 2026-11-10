@@ -45,6 +45,16 @@ export function charArtFirst(paths: string[]): Art | undefined {
 	return undefined;
 }
 
+/** Like `charArtFirst`, plus `pending` while an earlier slot is still resolving (callers keep what they show). */
+export function charArtFirstState(paths: string[]): { art: Art | undefined; pending: boolean } {
+	for (const p of paths) {
+		const a = charArt(p);
+		if (a) return { art: a, pending: false };
+		if (known[p] === undefined) return { art: undefined, pending: true };
+	}
+	return { art: undefined, pending: false };
+}
+
 /** Like `charArtFirst`, plus which slot answered (e.g. to apply a body-level robe mask only to body-level art). */
 export function charArtFirstSlot(paths: string[]): { art: Art; slot: string } | undefined {
 	for (const p of paths) {

@@ -92,7 +92,7 @@
 				aria-label="Hồ sơ {ch.name}"
 				onclick={() => openWindow({ kind: 'profile', characterId: ch.id, name: ch.name, stageId: ch.stageId })}
 			>
-				<Portrait aura={realm?.visual.aura ?? 'none'} size={40} frameId={ch.appearance?.avatarFrameId} look={ch.appearance?.look} fxTier={realm?.visual.fxTier} />
+				<Portrait aura={realm?.visual.aura ?? 'none'} size={40} frameId={ch.appearance?.avatarFrameId} look={ch.appearance?.look} fxTier={realm?.visual.fxTier} mine />
 			</button>
 			<span class="min-w-0">
 				<button

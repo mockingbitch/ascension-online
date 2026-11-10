@@ -5,6 +5,8 @@
 	import { decoShape, frameStyle } from '$lib/game/cosmetics.svelte';
 	import type { CosmeticKind, Rarity } from '$lib/game/types';
 	import DecorationGlyph from './DecorationGlyph.svelte';
+	import FrameRing from './FrameRing.svelte';
+	import TitlePlaque from './TitlePlaque.svelte';
 	import NameFx from './NameFx.svelte';
 
 	interface Props {
@@ -23,9 +25,9 @@
 	{#if a && kind !== 'title' && kind !== 'chat_aura'}
 		<img src={a.src} srcset={a.srcset} alt="" class="size-full object-contain" draggable="false" />
 	{:else if kind === 'avatar_frame'}
-		<span class="disc"><span class="cos-frame frame-{frameStyle(`x:${slug}`)}"></span></span>
+		<span class="disc"><FrameRing style={frameStyle(`x:${slug}`)} /></span>
 	{:else if kind === 'title'}
-		<span class="title-seal font-display">{label.split(' ').slice(0, 2).map((w) => w[0]).join('')}</span>
+		<TitlePlaque name={label.split(' ').slice(0, 2).map((w) => w[0]).join('')} {rarity} seal />
 	{:else if kind === 'chat_aura'}
 		<NameFx fx={`chat_aura:${slug}`} class="text-sm font-semibold">Danh</NameFx>
 	{:else}
@@ -48,16 +50,5 @@
 		border-radius: 9999px;
 		background: radial-gradient(circle at 50% 60%, var(--color-ink-700), var(--color-ink-950));
 	}
-	.title-seal {
-		display: grid;
-		place-items: center;
-		width: 78%;
-		height: 78%;
-		border: 1px solid var(--r);
-		border-radius: 0.35rem;
-		font-size: 1.05rem;
-		font-weight: 700;
-		color: var(--r);
-		background: color-mix(in oklab, var(--r) 12%, var(--color-ink-950));
-	}
+
 </style>

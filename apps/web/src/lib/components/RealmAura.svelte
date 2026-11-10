@@ -112,6 +112,32 @@
 		stroke: color-mix(in oklab, var(--aura) 50%, transparent);
 		stroke-width: 1;
 	}
+	/* the painted aura sways slowly round the figure's feet (full), only breathes at lite, static off */
+	.overlay {
+		transform-origin: 50% 82%;
+	}
+	:global(:root[data-fx='full']) .overlay {
+		animation: aura-sway 9s var(--ease-in-out-sine) infinite;
+	}
+	:global(:root[data-fx='lite']) .overlay {
+		animation: aura-breathe 7s var(--ease-in-out-sine) infinite;
+	}
+	@keyframes aura-sway {
+		0%,
+		100% {
+			transform: rotate(-1.4deg) scale(1);
+			opacity: 0.8;
+		}
+		50% {
+			transform: rotate(1.4deg) scale(1.035);
+			opacity: 0.95;
+		}
+	}
+	@keyframes aura-breathe {
+		50% {
+			opacity: 0.95;
+		}
+	}
 	/* motion only at full (lite: the slow orbit + breathing ring); off / reduced motion: the static state above */
 	:global(:root[data-fx='full']) .ring,
 	:global(:root[data-fx='lite']) .ring {

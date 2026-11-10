@@ -8,10 +8,11 @@
 	`lockedBody` (cooldown) keeps every body except `currentBody` disabled, with `lockNote` explaining why.
 -->
 <script lang="ts">
-	import { charArtFirst } from '$lib/game/charArt.svelte';
+	import { charArtFirst, charArtFirstState } from '$lib/game/charArt.svelte';
 	import { cosmetics } from '$lib/game/cosmetics.svelte';
 	import { avatarSlots, bodyOf, figureOf, meditateSlots, optionsFor, outfitOf, robeToken, withBody, withOutfit } from '$lib/game/looks';
 	import type { AppearanceCatalog, Aura, BodySex, Look, PathId } from '$lib/game/types';
+	import ArtFade from './ArtFade.svelte';
 	import CultivatorFigure from './CultivatorFigure.svelte';
 	import Icon from './Icon.svelte';
 	import Portrait from './Portrait.svelte';
@@ -36,7 +37,29 @@
 	const shownBodies = $derived(opts.bodies.filter((b) => b.sex === sex));
 	const outfit = $derived(outfitOf(catalog, look));
 	const exact = $derived({ defaultOutfit: body?.defaultOutfit, exact: true });
-	const preview = $derived(charArtFirst(meditateSlots({ ...look, outfitId: outfit?.id }, exact)));
+	const previewState = $derived(charArtFirstState(meditateSlots({ ...look, outfitId: outfit?.id }, exact)));
+	const preview = $derived(previewState.art);
+	// warm the neighbours (the body's other outfits in this pose, this outfit's other poses): their URLs resolve and
+	// decode ahead, so a change cross-fades at once instead of waiting on a lazy image
+	const warmed = new Set<string>();
+	$effect(() => {
+		if (!body) return;
+		const near = [
+			...body.outfits.map((o) => withOutfit(catalog, look, o.id)),
+			...opts.poses.map((p) => ({ ...look, outfitId: outfit?.id, poseId: p.id }))
+		];
+		for (const l of near) {
+			const a = charArtFirst(meditateSlots(l, exact));
+			if (a && !warmed.has(a.src)) {
+				warmed.add(a.src);
+				const im = new Image();
+				im.src = a.src;
+				void im.decode?.().catch(() => {});
+			}
+		}
+	});
+	// a soft gold sweep + a few sparkles on every change the player makes (not on mount)
+	let changed = $state(0);
 	const hairName = (id: string) => catalog.hairAccessories.find((h) => h.id === id)?.name ?? id;
 	const uid = $props.id();
 	// Portrait resolves looks through the shared store (also outside /play, e.g. onboarding)
@@ -45,9 +68,11 @@
 	function pickBody(id: string) {
 		const next = withBody(catalog, look, id);
 		if (next) look = next;
+		changed++;
 	}
 	function pickOutfit(id: string) {
 		look = withOutfit(catalog, look, id);
+		changed++;
 	}
 	const sexes: { id: BodySex; label: string }[] = [
 		{ id: 'nam', label: 'Nam' },
@@ -59,14 +84,18 @@
 	<!-- live preview: what the scene and every portrait will show -->
 	<section class="preview relative flex flex-col items-center overflow-hidden p-3 text-center" style:--aura="var(--color-aura-{aura})" aria-label="Xem trước">
 		<div class="halo absolute inset-0" aria-hidden="true"></div>
-		<div class="relative aspect-square w-full max-w-[13rem]" data-testid="look-preview" data-outfit={outfit?.id} data-art={preview ? 'raster' : 'svg'}>
-			{#if preview}
-				<img src={preview.src} srcset={preview.srcset} alt="" class="size-full object-contain" draggable="false" />
-			{:else}
+		<div class="relative aspect-square w-full max-w-[13rem]" data-testid="look-preview" data-outfit={outfit?.id} data-art={preview || previewState.pending ? 'raster' : 'svg'}>
+			<ArtFade art={preview} pending={previewState.pending} class="size-full">
 				<CultivatorFigure {aura} {figure} class="size-full" />
-			{/if}
+			</ArtFade>
+			{#key changed}
+				{#if changed}
+					<span class="sweep" aria-hidden="true"></span>
+					<span class="sparks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+				{/if}
+			{/key}
 		</div>
-		<div class="relative -mt-6"><Portrait {aura} size={64} {frameId} {look} exact /></div>
+		<div class="relative -mt-6"><Portrait {aura} size={64} {frameId} {look} exact mine /></div>
 		{#if body}
 			<p class="relative mt-2 font-display text-xl font-bold text-mist-100">{body.name}</p>
 			{#if outfit}<p class="relative text-sm text-mist-100" data-testid="look-outfit-name">{outfit.name}</p>{/if}
@@ -152,7 +181,7 @@
 			<div class="flex flex-wrap gap-2" role="radiogroup" aria-labelledby="{uid}-pose">
 				{#each opts.poses as o (o.id)}
 					<button type="button" role="radio" aria-checked={look.poseId === o.id} class="chip press" class:is-on={look.poseId === o.id}
-						onclick={() => (look = { ...look, poseId: o.id })}>{o.name}</button>
+						onclick={() => ((look = { ...look, poseId: o.id }), changed++)}>{o.name}</button>
 				{/each}
 			</div>
 		</section>
@@ -186,6 +215,72 @@
 		border: 1px solid color-mix(in oklab, var(--color-gold-500) 20%, transparent);
 		background: color-mix(in oklab, var(--color-ink-950) 55%, transparent);
 		transition: border-color var(--dur-fast) var(--ease-qi);
+	}
+	@media (hover: hover) {
+		.body-card:not(:disabled):hover {
+			transform: translateY(-2px);
+			border-color: color-mix(in oklab, var(--color-gold-300) 65%, transparent);
+			box-shadow: 0 8px 18px -10px color-mix(in oklab, var(--color-gold-300) 55%, transparent);
+		}
+	}
+	.body-card {
+		transition:
+			border-color var(--dur-fast) var(--ease-qi),
+			transform var(--dur-fast) var(--ease-qi),
+			box-shadow var(--dur-fast) var(--ease-qi);
+	}
+	/* change feedback: a diagonal gold sheen crosses the preview once, five sparkles blink (end state = nothing) */
+	.sweep {
+		position: absolute;
+		inset: -10% -30%;
+		pointer-events: none;
+		background: linear-gradient(105deg, transparent 35%, color-mix(in oklab, var(--color-gold-300) 45%, transparent) 50%, transparent 65%);
+		opacity: 0;
+	}
+	:global(:root[data-fx='full']) .sweep,
+	:global(:root[data-fx='lite']) .sweep {
+		animation: sweep 700ms var(--ease-qi);
+	}
+	@keyframes sweep {
+		from {
+			opacity: 1;
+			transform: translateX(-60%);
+		}
+		to {
+			opacity: 0.2;
+			transform: translateX(60%);
+		}
+	}
+	.sparks i {
+		position: absolute;
+		width: 9px;
+		height: 9px;
+		pointer-events: none;
+		background: var(--color-gold-300);
+		clip-path: polygon(50% 0, 62% 38%, 100% 50%, 62% 62%, 50% 100%, 38% 62%, 0 50%, 38% 38%);
+		opacity: 0;
+	}
+	.sparks i:nth-child(1) { left: 22%; top: 26%; --d: 60ms; }
+	.sparks i:nth-child(2) { left: 70%; top: 18%; --d: 160ms; }
+	.sparks i:nth-child(3) { left: 80%; top: 58%; --d: 260ms; }
+	.sparks i:nth-child(4) { left: 14%; top: 64%; --d: 210ms; }
+	.sparks i:nth-child(5) { left: 50%; top: 8%; --d: 110ms; }
+	:global(:root[data-fx='full']) .sparks i {
+		animation: spark 650ms var(--ease-out-back) var(--d) both;
+	}
+	@keyframes spark {
+		0% {
+			opacity: 0;
+			transform: scale(0.2) rotate(0deg);
+		}
+		45% {
+			opacity: 1;
+			transform: scale(1.15) rotate(45deg);
+		}
+		100% {
+			opacity: 0;
+			transform: scale(0.5) rotate(90deg);
+		}
 	}
 	.body-card.is-on {
 		border-color: var(--color-gold-300);

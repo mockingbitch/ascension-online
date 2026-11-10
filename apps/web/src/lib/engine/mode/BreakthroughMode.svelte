@@ -17,7 +17,7 @@
 	import { page } from '$app/state';
 	import CultivatorFigure from '$lib/components/CultivatorFigure.svelte';
 	import FormationCircle from '$lib/components/FormationCircle.svelte';
-	import { charArtFirst } from '$lib/game/charArt.svelte';
+	import { charArt, charArtFirst } from '$lib/game/charArt.svelte';
 	import { cosmetics } from '$lib/game/cosmetics.svelte';
 	import { myFaction } from '$lib/game/faction.svelte';
 	import { bodySlots, figureOf } from '$lib/game/looks';
@@ -55,6 +55,20 @@
 		realm ? [...cat.realms.values()].filter((r) => r.path === realm.path && r.tier <= realm.tier).sort((a, b) => b.tier - a.tier).map((r) => r.id) : []
 	);
 	const bodyArt = $derived(look && realm ? charArtFirst(bodySlots(look, chain, realm.visual.fxTier)) : undefined);
+	// tiers 5–6: the painted realm-aura overlay (fx/aura-5 = five-colour clouds round a jade ring, fx/aura-6 = the
+	// starlit pháp tướng over a golden ring) carries the celebration; CSS layers stay as the fallback while it loads /
+	// if it is missing. Resolved while gathering (the target realm is known) and decoded before the answer lands.
+	// auspicious clouds = aura-5 (tiers 5–6), the starlit sky = aura-6 (tier 6)
+	const ausArt = $derived(tier >= 5 ? charArt('fx/aura-5') : undefined);
+	const skyArt = $derived(tier >= 6 ? charArt('fx/aura-6') : undefined);
+	$effect(() => {
+		for (const a of [ausArt, skyArt, tier >= 5 ? bodyArt : undefined]) {
+			if (!a) continue;
+			const im = new Image();
+			im.src = a.src;
+			void im.decode?.().catch(() => {});
+		}
+	});
 	const card = $derived.by(() => {
 		if (!res || !success || !realm) return null;
 		const ch = game.character;
@@ -129,6 +143,8 @@
 	};
 	const has = (b: BtBeat) => beats.has(b);
 	const stepMs = (b: BtBeat) => plan?.steps.find((s) => s.beat === b)?.ms ?? 0;
+	// light rays behind the gate / pháp tướng / pillar (tiers 5–6, success only)
+	const rays = $derived(tier >= 5 && success && (has('gate') || has('galaxy') || has('avatar') || (has('pillar') && !done)));
 
 	let burstDone = -1;
 	// reveal burst in the new realm's aura colour (pooled fxLayer; 0 when off)
@@ -241,11 +257,39 @@
 >
 	<div class="stage" class:is-shake={has('shake')}>
 		<div class="sky" aria-hidden="true"></div>
-		{#if has('galaxy')}<span class="galaxy" style:--ms="{stepMs('galaxy')}ms" aria-hidden="true"></span>{/if}
-		{#if has('avatar')}
-			<div class="avatar" style:--ms="{stepMs('avatar')}ms" aria-hidden="true"><CultivatorFigure {aura} {figure} still class="size-full" /></div>
+		{#if rays}<span class="rays" aria-hidden="true"></span>{/if}
+		{#if has('galaxy')}
+			{#if skyArt}
+				<!-- painted starlit pháp tướng + golden ring, two parallax depths of the same layer -->
+				<div class="sky-art" style:--ms="{stepMs('galaxy')}ms" aria-hidden="true">
+					<img class="far" src={skyArt.src} srcset={skyArt.srcset} alt="" draggable="false" />
+					<img class="near" src={skyArt.src} srcset={skyArt.srcset} alt="" draggable="false" />
+				</div>
+			{:else}
+				<span class="galaxy" style:--ms="{stepMs('galaxy')}ms" aria-hidden="true"></span>
+			{/if}
 		{/if}
-		{#if has('auspicious')}<div class="auspicious" style:--ms="{stepMs('auspicious')}ms" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>{/if}
+		{#if has('avatar')}
+			<div class="avatar" class:is-art={!!bodyArt} style:--ms="{stepMs('avatar')}ms" aria-hidden="true">
+				{#if bodyArt}
+					<img src={bodyArt.src} srcset={bodyArt.srcset} alt="" class="size-full object-contain" draggable="false" />
+				{:else}
+					<CultivatorFigure {aura} {figure} still class="size-full" />
+				{/if}
+			</div>
+		{/if}
+		{#if has('auspicious')}
+			{#if ausArt}
+				<!-- painted five-colour clouds: a soft far layer rising slowly, a crisp near layer rising faster
+				     (tier 6: only the soft band — the golden ring of the starlit sky is the focus) -->
+				<div class="aus-art" class:t6={tier >= 6} style:--ms="{stepMs('auspicious')}ms" aria-hidden="true">
+					<img class="far" src={ausArt.src} srcset={ausArt.srcset} alt="" draggable="false" />
+					{#if tier < 6}<img class="near" src={ausArt.src} srcset={ausArt.srcset} alt="" draggable="false" />{/if}
+				</div>
+			{:else}
+				<div class="auspicious" style:--ms="{stepMs('auspicious')}ms" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+			{/if}
+		{/if}
 		{#if has('gate')}
 			<svg class="gate" class:is-fail={res?.result === 'failure'} viewBox="0 0 240 200" style:--ms="{stepMs('gate')}ms" aria-hidden="true">
 				<path class="arch" d="M20 196 V70 Q120 -10 220 70 V196" />
@@ -306,7 +350,10 @@
 
 		{#if has('title') && !done}
 			<p class="title-anim font-display is-cal" class:is-gold={gold} style:--ms="{stepMs('title')}ms" aria-hidden="true">
-				{realm?.name ?? ''}
+				<span class="ink">{realm?.name ?? ''}</span>
+				{#if gold}
+					<svg class="brush" viewBox="0 0 400 24" preserveAspectRatio="none"><path d="M6 16 C80 6 160 20 230 12 S350 6 394 13" /></svg>
+				{/if}
 			</p>
 		{/if}
 	</div>
@@ -427,7 +474,8 @@
 		width: 70%;
 		height: 60%;
 		border-radius: 50%;
-		background: radial-gradient(ellipse at 50% 60%, var(--color-ink-950), color-mix(in oklab, var(--color-ink-900) 70%, transparent) 55%, transparent 72%);
+		/* closest-side: the gradient fades out inside the ellipse (no hard rim against bright layers behind) */
+		background: radial-gradient(closest-side at 50% 55%, var(--color-ink-950), color-mix(in oklab, var(--color-ink-900) 70%, transparent) 60%, transparent);
 		opacity: 0.9;
 	}
 	.c1 {
@@ -908,6 +956,176 @@
 		font-size: clamp(3rem, 12vw, 8rem);
 		color: var(--color-gold-300);
 		text-shadow: 0 0 30px color-mix(in oklab, var(--color-gold-300) 70%, transparent), 0 0 60px color-mix(in oklab, var(--aura) 50%, transparent);
+	}
+	/* ── tiers 5–6 painted layers (fx/aura-5|6): parallax depths, light rays, gold calligraphy ── */
+	.rays {
+		position: absolute;
+		left: 50%;
+		top: 40%;
+		width: max(160vw, 160vh);
+		aspect-ratio: 1;
+		transform: translate(-50%, -50%);
+		background: repeating-conic-gradient(
+			from 0deg,
+			color-mix(in oklab, var(--color-gold-300) 30%, transparent) 0deg 4deg,
+			transparent 4deg 15deg
+		);
+		mask: radial-gradient(circle, black 4%, transparent 46%);
+		opacity: 0.55;
+		animation: rays-in var(--dur-slow) var(--ease-qi);
+	}
+	:global(:root[data-fx='full']) .rays {
+		animation:
+			rays-in var(--dur-slow) var(--ease-qi),
+			rays-turn 9s linear infinite;
+	}
+	@keyframes rays-in {
+		from {
+			opacity: 0;
+		}
+	}
+	@keyframes rays-turn {
+		to {
+			transform: translate(-50%, -50%) rotate(40deg);
+		}
+	}
+	.aus-art,
+	.sky-art {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
+	.aus-art img,
+	.sky-art img {
+		position: absolute;
+		left: 50%;
+		max-width: none;
+		aspect-ratio: 1;
+		object-fit: contain;
+	}
+	/* five-colour clouds: the painting's lower band frames the bottom of the screen */
+	.aus-art .far {
+		bottom: -38%;
+		width: max(150vw, 120vh);
+		opacity: 0.35;
+		filter: blur(3px);
+		transform: translateX(-50%);
+		animation: aus-far var(--ms) var(--ease-qi) both;
+	}
+	.aus-art .near {
+		bottom: -30%;
+		width: max(118vw, 92vh);
+		opacity: 0.9;
+		transform: translateX(-50%);
+		animation: aus-near var(--ms) var(--ease-out-back) both;
+	}
+	.aus-art.t6 .far {
+		opacity: 0.5;
+	}
+	/* portrait phones: the cloud ring sits in view near the bottom */
+	@media (orientation: portrait) {
+		.aus-art .near {
+			bottom: -6%;
+			width: 150vw;
+		}
+		.aus-art .far {
+			bottom: -8%;
+			width: 230vw;
+		}
+	}
+	@keyframes aus-far {
+		from {
+			opacity: 0;
+			transform: translate(-50%, 6%) scale(1.08);
+		}
+	}
+	@keyframes aus-near {
+		from {
+			opacity: 0;
+			transform: translate(-50%, 16%) scale(0.92);
+		}
+	}
+	/* tier 6: the starlit pháp tướng over its golden ring rises behind the formation; a soft far copy drifts */
+	.sky-art .far {
+		top: 50%;
+		width: min(150vw, 135vh);
+		opacity: 0.22;
+		filter: blur(4px);
+		transform: translate(-50%, -52%) scale(1.15);
+		animation: sky-far var(--ms) linear both;
+	}
+	.sky-art .near {
+		top: 46%;
+		width: min(118vw, 100vh);
+		opacity: 0.7;
+		transform: translate(-50%, -50%);
+		animation: sky-near var(--ms) var(--ease-qi) both;
+	}
+	@keyframes sky-far {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -48%) scale(1.3);
+		}
+	}
+	@keyframes sky-near {
+		from {
+			opacity: 0;
+			transform: translate(-50%, -42%) scale(0.86);
+		}
+	}
+	/* the player's own painted figure as the giant pháp tướng (ghostly, lit from within) */
+	.avatar.is-art {
+		height: min(84vh, 140vw);
+		width: auto;
+		aspect-ratio: 2 / 3;
+		bottom: 6%;
+		opacity: 0.38;
+		mix-blend-mode: screen;
+		filter: drop-shadow(0 0 30px var(--color-gold-300)) drop-shadow(0 0 60px var(--aura)) brightness(1.25);
+	}
+	/* gold calligraphy: a gradient ink revealed left → right like a brush stroke, a brush underline after it */
+	.title-anim.is-gold .ink {
+		display: inline-block;
+		padding: 0 0.15em;
+		letter-spacing: 0.06em;
+		background: linear-gradient(180deg, var(--color-mist-100) 10%, var(--color-gold-300) 45%, var(--color-gold-500) 90%);
+		background-clip: text;
+		-webkit-background-clip: text;
+		color: transparent;
+		filter: drop-shadow(0 0 18px color-mix(in oklab, var(--color-gold-300) 60%, transparent)) drop-shadow(0 2px 0 var(--color-ink-950));
+		animation: ink-reveal var(--ms) var(--ease-qi) both;
+	}
+	.title-anim.is-gold {
+		text-shadow: none;
+	}
+	.title-anim .brush {
+		display: block;
+		margin: -0.1em auto 0;
+		width: min(70vw, 34rem);
+		height: 0.32em;
+		fill: none;
+		stroke: var(--color-gold-300);
+		stroke-width: 5;
+		stroke-linecap: round;
+		stroke-dasharray: 420;
+		stroke-dashoffset: 0;
+		filter: drop-shadow(0 0 8px var(--color-gold-300));
+		animation: brush var(--ms) var(--ease-qi) both;
+	}
+	@keyframes ink-reveal {
+		from {
+			clip-path: inset(0 100% 0 0);
+			transform: scale(1.08);
+		}
+		60% {
+			clip-path: inset(0 0 0 0);
+		}
+	}
+	@keyframes brush {
+		0%,
+		45% {
+			stroke-dashoffset: 420;
+		}
 	}
 	/* ── achievement card ── */
 	.achv {

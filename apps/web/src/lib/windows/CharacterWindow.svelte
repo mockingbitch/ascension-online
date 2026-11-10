@@ -14,6 +14,7 @@
 	import { game } from '$lib/game/store.svelte';
 	import FactionEmblem from '$lib/components/FactionEmblem.svelte';
 	import CosmeticsPanel from '$lib/components/CosmeticsPanel.svelte';
+	import RealmAura from '$lib/components/RealmAura.svelte';
 	import CultivatorFigure from '$lib/components/CultivatorFigure.svelte';
 	import { charArtFirst } from '$lib/game/charArt.svelte';
 	import { factionColor, myFaction } from '$lib/game/faction.svelte';
@@ -65,13 +66,16 @@
 			<div class="halo absolute inset-0" aria-hidden="true"></div>
 			{#if body || look}
 				{#if body}
-					<img src={body.src} srcset={body.srcset} alt="" class="body relative h-[340px] object-contain" draggable="false" />
+					<div class="body-wrap relative h-[340px]" data-alive>
+						<div class="aura-box" aria-hidden="true"><RealmAura tier={realm?.visual.fxTier ?? 1} {aura} {figure} /></div>
+						<img src={body.src} srcset={body.srcset} alt="" class="body relative h-full object-contain" draggable="false" />
+					</div>
 				{:else}
 					<div class="body relative h-[300px] w-full max-w-[340px]" data-testid="look-figure"><CultivatorFigure {aura} {figure} class="size-full" /></div>
 				{/if}
-				<div class="absolute top-4 left-4"><Portrait {aura} size={60} frameId={ch.appearance?.avatarFrameId} {look} fxTier={realm?.visual.fxTier} /></div>
+				<div class="absolute top-4 left-4"><Portrait {aura} size={60} frameId={ch.appearance?.avatarFrameId} {look} fxTier={realm?.visual.fxTier} mine /></div>
 			{:else}
-				<div class="relative"><Portrait {aura} size={168} frameId={ch.appearance?.avatarFrameId} {look} fxTier={realm?.visual.fxTier} /></div>
+				<div class="relative"><Portrait {aura} size={168} frameId={ch.appearance?.avatarFrameId} {look} fxTier={realm?.visual.fxTier} mine /></div>
 			{/if}
 			<p class="relative mt-4 eyebrow">{realm?.title ?? 'Tu sĩ'}</p>
 			<h2 class="relative font-display text-4xl font-bold text-mist-100"><NameFx fx={ch.appearance?.chatAuraId}>{ch.name}</NameFx></h2>
@@ -140,6 +144,27 @@
 	}
 	.body {
 		filter: drop-shadow(0 0 24px color-mix(in oklab, var(--aura) 45%, transparent));
+		transform-origin: 50% 100%;
+	}
+	/* the realm aura (fx/aura-<tier>) stands round the feet, the body breathes (full; lite slower; off still) */
+	.aura-box {
+		position: absolute;
+		left: 50%;
+		bottom: -2%;
+		width: 112%;
+		aspect-ratio: 1;
+		transform: translateX(-50%);
+	}
+	:global(:root[data-fx='full']) .body-wrap .body {
+		animation: body-breathe 4.8s var(--ease-in-out-sine) infinite;
+	}
+	:global(:root[data-fx='lite']) .body-wrap .body {
+		animation: body-breathe 7s var(--ease-in-out-sine) infinite;
+	}
+	@keyframes body-breathe {
+		50% {
+			transform: scale(1.008, 1.014);
+		}
 	}
 	.stats > div {
 		padding: 0.6rem 0.75rem;

@@ -42,6 +42,10 @@ class CosmeticsStore {
 
 export const cosmetics = new CosmeticsStore();
 
+/** Bumped after the server confirmed a new look / frame (Trang phục save): the player's portraits play a short
+ *  "đổi y phục" swirl once. Presentation only. */
+export const lookFx = $state({ seq: 0 });
+
 export const kindLabel: Record<CosmeticKind, string> = {
 	title: 'Danh hiệu',
 	avatar_frame: 'Khung chân dung',

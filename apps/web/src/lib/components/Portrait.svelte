@@ -8,10 +8,11 @@
 <script lang="ts">
 	import { art } from '$lib/game/art';
 	import { charArt, charArtFirstSlot } from '$lib/game/charArt.svelte';
-	import { cosmetics, frameStyle, slugOf } from '$lib/game/cosmetics.svelte';
+	import { cosmetics, frameStyle, lookFx, slugOf } from '$lib/game/cosmetics.svelte';
 	import { avatarSlots, bodyOf, figureOf, isBodyLevel, maskSlot, outfitOf, robeToken } from '$lib/game/looks';
 	import type { Aura, Look } from '$lib/game/types';
 	import CultivatorFigure from './CultivatorFigure.svelte';
+	import FrameRing from './FrameRing.svelte';
 
 	const shared = art('characters/avatar'); // raster slot (docs/design/art-prompts.md §4), SVG otherwise
 
@@ -25,8 +26,13 @@
 		fxTier?: number;
 		/** look picker: only the art painting exactly this outfit (else the SVG in its colours) */
 		exact?: boolean;
+		/** the player's own portrait: plays the "đổi y phục" swirl after a confirmed look / frame change */
+		mine?: boolean;
 	}
-	let { aura, size = 80, frameId, look, fxTier = 1, exact = false }: Props = $props();
+	let { aura, size = 80, frameId, look, fxTier = 1, exact = false, mine = false }: Props = $props();
+	// only changes after mount play (seq at mount is the baseline)
+	const seq0 = lookFx.seq;
+	const swirl = $derived(mine && lookFx.seq > seq0 ? lookFx.seq : 0);
 	const frameArt = $derived(frameId ? art(`cosmetics/${slugOf(frameId)}`) : undefined);
 	const figure = $derived(figureOf(cosmetics.looks, look));
 	// with a look, only that body's art (the SVG while the catalogue/art loads) — never the shared art of another figure
@@ -61,12 +67,78 @@
 		{#if frameArt}
 			<img src={frameArt.src} srcset={frameArt.srcset} alt="" class="frame-art" draggable="false" />
 		{:else}
-			<span class="cos-frame frame-{frameStyle(frameId)}" aria-hidden="true"></span>
+			<FrameRing style={frameStyle(frameId)} />
 		{/if}
 	{/if}
+	{#key swirl}
+		{#if swirl}
+			<span class="swirl" aria-hidden="true" data-look-swirl><i></i><i></i><i></i><i></i><i></i><i></i></span>
+		{/if}
+	{/key}
 </span>
 
 <style>
+	/* "đổi y phục": a gold-jade swirl closes round the portrait and a few motes scatter (0.9 s, once); off = nothing */
+	.swirl {
+		position: absolute;
+		inset: -18%;
+		border-radius: 50%;
+		pointer-events: none;
+		background: conic-gradient(from 0deg, transparent, color-mix(in oklab, var(--color-gold-300) 85%, transparent), transparent 35%, color-mix(in oklab, var(--color-jade-300) 70%, transparent), transparent 70%);
+		mask: radial-gradient(closest-side, transparent 66%, black 70%, black 86%, transparent 92%);
+		opacity: 0;
+	}
+	.swirl i {
+		position: absolute;
+		left: 50%;
+		top: 50%;
+		width: 4px;
+		height: 4px;
+		margin: -2px;
+		border-radius: 50%;
+		background: var(--color-gold-300);
+		box-shadow: 0 0 6px var(--color-gold-300);
+		opacity: 0;
+	}
+	:global(:root[data-fx='full']) .swirl,
+	:global(:root[data-fx='lite']) .swirl {
+		animation: swirl 900ms var(--ease-qi) forwards;
+	}
+	:global(:root[data-fx='full']) .swirl i {
+		animation: mote 900ms var(--ease-qi) forwards;
+	}
+	.swirl i:nth-child(1) { --a: 20deg; }
+	.swirl i:nth-child(2) { --a: 80deg; }
+	.swirl i:nth-child(3) { --a: 140deg; }
+	.swirl i:nth-child(4) { --a: 200deg; }
+	.swirl i:nth-child(5) { --a: 260deg; }
+	.swirl i:nth-child(6) { --a: 320deg; }
+	@keyframes swirl {
+		0% {
+			opacity: 0;
+			transform: rotate(-200deg) scale(1.25);
+		}
+		35% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+			transform: rotate(160deg) scale(0.95);
+		}
+	}
+	@keyframes mote {
+		0% {
+			opacity: 0;
+			transform: rotate(var(--a)) translateY(-20%);
+		}
+		40% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0;
+			transform: rotate(calc(var(--a) + 40deg)) translateY(-340%);
+		}
+	}
 	.portrait {
 		background: radial-gradient(circle at 50% 60%, color-mix(in oklab, var(--aura) 35%, var(--color-ink-800)), var(--color-ink-950));
 		box-shadow:

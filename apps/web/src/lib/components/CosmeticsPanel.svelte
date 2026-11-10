@@ -6,13 +6,15 @@
 -->
 <script lang="ts">
 	import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
-	import { cosmetics, kindLabel, slugOf } from '$lib/game/cosmetics.svelte';
+	import { cosmetics, kindLabel, lookFx, slugOf } from '$lib/game/cosmetics.svelte';
 	import { game } from '$lib/game/store.svelte';
 	import { toast } from '$lib/game/toasts.svelte';
 	import { sameLook } from '$lib/game/looks';
 	import type { Appearance, CosmeticDef, CosmeticKind, CosmeticsView } from '$lib/game/types';
 	import LookPicker from './LookPicker.svelte';
+	import ChatSample from './ChatSample.svelte';
 	import CosmeticArt from './CosmeticArt.svelte';
+	import TitlePlaque from './TitlePlaque.svelte';
 	import GameWindow from './GameWindow.svelte';
 	import Icon from './Icon.svelte';
 	import NameFx from './NameFx.svelte';
@@ -50,6 +52,7 @@
 	const onSale = $derived(new Set(view?.available ?? []));
 	const series = $derived((cat?.series ?? []).filter((s) => s.kind === kind));
 	const aura = $derived(game.catalogue?.realmOf(game.character?.stageId ?? '')?.visual.aura ?? 'none');
+	const fxTier = $derived(game.catalogue?.realmOf(game.character?.stageId ?? '')?.visual.fxTier ?? 1);
 	const lookDirty = $derived(!!view && !!draft.look && !sameLook(draft.look, view.equipped.look));
 	const dirty = $derived(
 		!!view &&
@@ -98,8 +101,10 @@
 		saveKey ??= newIdempotencyKey();
 		try {
 			// the look rides along only when it changed (absent = keep, so a cosmetics-only save never touches it)
+			const changedLook = lookDirty || (draft.avatarFrameId ?? '') !== (view?.equipped.avatarFrameId ?? '');
 			const r = await api.cosmeticEquip(lookDirty ? draft : { ...draft, look: undefined }, saveKey);
 			saveKey = null;
+			if (changedLook) lookFx.seq++; // after the server confirmed it
 			adopt(r.state);
 			toast('ok', 'Đã thay trang phục.');
 			await game.reload();
@@ -143,13 +148,16 @@
 	<!-- preview: what others will see -->
 	<section class="preview mb-4 grid items-center gap-4 p-4 sm:grid-cols-[auto_minmax(0,1fr)]">
 		<div class="flex items-center gap-4">
-			<Portrait {aura} size={88} frameId={draft.avatarFrameId} look={draft.look} />
+			<Portrait {aura} size={88} frameId={draft.avatarFrameId} look={draft.look} fxTier={fxTier} mine />
 			<div class="min-w-0">
 				<p class="eyebrow">Người khác thấy</p>
 				<p class="truncate font-display text-2xl font-bold text-mist-100">
 					<NameFx fx={draft.chatAuraId}>{game.character?.name ?? ''}</NameFx>
 				</p>
-				<p class="min-h-5 truncate text-sm text-gold-300">{draft.titleId ? `「${cosmetics.name(draft.titleId)}」` : ''}</p>
+				<p class="min-h-6">
+					{#if draft.titleId}<TitlePlaque name={cosmetics.name(draft.titleId)} rarity={cosmetics.get(draft.titleId)?.rarity} size="sm" />{/if}
+				</p>
+				<div class="mt-1.5 max-w-[17rem]"><ChatSample name={game.character?.name ?? ''} fx={draft.chatAuraId} /></div>
 			</div>
 		</div>
 		<div>
@@ -198,10 +206,22 @@
 						{@const lock = has ? '' : lockOf(c, v)}
 						<li class="card" class:on={worn(c)} style:--r="var(--color-rarity-{c.rarity})">
 							<button type="button" class="flex w-full flex-col items-center gap-1 px-2 pt-3 pb-2 text-center" onclick={() => (has ? toggle(c) : (pick = c))}>
-								<CosmeticArt kind={c.kind} slug={c.slug} rarity={c.rarity} label={c.name} size={56} />
-								<span class="line-clamp-2 min-h-10 text-sm font-medium text-mist-100">
-									{#if c.kind === 'chat_aura'}<NameFx fx={c.id}>{c.name}</NameFx>{:else}{c.name}{/if}
-								</span>
+								<!-- each skin previewed as it will look: frames on the player's own portrait, titles as their plaque,
+								     chat effects on a chat line -->
+								{#if c.kind === 'avatar_frame'}
+									<span class="my-1"><Portrait {aura} size={64} frameId={c.id} look={draft.look} fxTier={fxTier} /></span>
+								{:else if c.kind === 'title'}
+									<span class="flex min-h-16 w-full items-center justify-center px-1"><TitlePlaque name={c.name} rarity={c.rarity} wrap /></span>
+								{:else if c.kind === 'chat_aura'}
+									<span class="flex min-h-16 w-full items-center"><ChatSample name={game.character?.name || c.name} fx={c.id} text="an hảo" /></span>
+								{:else}
+									<CosmeticArt kind={c.kind} slug={c.slug} rarity={c.rarity} label={c.name} size={56} />
+								{/if}
+								{#if c.kind !== 'title'}
+									<span class="line-clamp-2 min-h-10 text-sm font-medium text-mist-100">
+										{#if c.kind === 'chat_aura'}<NameFx fx={c.id}>{c.name}</NameFx>{:else}{c.name}{/if}
+									</span>
+								{/if}
 								{#if has}
 									<span class="state" class:gold={worn(c)}>{worn(c) ? 'Đang dùng' : 'Đã có · chạm để dùng'}</span>
 								{:else if lock}
@@ -227,7 +247,7 @@
 			{@const lock = lockOf(c, v)}
 			<div class="flex items-center gap-4">
 				{#if c.kind === 'avatar_frame'}
-					<Portrait {aura} size={88} frameId={c.id} />
+					<Portrait {aura} size={88} frameId={c.id} look={draft.look} />
 				{:else}
 					<CosmeticArt kind={c.kind} slug={c.slug} rarity={c.rarity} label={c.name} size={88} />
 				{/if}
@@ -235,8 +255,9 @@
 					<p class="eyebrow">{kindLabel[c.kind]}</p>
 					{#if c.kind === 'chat_aura'}
 						<p class="font-display text-2xl font-bold"><NameFx fx={c.id}>{game.character?.name ?? c.name}</NameFx></p>
+						<div class="mt-1.5"><ChatSample name={game.character?.name ?? c.name} fx={c.id} /></div>
 					{:else if c.kind === 'title'}
-						<p class="text-gold-300">「{c.name}」</p>
+						<TitlePlaque name={c.name} rarity={c.rarity} />
 					{/if}
 				</div>
 			</div>
@@ -290,6 +311,19 @@
 		border: 1px solid color-mix(in oklab, var(--r) 30%, transparent);
 		background: color-mix(in oklab, var(--color-ink-950) 60%, transparent);
 		transition: border-color 200ms var(--ease-qi);
+	}
+	@media (hover: hover) {
+		.card:hover {
+			border-color: color-mix(in oklab, var(--r) 70%, var(--color-gold-300));
+			transform: translateY(-2px);
+			box-shadow: 0 8px 18px -10px color-mix(in oklab, var(--r) 70%, transparent);
+		}
+	}
+	.card {
+		transition:
+			border-color var(--dur-fast) var(--ease-qi),
+			transform var(--dur-fast) var(--ease-qi),
+			box-shadow var(--dur-fast) var(--ease-qi);
 	}
 	.card.on {
 		border-color: var(--color-gold-300);
