@@ -25,10 +25,22 @@ func (d Deps) chatHistory(w http.ResponseWriter, r *http.Request) {
 		}
 		before = n
 	}
+	var hallID int
+	if v := r.URL.Query().Get("hall"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 1 {
+			writeError(w, 400, "invalid_query", "hall must be a điện number ≥ 1")
+			return
+		}
+		hallID = n
+	}
 	channel := r.PathValue("channel")
-	msgs, err := d.Chat.History(r.Context(), channel, before)
+	msgs, err := d.Chat.History(r.Context(), channel, hallID, before)
 	if errors.Is(err, chat.ErrUnknownChannel) {
 		writeError(w, 404, "unknown_channel", "unknown chat channel")
+		return
+	} else if errors.Is(err, chat.ErrHallRequired) {
+		writeError(w, 400, "hall_required", "Kênh Tử Tiêu Cung cần số điện (?hall=N)")
 		return
 	} else if err != nil {
 		d.internal(w, r, "chat history", err)
@@ -68,6 +80,8 @@ func (d Deps) chatSend(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid_text", "Tin nhắn trống hoặc quá dài")
 	case errors.Is(err, chat.ErrNoCharacter):
 		writeError(w, 403, "no_character", "Cần tạo nhân vật trước khi trò chuyện")
+	case errors.Is(err, chat.ErrNotInHall):
+		writeError(w, 409, "not_in_hall", "Hãy vào một điện của Tử Tiêu Cung để luận đạo")
 	case errors.Is(err, chat.ErrUnknownUser):
 		writeError(w, 403, "forbidden", "account not found")
 	case errors.As(err, &low):

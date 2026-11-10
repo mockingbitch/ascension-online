@@ -244,8 +244,14 @@ export const api = {
 		request<DailyTask>(f, `/tasks/daily/${encodeURIComponent(taskId)}/claim`, { method: 'POST', auth: true }),
 
 	// chat
-	chatHistory: (channel: string, before = 0, f: Fetch = fetch) =>
-		request<ChatHistory>(f, `/chat/${encodeURIComponent(channel)}/messages${before ? `?before=${before}` : ''}`, { auth: true }),
+	/** `hall` = điện number, required for the Tử Tiêu Cung channel (per-điện backfill), ignored elsewhere. */
+	chatHistory: (channel: string, before = 0, f: Fetch = fetch, hall = 0) => {
+		const q = new URLSearchParams();
+		if (before) q.set('before', String(before));
+		if (hall) q.set('hall', String(hall));
+		const qs = q.toString();
+		return request<ChatHistory>(f, `/chat/${encodeURIComponent(channel)}/messages${qs ? `?${qs}` : ''}`, { auth: true });
+	},
 	/** Reuse `key` when retrying the same message after a network error (idempotent). */
 	chatSend: (channel: string, text: string, key: string, f: Fetch = fetch) => {
 		const init = mutate(key);
@@ -262,6 +268,15 @@ export const api = {
 	lectureEnter: (f: Fetch = fetch) => request<LectureState>(f, '/lecture/enter', { method: 'POST', auth: true }),
 	lectureLeave: (f: Fetch = fetch, keepalive = false) =>
 		request<{ inHall: boolean }>(f, '/lecture/leave', { method: 'POST', auth: true, keepalive }),
+	/** Move to another open điện with a free cushion (the picker). Reuse `key` on a network retry. */
+	lectureSwitch: (hallId: number, key: string, f: Fetch = fetch) => {
+		const init = mutate(key);
+		return request<LectureState>(f, '/lecture/hall', {
+			...init,
+			headers: { ...init.headers, 'Content-Type': 'application/json' },
+			body: JSON.stringify({ hallId })
+		});
+	},
 	lectureHeartbeat: (f: Fetch = fetch) => request<LectureMe>(f, '/lecture/heartbeat', { method: 'POST', auth: true }),
 	/** Reuse `key` when retrying after a network error; the ngộ đạo slot itself is the server-side guard. */
 	lectureInsight: (key: string, f: Fetch = fetch) => request<InsightResult>(f, '/lecture/insight', mutate(key)),

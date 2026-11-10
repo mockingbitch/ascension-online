@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
 	import NameFx from './NameFx.svelte';
+	import RealmName from './RealmName.svelte';
 	import { tick } from 'svelte';
 	import { chat, loadOlder, markChatVisible, sendChat } from '$lib/game/chat.svelte';
 	import { hall, markHallChatVisible } from '$lib/game/lecture.svelte';
@@ -150,7 +151,7 @@
 			<li class="msg leading-snug break-words" class:mine={m.characterId === me?.id}>
 				<span class="mr-1 text-xs text-mist-500 tabular-nums">{time(m.sentAt)}</span>
 				<button type="button" class="name font-semibold hover:underline" style:color="var(--color-aura-{auraOf(m.stageId)})" onclick={() => openProfile(m)}>
-					<NameFx fx={m.nameFx}>{m.name}</NameFx>
+					{#if tab === 'room'}<RealmName name={m.name} stageId={m.stageId} nameFx={m.nameFx} />{:else}<NameFx fx={m.nameFx}>{m.name}</NameFx>{/if}
 				</button><span class="text-mist-500">:</span>
 				<span class="text-mist-100">{m.text}</span>
 			</li>

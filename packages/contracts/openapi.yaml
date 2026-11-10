@@ -1055,7 +1055,9 @@ paths:
     get:
       summary: Chat history (visible messages, oldest first). Live updates arrive over /ws (chat.message, chat.hidden).
       security: [{ bearer: [] }]
-      parameters: [{ name: before, in: query, schema: { type: integer, format: int64 }, description: "Message id; omit for newest" }]
+      parameters:
+        - { name: before, in: query, schema: { type: integer, format: int64 }, description: "Message id; omit for newest" }
+        - { name: hall, in: query, schema: { type: integer, minimum: 1 }, description: "điện number — required for the Tử Tiêu Cung channel (400 hall_required), ignored elsewhere" }
       responses:
         "200":
           description: OK
@@ -1072,6 +1074,7 @@ paths:
       summary: >-
         Post a message. Idempotent per Idempotency-Key. Profanity is masked with *** (moderation.yaml).
         403 stage_too_low (details.minStage) | muted (details.mutedUntil) | no_character; 429 rate_limited | duplicate_message.
+        Tử Tiêu Cung channel: the message belongs to the sender's current điện (server-chosen; 409 not_in_hall without a cushion).
       security: [{ bearer: [] }]
       parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
       requestBody:
@@ -1196,18 +1199,41 @@ paths:
         "503": { $ref: "#/components/responses/Error" }
   /lecture/state:
     get:
-      summary: Hall state, ngộ đạo timing and the viewer's own unpaid listening. Live seat changes arrive over /ws (lecture.enter, lecture.leave).
+      summary: >-
+        Hall state of the viewer's điện (decisions 2026-11-10: the hall is split into điện of `capacity` cushions),
+        the điện list for the picker, the global listener count, ngộ đạo timing and the viewer's own unpaid listening.
+        Live seat changes arrive over /ws on topic hall:<hallId> (lecture.enter, lecture.leave, lecture.count).
       security: [{ bearer: [] }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LectureState" } } } }
         "404": { $ref: "#/components/responses/Error" }
   /lecture/enter:
     post:
-      summary: Take (or keep) a seat in the hall. No amounts; repeating it is harmless. Listening is measured from heartbeats on the server clock.
+      summary: >-
+        Take (or keep) a cushion. The server picks the điện: the đạo lữ's if not full → most same-faction listeners →
+        the fullest non-full → opens the next. No amounts; repeating it is harmless. Listening is measured from
+        heartbeats on the server clock. 503 halls_full beyond lectures.yaml max_halls.
       security: [{ bearer: [] }]
       responses:
         "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LectureState" } } } }
         "404": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+  /lecture/hall:
+    post:
+      summary: >-
+        Move to another open điện with a free cushion (the picker). Idempotent by target (moving where one already
+        sits changes nothing); rate-limited per player (lectures.yaml hall.switch). Rewards/accrual are unaffected.
+        404 hall_not_found (not open) | 409 hall_full | not_in_hall; 429 rate_limited.
+      security: [{ bearer: [] }]
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [hallId], properties: { hallId: { type: integer, minimum: 1 } } } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/LectureState" } } } }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
   /lecture/leave:
     post:
       summary: Leave the hall. Unpaid listening is kept until it expires (1 h) or is paid on return.
@@ -2085,14 +2111,20 @@ components:
         sentAt: { type: string, format: date-time }
         nameFx: { type: string, description: "chat_aura cosmetic worn at send time (display only; omitted when none)" }
         look: { $ref: "#/components/schemas/Look", description: "sender look at send time (display only; absent on old messages)" }
+        hallId: { type: integer, description: "điện of a Tử Tiêu Cung (hall channel) message, chosen by the server from the sender's cushion; absent for other channels" }
     Listener:
       type: object
       properties:
         characterId: { type: string, format: uuid }
         name: { type: string }
         stageId: { type: string }
-        seat: { type: integer, description: "-1 = listening outside the hall" }
+        hallId: { type: integer, description: "điện (≥ 1)" }
+        seat: { type: integer, description: "cushion index in the điện, 0 … capacity-1 (everyone in a điện is seated)" }
+        factionId: { type: string, description: "listener's faction (display only; omitted when none)" }
         look: { $ref: "#/components/schemas/Look", description: listener look (display only) }
+    HallCount:
+      type: object
+      properties: { id: { type: integer, description: điện number }, count: { type: integer, description: listeners in it } }
     InsightSlot:
       type: object
       properties: { no: { type: integer, format: int64 }, opensAt: { type: string, format: date-time }, closesAt: { type: string, format: date-time } }
@@ -2101,7 +2133,13 @@ components:
       properties: { gameDay: { type: string, format: date }, milli: { type: integer, format: int64 }, capMilli: { type: integer, format: int64 } }
     LectureMe:
       type: object
-      properties: { inHall: { type: boolean }, seat: { type: integer }, accruedSeconds: { type: integer, format: int64 } }
+      properties:
+        inHall: { type: boolean }
+        hallId: { type: integer, description: "the viewer's điện (0 when not in the hall)" }
+        seat: { type: integer, description: "-1 when not in the hall" }
+        accruedSeconds: { type: integer, format: int64 }
+        partnerId: { type: string, description: "the viewer's đạo lữ character id (display hint; omitted when none)" }
+        factionId: { type: string, description: "the viewer's faction (display hint; omitted when none)" }
     LectureScript:
       type: object
       properties:
@@ -2119,9 +2157,12 @@ components:
         serverNow: { type: string, format: date-time }
         cycleEpoch: { type: string, format: date-time }
         cycleSeconds: { type: integer }
-        seats: { type: integer }
-        listeners: { type: integer, format: int64 }
-        seated: { type: array, items: { $ref: "#/components/schemas/Listener" } }
+        hallId: { type: integer, description: "the điện shown = the viewer's (0 when not in the hall; seated is then empty)" }
+        capacity: { type: integer, description: "cushions per điện (lectures.yaml hall.seats)" }
+        count: { type: integer, description: listeners in this điện }
+        globalListeners: { type: integer, format: int64, description: listeners in every điện }
+        halls: { type: array, items: { $ref: "#/components/schemas/HallCount" }, description: "open điện with counts, by number (picker)" }
+        seated: { type: array, items: { $ref: "#/components/schemas/Listener" }, description: this điện only }
         chatChannel: { type: string }
         heartbeatSeconds: { type: integer }
         rateMilliPerHour: { type: integer, format: int64 }

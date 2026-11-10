@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hallSeats, tuTieuCung } from '../../scene/defs/tu_tieu_cung';
+import { HALL_ROWS, hallSeats, tuTieuCung } from '../../scene/defs/tu_tieu_cung';
 import { anchorToScreen, frameRect } from '../frame';
 import { DAIS_TOP, HALL, HALL_REF_POSE } from './layout';
 import { anchorToWorld, drift, FAR, frameRay, lerpPreset, projectToFrame, viewRect, withOffset, worldToBox } from './mapping';
@@ -42,8 +42,8 @@ describe('anchor → 3D (reference camera)', () => {
 	});
 
 	it('the hall is laid out sensibly: rows recede toward the dais, seats inside the pillars, sage on the dais', () => {
-		const rows = [0.43, 0.52, 0.62, 0.72].map((y) => anchorToWorld(pose, { x: 0.5, y }).z);
-		for (let i = 1; i < rows.length; i++) expect(rows[i]!).toBeGreaterThan(rows[i - 1]! + 1.5); // ≥ 1.5 units apart
+		const rows = HALL_ROWS.map((r) => anchorToWorld(pose, { x: 0.5, y: r.y }).z);
+		for (let i = 1; i < rows.length; i++) expect(rows[i]!).toBeGreaterThan(rows[i - 1]! + 2 * HALL.cushion.radius); // cushions never touch
 		const sage = anchorToWorld(pose, tuTieuCung.anchors.hong_quan!);
 		expect(sage.z).toBeLessThan(rows[0]! - 3);
 		expect(sage.z).toBeGreaterThan(HALL.facade.z);
@@ -53,6 +53,14 @@ describe('anchor → 3D (reference camera)', () => {
 			const w = anchorToWorld(pose, s);
 			expect(Math.abs(w.x)).toBeLessThan(HALL.pillars.x - HALL.pillars.radius - HALL.cushion.radius);
 			expect(w.z).toBeLessThan(HALL.floor.zTo);
+		}
+	});
+
+	it('a điện of 60: neighbouring 3D cushions in a row never touch', () => {
+		const seats = hallSeats(60);
+		for (let r = 0; r < HALL_ROWS.length; r++) {
+			const xs = seats.filter((s) => s.row === r).map((s) => anchorToWorld(pose, s).x).sort((a, b) => a - b);
+			for (let i = 1; i < xs.length; i++) expect(xs[i]! - xs[i - 1]!, `row ${r}`).toBeGreaterThan(2 * HALL.cushion.radius);
 		}
 	});
 

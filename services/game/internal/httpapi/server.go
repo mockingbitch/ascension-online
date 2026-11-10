@@ -116,6 +116,11 @@ func New(d Deps) http.Handler {
 	wsLimit := lim("ws", 1, 2*time.Second, 10)         // per IP connection attempts
 	worldLimit := lim("world", 1, 2*time.Second, 20)   // per IP: public GET /world (a few small queries)
 	adminLimit := lim("admin", 1, time.Second, 10)     // per admin: a stolen token or a script bug can't sweep users at full speed
+	switchLimit := gameLimit
+	if d.Content != nil && d.Content.Lectures != nil { // per user, from lectures.yaml hall.switch
+		lc := d.Content.Lectures
+		switchLimit = lim("hallswitch", 1, lc.SwitchEvery, lc.SwitchBurst)
+	}
 	chatLimit := gameLimit
 	if d.Content != nil && d.Content.Chat != nil { // per user, from chat.yaml
 		cr := d.Content.Chat.Rate
@@ -180,7 +185,7 @@ func New(d Deps) http.Handler {
 	mux.Handle("POST /api/v1/presence/ping", d.authn(gameLimit.byUser(http.HandlerFunc(d.presencePing))))
 	mux.Handle("GET /api/v1/admin/protector/pairs", d.authn(d.admin(adminLimit.byUser(http.HandlerFunc(d.adminProtectorPairs)))))
 	mux.Handle("POST /api/v1/reports", d.authn(gameLimit.byUser(http.HandlerFunc(d.submitReport))))
-	mux.Handle("GET /api/v1/chat/{channel}/messages", d.authn(http.HandlerFunc(d.chatHistory)))
+	mux.Handle("GET /api/v1/chat/{channel}/messages", d.authn(gameLimit.byUser(http.HandlerFunc(d.chatHistory))))
 	mux.Handle("POST /api/v1/chat/{channel}/messages", d.authn(chatLimit.byUser(http.HandlerFunc(d.chatSend))))
 
 	mux.Handle("GET /api/v1/factions/me", d.authn(gameLimit.byUser(http.HandlerFunc(d.factionMe))))
@@ -200,6 +205,7 @@ func New(d Deps) http.Handler {
 	mux.Handle("GET /api/v1/lecture/state", d.authn(gameLimit.byUser(http.HandlerFunc(d.lectureState))))
 	mux.Handle("GET /api/v1/lecture/notebook", d.authn(gameLimit.byUser(http.HandlerFunc(d.lectureNotebook))))
 	mux.Handle("POST /api/v1/lecture/enter", d.authn(gameLimit.byUser(http.HandlerFunc(d.lectureEnter))))
+	mux.Handle("POST /api/v1/lecture/hall", d.authn(gameLimit.byUser(switchLimit.byUser(http.HandlerFunc(d.lectureSwitch)))))
 	mux.Handle("POST /api/v1/lecture/leave", d.authn(gameLimit.byUser(http.HandlerFunc(d.lectureLeave))))
 	mux.Handle("POST /api/v1/lecture/heartbeat", d.authn(gameLimit.byUser(http.HandlerFunc(d.lectureBeat))))
 	mux.Handle("POST /api/v1/lecture/insight", d.authn(gameLimit.byUser(http.HandlerFunc(d.lectureInsight))))

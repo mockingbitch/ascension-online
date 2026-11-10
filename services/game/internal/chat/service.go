@@ -34,6 +34,8 @@ var (
 	ErrNotFound       = errors.New("chat: message not found")
 	ErrInvalidMute    = errors.New("chat: invalid mute")
 	ErrUnknownUser    = errors.New("chat: user not found")
+	ErrNotInHall      = errors.New("chat: hall chat needs a seat in a điện")
+	ErrHallRequired   = errors.New("chat: hall chat history needs a điện")
 )
 
 // StageTooLowError: posting needs MinStage (reading is open to everyone).
@@ -61,10 +63,13 @@ type Message struct {
 	// Look at send time (appearances.yaml, resolved for the sender's path; display only): the portrait card opened
 	// from this message shows it.
 	Look *appearance.Look `json:"look,omitempty"`
+	// HallID is the điện of a hall-channel message (decisions 2026-11-10); absent for other channels.
+	HallID int `json:"hallId,omitempty"`
 }
 
-// Publisher fans an event out to every API instance (realtime.Publish in production). Best effort.
-type Publisher func(ctx context.Context, eventType, id string, data any) error
+// Publisher fans an event out to every API instance (realtime.PublishTopic in production); topic "" = every
+// socket. Best effort.
+type Publisher func(ctx context.Context, topic, eventType, id string, data any) error
 
 // Service owns chat transactions.
 type Service struct {
@@ -79,6 +84,22 @@ type Service struct {
 	NameFx func(fx string, vipPoints int64) string
 	// Looks resolves the sender's look snapshot. nil → messages carry no look.
 	Looks *appearance.Catalogue
+	// HallChannel is the Tử Tiêu Cung channel (lectures.yaml hall.chat_channel): its messages belong to the sender's
+	// điện (HallOf), are stored with it and delivered/back-filled per điện. "" → no per-điện channel.
+	HallChannel string
+	// HallOf is the character's current điện (Redis presence). Required when HallChannel is set.
+	HallOf func(ctx context.Context, characterID uuid.UUID) (hallID int, ok bool, err error)
+	// HallTopic names a điện's WS topic (hall.Topic).
+	HallTopic func(hallID int) string
+}
+
+func (s *Service) isHall(channel string) bool { return s.HallChannel != "" && channel == s.HallChannel }
+
+func (s *Service) topicOf(hallID int) string {
+	if hallID <= 0 || s.HallTopic == nil {
+		return ""
+	}
+	return s.HallTopic(hallID)
 }
 
 // CanPost reports whether a character at stageID may post in ch. Stages on another path compare by tier/order.
@@ -112,6 +133,27 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 	body, hits := s.Mod.MaskText(clean, s.Cat.MaskCategories)
 	raw := pgtype.Text{String: clean, Valid: hits > 0}
 	now := s.Now().UTC()
+	// Hall chat: the server decides the điện (the sender's current cushion), read before the transaction (Redis is
+	// never called inside it). A replay of an already-stored message is still answered below even if they left.
+	var hallID pgtype.Int4
+	if s.isHall(channel) {
+		if s.HallOf == nil {
+			return Message{}, ErrNotInHall
+		}
+		sender, err := db.New(s.Pool).GetChatSender(ctx, userID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return Message{}, ErrNoCharacter
+		} else if err != nil {
+			return Message{}, err
+		}
+		h, ok, err := s.HallOf(ctx, sender.CharacterID)
+		if err != nil {
+			return Message{}, fmt.Errorf("chat hall: %w", err)
+		}
+		if ok {
+			hallID = pgtype.Int4{Int32: int32(h), Valid: true}
+		}
+	}
 
 	var out Message
 	replay := false
@@ -130,6 +172,9 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 			return nil
 		} else if !errors.Is(err, pgx.ErrNoRows) {
 			return err
+		}
+		if s.isHall(channel) && !hallID.Valid {
+			return ErrNotInHall
 		}
 		sender, err := q.GetChatSender(ctx, userID)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -170,6 +215,7 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 		row, err := q.InsertChatMessage(ctx, db.InsertChatMessageParams{
 			Channel: channel, UserID: userID, CharacterID: sender.CharacterID, CharacterName: sender.Name,
 			StageID: sender.StageID, Body: body, RawBody: raw, IdempotencyKey: key, Now: now, NameFx: fx, Look: look,
+			HallID: hallID,
 		})
 		if err != nil {
 			return err
@@ -182,14 +228,15 @@ func (s *Service) Send(ctx context.Context, userID uuid.UUID, channel, text, key
 	}
 	if !replay && s.Publish != nil {
 		// After commit, outside the tx. At-most-once: a lost publish is recovered by the client's history fetch.
-		_ = s.Publish(ctx, EventMessage, strconv.FormatInt(out.ID, 10), out)
+		// Hall messages reach only that điện's sockets; every other channel is broadcast.
+		_ = s.Publish(ctx, s.topicOf(out.HallID), EventMessage, strconv.FormatInt(out.ID, 10), out)
 	}
 	return out, nil
 }
 
 func fromRow(r db.ChatMessage) Message {
 	return Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName, StageID: r.StageID, Text: r.Body,
-		SentAt: r.CreatedAt, NameFx: r.NameFx.String, Look: lookOf(r.Look)}
+		SentAt: r.CreatedAt, NameFx: r.NameFx.String, Look: lookOf(r.Look), HallID: int(r.HallID.Int32)}
 }
 
 // lookOf decodes the look snapshot (nil when absent or unreadable — display only).
@@ -204,10 +251,26 @@ func lookOf(b []byte) *appearance.Look {
 	return &l
 }
 
-// History returns up to history_size visible messages before beforeID (0 = newest), oldest first.
-func (s *Service) History(ctx context.Context, channel string, beforeID int64) ([]Message, error) {
+// History returns up to history_size visible messages before beforeID (0 = newest), oldest first. The hall
+// channel is per điện: hallID ≥ 1 is required there (ErrHallRequired) and ignored elsewhere.
+func (s *Service) History(ctx context.Context, channel string, hallID int, beforeID int64) ([]Message, error) {
 	if _, ok := s.Cat.Channel(channel); !ok {
 		return nil, ErrUnknownChannel
+	}
+	if s.isHall(channel) {
+		if hallID < 1 || hallID > 1<<20 {
+			return nil, ErrHallRequired
+		}
+		rows, err := db.New(s.Pool).ListChatHallMessages(ctx, db.ListChatHallMessagesParams{Channel: channel, HallID: int32(hallID), BeforeID: beforeID, Lim: int32(s.Cat.HistorySize)})
+		if err != nil {
+			return nil, err
+		}
+		out := make([]Message, len(rows))
+		for i, r := range rows {
+			out[len(rows)-1-i] = Message{ID: r.ID, Channel: r.Channel, CharacterID: r.CharacterID, Name: r.CharacterName,
+				StageID: r.StageID, Text: r.Body, SentAt: r.CreatedAt, NameFx: r.NameFx.String, Look: lookOf(r.Look), HallID: int(r.HallID.Int32)}
+		}
+		return out, nil
 	}
 	rows, err := db.New(s.Pool).ListChatMessages(ctx, db.ListChatMessagesParams{Channel: channel, BeforeID: beforeID, Lim: int32(s.Cat.HistorySize)})
 	if err != nil {
@@ -246,7 +309,8 @@ func (s *Service) Hide(ctx context.Context, admin uuid.UUID, id int64, reason st
 			map[string]any{"body": m.Body, "characterId": m.CharacterID}, map[string]any{"hidden": true}, reason)
 	})
 	if err == nil && changed && s.Publish != nil {
-		_ = s.Publish(ctx, EventHidden, "hide-"+strconv.FormatInt(id, 10), map[string]any{"id": id, "channel": channel})
+		// Broadcast even for a hall message (tiny payload): a client may show another điện's backfill.
+		_ = s.Publish(ctx, "", EventHidden, "hide-"+strconv.FormatInt(id, 10), map[string]any{"id": id, "channel": channel})
 	}
 	return err
 }

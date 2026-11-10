@@ -193,8 +193,8 @@ func run(log *slog.Logger) error {
 			deps.DaoLu.Session = &bond.Session{R: rdb, Cfg: cb.DaoLu} // song tu overlap accrual
 			deps.Factions.Ranking = &faction.Ranking{Pool: pool, Redis: rdb, Realms: cb.Realms, Cat: cb.Factions,
 				Look: cb.Cosmetics.BoardFilter(cb.VIP.TierForPoints), Looks: cb.Appearances}
-			deps.Chat.Publish = func(ctx context.Context, typ, id string, data any) error {
-				return realtime.Publish(ctx, rdb, realtime.Envelope{Type: typ, ID: id, TS: time.Now().UTC(), Data: data})
+			deps.Chat.Publish = func(ctx context.Context, topic, typ, id string, data any) error {
+				return realtime.PublishTopic(ctx, rdb, topic, realtime.Envelope{Type: typ, ID: id, TS: time.Now().UTC(), Data: data})
 			}
 			scripts, err := lecture.LoadScripts(filepath.Join(cfg.StoryDir, "lectures"))
 			if err != nil {
@@ -203,12 +203,16 @@ func run(log *slog.Logger) error {
 			deps.Lectures = &hall.Service{Pool: pool, Hall: &hall.Hall{R: rdb, Cfg: cb.Lectures}, Cfg: cb.Lectures, Scripts: scripts,
 				Cultivation: cult, VIP: cb.VIP, Now: time.Now, Log: log, Publish: hall.Publisher(deps.Chat.Publish),
 				Looks: cb.Appearances}
+			// Hall chat is per điện (decisions 2026-11-10): stored with the sender's điện, delivered on its topic.
+			deps.Chat.HallChannel, deps.Chat.HallOf, deps.Chat.HallTopic = cb.Lectures.ChatChannel, deps.Lectures.HallOf, hall.Topic
 			origin, err := url.Parse(cfg.PublicBaseURL)
 			if err != nil {
 				return err
 			}
 			hub := realtime.NewHub(log, []string{origin.Host}, cfg.WSMaxClients)
+			hub.TopicOK = func(t string) bool { return hall.ValidTopic(cb.Lectures, t) }
 			go hub.Subscribe(ctx, rdb)
+			go deps.Lectures.RunPresence(ctx, hub) // one loop per instance: sweep, merge, lecture.count
 			metrics.RegisterWSClients(reg, hub.Count)
 			deps.Realtime = hub
 		} else {

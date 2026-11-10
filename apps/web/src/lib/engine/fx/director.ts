@@ -82,7 +82,7 @@ export function startDirector(): () => void {
 		}
 		if (kind === 'seat' && r && sceneStage.shown === 'tu_tieu_cung') {
 			const seat = hall.state?.me.seat ?? -1;
-			const s = seat >= 0 ? hallSeats(hall.state?.seats ?? HALL_DEFAULT_SEATS)[seat] : undefined;
+			const s = seat >= 0 ? hallSeats(hall.state?.capacity || HALL_DEFAULT_SEATS, hall.seatFit)[seat] : undefined;
 			const p = s && r.projectPoint(s);
 			if (p) return p;
 		}

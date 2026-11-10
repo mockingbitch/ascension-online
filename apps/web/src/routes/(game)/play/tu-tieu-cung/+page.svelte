@@ -27,11 +27,14 @@
 	import type { InsightResult } from '$lib/game/types';
 
 	const phone = new MediaQuery('max-width: 639px');
+	const short = new MediaQuery('max-height: 480px');
 
 	const speaking = $derived(hall.speaking);
 	const ins = $derived(hall.insight);
 	const phase = $derived(ins?.phase ?? 'listening');
-	const outside = $derived(Math.max(0, hall.listeners - Object.keys(hall.seats).length));
+	const capacity = $derived(hall.capacity);
+	const halls = $derived(hall.state?.halls ?? []);
+	let pickerOpen = $state(false);
 	const today = $derived(hall.state?.today);
 	const capped = $derived(!!today && today.milli >= today.capMilli);
 
@@ -74,6 +77,41 @@
 		run: () => void ngoDao()
 	}));
 
+	// short screens: the subtitle line is folded to one line; a tap unfolds it for a while
+	const SUB_OPEN_MS = 8000;
+	let subsOpen = $state(false);
+	let subsTimer: ReturnType<typeof setTimeout> | undefined;
+	function toggleSubs() {
+		subsOpen = !subsOpen;
+		clearTimeout(subsTimer);
+		if (subsOpen) subsTimer = setTimeout(() => (subsOpen = false), SUB_OPEN_MS);
+	}
+
+	const NAME_MODES = [
+		{ id: 'important', label: 'Quan trọng' },
+		{ id: 'all', label: 'Tất cả' },
+		{ id: 'off', label: 'Ẩn' }
+	] as const;
+
+	// phones / short screens: one chip that cycles Quan trọng → Tất cả → Ẩn
+	function cycleNames() {
+		const i = NAME_MODES.findIndex((m) => m.id === settings.hallNames);
+		settings.setHallNames(NAME_MODES[(i + 1) % NAME_MODES.length]!.id);
+	}
+
+	async function openPicker() {
+		pickerOpen = true;
+		hall.switchError = null;
+		await hall.refresh();
+	}
+
+	async function pick(id: number) {
+		if (await hall.switchHall(id)) {
+			pickerOpen = false;
+			toast('ok', `Đã sang Điện ${id}.`);
+		}
+	}
+
 	async function openNotebook() {
 		notebookOpen = true;
 		if (!hall.notebook) await hall.loadNotebook().catch(() => toast('err', 'Không tải được Sổ Đạo Ngộ.'));
@@ -105,62 +143,99 @@
 {/snippet}
 
 	<div class="hall-page flex h-full min-h-0 flex-col overflow-y-auto overscroll-contain">
-		<!-- ngộ đạo status (the button itself is the action bar's primary) -->
-		<section class="cta ui" data-phase={phase} aria-label="Ngộ đạo">
-			<div class="min-w-0 flex-1">
-				<p class="eyebrow hidden sm:block">Tử Tiêu Cung · Hồng Quân giảng đạo</p>
-				<p class="status">
-					{#if phase === 'ready'}
-						<Icon name="spark" size={16} class="text-gold-300" /> Thời khắc ngộ đạo — còn
-						<span class="tabular-nums">{mmss(ins?.msToClose ?? 0)}</span>
-					{:else if phase === 'cooldown'}
-						<Icon name="check" size={16} class="text-jade-300" /> Đã ngộ đạo — lần tới sau
-						<span class="tabular-nums">{mmss(ins?.msToNext ?? 0)}</span>
-					{:else}
-						<Icon name="lotus" size={16} class="text-jade-300" />
-						{hall.full ? 'Linh khí đã đầy' : 'Đang tích linh khí'}
-						<span class="text-mist-300 tabular-nums">· {Math.round((ins?.progress ?? 0) * 100)}%</span>
-					{/if}
-				</p>
-				<dl class="facts">
-					<div>
-						<dt>Đã nghe</dt>
-						<dd class="tabular-nums">
-							{mmss(hall.accruedSeconds * 1000)}{#if hall.full}<span class="text-mist-300">&nbsp;(tối đa)</span>{/if}
-						</dd>
-					</div>
-					<div>
-						<dt>Tu vi hôm nay</dt>
-						<dd class="tabular-nums">
-							{formatPoints(today?.milli ?? 0)}/{formatPoints(today?.capMilli ?? 0)}{#if capped}<span class="text-mist-300">&nbsp;· đã đủ</span>{/if}
-						</dd>
-					</div>
-					<div>
-						<dt>Tốc độ</dt>
-						<dd class="tabular-nums">+{formatPoints(hall.state?.rateMilliPerHour ?? 0)} tu vi/giờ</dd>
-					</div>
-					<div class="hidden sm:block">
-						<dt>Đang nghe</dt>
-						<dd class="tabular-nums">{hall.listeners} đạo hữu</dd>
-					</div>
-				</dl>
-			</div>
-
-			<HelpButton topic="hall" />
-		</section>
-
-		<!-- scene slot: the hall painting covers it anchored centre-top (renderer); UI rides on top -->
+		<!-- scene slot: the hall painting covers it anchored centre-top (renderer). The header floats OVER the hall
+		     (owner review 2026-11-10): a translucent ink gradient, compact, its content box marked data-scene-avoid so
+		     seat labels and bubbles keep clear of it; the ngộ đạo button itself is the action bar's primary. -->
 		<SceneSlot class="stage" passthrough>
-			<div class="bar ui">
-				<div class="ml-auto flex gap-2">
-					<button type="button" class="btn btn-ghost !px-3 !py-1.5 text-sm" onclick={openNotebook} aria-label="Sổ Đạo Ngộ">
-						<Icon name="scroll" size={16} /> <span class="hidden sm:inline">Sổ Đạo Ngộ</span>
-					</button>
-					<a href={screens.timeline.href} class="btn btn-ghost hidden !px-3 !py-1.5 text-sm md:inline-flex"><Icon name="clock" size={16} /> Thiên Đạo Sử</a>
+			<header class="overlay" data-phase={phase} aria-label="Ngộ đạo">
+				<div class="overlay-box ui" data-scene-avoid>
+					<div class="info min-w-0 flex-1">
+						<p class="hall-head" data-hall-head>
+							{#if hall.hallId > 0}
+								<button type="button" class="hall-name press" onclick={openPicker} aria-haspopup="dialog" aria-label="Điện {hall.hallId}, {hall.count} trên {capacity} đạo hữu — đổi điện">
+									<Icon name="scroll" size={14} />
+									<span>Điện {hall.hallId}</span>
+									<span class="text-mist-300">·</span>
+									<span class="tabular-nums">{hall.count}/{capacity} đạo hữu</span>
+									<Icon name="chevron" size={14} />
+								</button>
+							{:else}
+								<span class="eyebrow">Tử Tiêu Cung · Hồng Quân giảng đạo</span>
+							{/if}
+							<button type="button" class="names-cycle press" onclick={cycleNames} aria-label="Tên đạo hữu: {NAME_MODES.find((m) => m.id === settings.hallNames)?.label} — đổi" data-names-cycle>
+								Tên: {NAME_MODES.find((m) => m.id === settings.hallNames)?.label}
+							</button>
+							<span class="global" data-global-count><span class="tabular-nums">{hall.globalListeners}</span> đạo hữu đang nghe khắp Hồng Hoang</span>
+						</p>
+						<p class="status">
+							{#if phase === 'ready'}
+								<Icon name="spark" size={16} class="text-gold-300" /> Thời khắc ngộ đạo — còn
+								<span class="tabular-nums">{mmss(ins?.msToClose ?? 0)}</span>
+							{:else if phase === 'cooldown'}
+								<Icon name="check" size={16} class="text-jade-300" /> Đã ngộ đạo — lần tới sau
+								<span class="tabular-nums">{mmss(ins?.msToNext ?? 0)}</span>
+							{:else}
+								<Icon name="lotus" size={16} class="text-jade-300" />
+								{hall.full ? 'Linh khí đã đầy' : 'Đang tích linh khí'}
+								<span class="text-mist-300 tabular-nums">· {Math.round((ins?.progress ?? 0) * 100)}%</span>
+							{/if}
+						</p>
+						<dl class="facts">
+							<div>
+								<dt>Đã nghe</dt>
+								<dd class="tabular-nums">
+									{mmss(hall.accruedSeconds * 1000)}{#if hall.full}<span class="text-mist-300">&nbsp;(tối đa)</span>{/if}
+								</dd>
+							</div>
+							<div>
+								<dt>Tu vi hôm nay</dt>
+								<dd class="tabular-nums">
+									{formatPoints(today?.milli ?? 0)}/{formatPoints(today?.capMilli ?? 0)}{#if capped}<span class="text-mist-300">&nbsp;· đã đủ</span>{/if}
+								</dd>
+							</div>
+							<div>
+								<dt>Tốc độ</dt>
+								<dd class="tabular-nums">+{formatPoints(hall.state?.rateMilliPerHour ?? 0)} tu vi/giờ</dd>
+							</div>
+						</dl>
+						<div class="names" role="radiogroup" aria-label="Tên đạo hữu trong điện" data-names-toggle>
+							<span class="names-label">Tên:</span>
+							{#each NAME_MODES as m (m.id)}
+								<button type="button" role="radio" aria-checked={settings.hallNames === m.id} class="name-mode" class:is-on={settings.hallNames === m.id} onclick={() => settings.setHallNames(m.id)}>{m.label}</button>
+							{/each}
+						</div>
+					</div>
+
 				</div>
-			</div>
-			{#if outside > 0}<p class="outside">+{outside} đạo hữu nghe ngoài điện</p>{/if}
-			{#if !phone.current}<div class="subtitles" aria-live="polite">{@render subtitle()}</div>{/if}
+				<div class="overlay-box tools ui" data-scene-avoid>
+						<button type="button" class="tool press" onclick={openNotebook} aria-label="Sổ Đạo Ngộ">
+							<Icon name="scroll" size={16} /> <span class="hidden lg:inline">Sổ Đạo Ngộ</span>
+						</button>
+						<a href={screens.timeline.href} class="tool press wide-only" aria-label="Thiên Đạo Sử"><Icon name="clock" size={16} /> <span class="hidden lg:inline">Thiên Đạo Sử</span></a>
+						<HelpButton topic="hall" />
+				</div>
+			</header>
+			{#if !phone.current}
+				<!-- short landscape screens: one line; tap to read it all (folds back after SUB_OPEN_MS) -->
+				{#if short.current}
+					<div
+						class="subtitles ui"
+						aria-live="polite"
+						data-scene-avoid
+						data-hall-subs
+						data-open={subsOpen || undefined}
+						role="button"
+						tabindex="0"
+						aria-expanded={subsOpen}
+						onclick={toggleSubs}
+						onkeydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggleSubs())}
+					>
+						{@render subtitle()}
+					</div>
+				{:else}
+					<div class="subtitles" aria-live="polite" data-scene-avoid data-hall-subs>{@render subtitle()}</div>
+				{/if}
+			{/if}
 		</SceneSlot>
 
 		{#if phone.current}<div class="subtitles is-below ui" aria-live="polite">{@render subtitle()}</div>{/if}
@@ -196,6 +271,39 @@
 	{/if}
 </GameWindow>
 
+<!-- điện picker: every open điện with its count; full ones are disabled (the server checks again) -->
+<GameWindow local open={pickerOpen} title="Chọn điện" icon="scroll" onclose={() => (pickerOpen = false)}>
+	<p class="text-sm text-mist-300">
+		Mỗi điện có {capacity} bồ đoàn. Lời giảng và ngộ đạo như nhau ở mọi điện; Luận Đạo chỉ đạo hữu cùng điện thấy.
+	</p>
+	{#if hall.switchError}<p class="mt-2 text-sm text-cinnabar-300" role="alert">{hall.switchError}</p>{/if}
+	<ul class="picker mt-3" data-hall-picker aria-label="Các điện">
+		{#each halls as h (h.id)}
+			{@const here = h.id === hall.hallId}
+			{@const full = h.count >= capacity}
+			<li>
+				<button
+					type="button"
+					class="pick press"
+					class:is-here={here}
+					disabled={here || full || hall.switching}
+					aria-busy={hall.switching}
+					onclick={() => pick(h.id)}
+				>
+					<span class="font-semibold text-mist-100">Điện <span class="tabular-nums">{h.id}</span></span>
+					<span class="meter" role="progressbar" aria-valuemin="0" aria-valuemax={capacity} aria-valuenow={h.count} aria-label="Điện {h.id}: {h.count}/{capacity}">
+						<span style:width="{Math.min(100, (h.count / Math.max(1, capacity)) * 100)}%"></span>
+					</span>
+					<span class="tabular-nums text-sm text-mist-100">{h.count}/{capacity}</span>
+					<span class="tag">{here ? 'Đang ở' : full ? 'Kín chỗ' : 'Còn chỗ'}</span>
+				</button>
+			</li>
+		{:else}
+			<li><EmptyState icon="scroll" title="Chưa có điện nào mở" hint="Vào Tử Tiêu Cung để mở điện đầu tiên." /></li>
+		{/each}
+	</ul>
+</GameWindow>
+
 <!-- Sổ Đạo Ngộ -->
 <GameWindow local open={notebookOpen} title="Sổ Đạo Ngộ" icon="scroll" onclose={() => (notebookOpen = false)}>
 	<ol class="stagger space-y-3">
@@ -221,26 +329,184 @@
 		min-height: 12rem;
 		container-type: size;
 	}
-	.bar {
+	/* ── header overlay: floats over the hall, translucent ink gradient + light blur; only its box takes the pointer ── */
+	.overlay {
 		position: absolute;
-		right: 0;
-		top: 0;
+		inset: 0 0 auto;
 		z-index: var(--z-local-1);
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		justify-content: space-between;
 		gap: 0.5rem;
-		padding: 0.5rem 0.75rem;
-		flex-wrap: wrap;
+		padding: 0.45rem 0.6rem 1.6rem;
+		background: linear-gradient(180deg, color-mix(in oklab, var(--color-ink-950) 82%, transparent) 0%, color-mix(in oklab, var(--color-ink-950) 55%, transparent) 60%, transparent);
+		pointer-events: none;
 	}
-	.outside {
-		position: absolute;
-		left: 0.5rem;
-		top: 3.25rem;
-		padding: 0.1rem 0.6rem;
-		font-size: 0.75rem;
+	.overlay[data-phase='ready'] {
+		background: linear-gradient(180deg, color-mix(in oklab, var(--color-gold-700) 45%, var(--color-ink-950) 55%) 0%, color-mix(in oklab, var(--color-ink-950) 55%, transparent) 60%, transparent);
+	}
+	.overlay-box {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+		min-width: 0;
+		/* narrow enough to leave Hồng Quân (stage centre) clear on tablets; phones use the full width */
+		max-width: min(100%, 23rem);
+		padding: 0.35rem 0.6rem;
+		border-radius: 0.6rem;
+		background: color-mix(in oklab, var(--color-ink-950) 35%, transparent);
+		backdrop-filter: blur(3px);
+		-webkit-backdrop-filter: blur(3px);
+		text-shadow: 0 1px 2px var(--color-ink-950);
+	}
+	.names-cycle {
+		display: none;
+		min-height: 1.6rem;
+		padding: 0 0.5rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--color-mist-100);
+		white-space: nowrap;
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 35%, transparent);
+		border-radius: 9999px;
+		background: color-mix(in oklab, var(--color-ink-950) 55%, transparent);
+	}
+	@media (max-width: 639px), (max-height: 480px) {
+		.names-cycle {
+			display: inline-flex;
+			align-items: center;
+		}
+		.names {
+			display: none !important;
+		}
+	}
+	.names {
+		display: flex;
+		align-items: center;
+		gap: 0.15rem;
+		margin-top: 0.25rem;
+		font-size: 0.72rem;
+	}
+	.names-label {
+		margin-right: 0.15rem;
 		color: var(--color-mist-300);
-		background: color-mix(in oklab, var(--color-ink-950) 80%, transparent);
+	}
+	.name-mode {
+		min-height: 1.75rem;
+		padding: 0 0.5rem;
+		color: var(--color-mist-300);
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
+		border-radius: 9999px;
+		background: color-mix(in oklab, var(--color-ink-950) 45%, transparent);
+	}
+	.name-mode.is-on {
+		color: var(--color-ink-950);
+		font-weight: 700;
+		border-color: var(--color-gold-300);
+		background: var(--color-gold-300);
+	}
+	.overlay-box.tools {
+		align-items: center;
+		gap: 0.35rem;
+		flex-shrink: 0;
+		padding: 0.2rem;
+	}
+	.tool {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.3rem;
+		min-width: var(--tap, 44px);
+		min-height: var(--tap, 44px);
+		padding: 0 0.6rem;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--color-mist-100);
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 35%, transparent);
+		border-radius: 0.5rem;
+		background: color-mix(in oklab, var(--color-ink-950) 55%, transparent);
+	}
+	/* ── điện header + picker ── */
+	.hall-head {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.15rem 0.75rem;
+		margin-bottom: 0.2rem;
+		font-size: 0.8rem;
+	}
+	.hall-name {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		min-height: 2rem;
+		padding: 0.1rem 0.6rem;
+		font-weight: 700;
+		color: var(--color-gold-300);
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 45%, transparent);
+		border-radius: 9999px;
+		background: color-mix(in oklab, var(--color-ink-950) 70%, transparent);
+	}
+	.global {
+		color: var(--color-mist-300);
+	}
+	.global > span {
+		font-weight: 700;
+		color: var(--color-jade-300);
+	}
+	.picker {
+		display: grid;
+		gap: 0.5rem;
+		max-height: min(60vh, 28rem);
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+	.pick {
+		display: grid;
+		grid-template-columns: 5.5rem 1fr auto auto;
+		align-items: center;
+		gap: 0.75rem;
+		width: 100%;
+		min-height: var(--tap, 44px);
+		padding: 0.4rem 0.75rem;
+		text-align: left;
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
+		background: color-mix(in oklab, var(--color-ink-900) 85%, transparent);
+	}
+	.pick:not(:disabled):hover {
+		border-color: color-mix(in oklab, var(--color-gold-300) 60%, transparent);
+	}
+	.pick:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+	.pick.is-here {
+		opacity: 1;
+		border-color: var(--color-gold-300);
+	}
+	.meter {
+		height: 0.4rem;
+		border-radius: 9999px;
+		background: var(--color-ink-700);
+		overflow: hidden;
+	}
+	.meter > span {
+		display: block;
+		height: 100%;
+		background: linear-gradient(90deg, var(--color-jade-500), var(--color-jade-300));
+	}
+	.tag {
+		font-size: 0.72rem;
+		color: var(--color-mist-300);
+	}
+	@media (max-width: 420px) {
+		.pick {
+			grid-template-columns: 1fr auto auto;
+		}
+		.meter {
+			grid-column: 1 / -1;
+			grid-row: 2;
+		}
 	}
 
 	/* ── subtitles: bottom band of the scene (below the scene on phones) ── */
@@ -281,19 +547,6 @@
 		font-size: 1rem;
 	}
 
-	/* ── ngộ đạo CTA ── */
-	.cta {
-		display: flex;
-		flex-shrink: 0;
-		align-items: center;
-		gap: 1rem;
-		padding: 0.75rem 1rem;
-		border-bottom: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
-		background: linear-gradient(180deg, var(--color-ink-900), var(--color-ink-950));
-	}
-	.cta[data-phase='ready'] {
-		background: linear-gradient(180deg, color-mix(in oklab, var(--color-gold-500) 14%, var(--color-ink-900)), var(--color-ink-950));
-	}
 	.status {
 		display: flex;
 		flex-wrap: wrap;
@@ -309,6 +562,11 @@
 		gap: 0.2rem 1.25rem;
 		margin-top: 0.35rem;
 	}
+	.facts > div {
+		display: flex;
+		align-items: baseline;
+		gap: 0.3rem;
+	}
 	.facts dt {
 		font-size: 0.72rem;
 		color: var(--color-mist-300);
@@ -320,16 +578,155 @@
 	}
 
 	/* ── phones: status band, the scene fills the rest, subtitles under it ── */
+	.tool.wide-only {
+		display: none;
+	}
+	@media (min-width: 768px) and (min-height: 481px) {
+		.tool.wide-only {
+			display: inline-flex;
+		}
+	}
+	.hall-name,
+	.global {
+		white-space: nowrap;
+	}
+	.global {
+		flex-basis: 100%;
+	}
 	@media (max-width: 639px) {
-		.cta {
-			gap: 0.75rem;
-			padding: 0.5rem 0.75rem;
+		.overlay-box {
+			max-width: 100%;
+		}
+	}
+	/* phones: the tools stack in a slim column so the info keeps its width */
+	@media (max-width: 639px) {
+		.names-cycle {
+		display: none;
+		min-height: 1.6rem;
+		padding: 0 0.5rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: var(--color-mist-100);
+		white-space: nowrap;
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 35%, transparent);
+		border-radius: 9999px;
+		background: color-mix(in oklab, var(--color-ink-950) 55%, transparent);
+	}
+	@media (max-width: 639px), (max-height: 480px) {
+		.names-cycle {
+			display: inline-flex;
+			align-items: center;
+		}
+		.names {
+			display: none !important;
+		}
+	}
+	.names {
+		display: flex;
+		align-items: center;
+		gap: 0.15rem;
+		margin-top: 0.25rem;
+		font-size: 0.72rem;
+	}
+	.names-label {
+		margin-right: 0.15rem;
+		color: var(--color-mist-300);
+	}
+	.name-mode {
+		min-height: 1.75rem;
+		padding: 0 0.5rem;
+		color: var(--color-mist-300);
+		border: 1px solid color-mix(in oklab, var(--color-gold-500) 22%, transparent);
+		border-radius: 9999px;
+		background: color-mix(in oklab, var(--color-ink-950) 45%, transparent);
+	}
+	.name-mode.is-on {
+		color: var(--color-ink-950);
+		font-weight: 700;
+		border-color: var(--color-gold-300);
+		background: var(--color-gold-300);
+	}
+	.overlay-box.tools {
+			flex-direction: column;
+		}
+		.global {
+			font-size: 0.68rem;
+		}
+	}
+	/* short landscape screens: one dense block — status and facts run on in one line */
+	@media (max-height: 480px) {
+		.overlay-box:not(.tools) {
+			max-width: calc(100% - 7.5rem);
+		}
+		.global {
+			flex-basis: auto;
+		}
+		.info {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: baseline;
+			column-gap: 0.8rem;
+		}
+		.info .hall-head {
+			flex-basis: 100%;
+			margin-bottom: 0.1rem;
+		}
+		.info .facts {
+			margin-top: 0;
+		}
+		.hall-name {
+			min-height: 1.6rem;
+		}
+		/* one compact line right of the chat dock (tap to read the whole line; it folds back by itself) — the seat
+		   block is fitted above it (HallView measures [data-hall-subs]), so it never sits on figures */
+		.subtitles {
+			min-height: 0;
+			padding: 0.3rem 0.75rem;
+			cursor: pointer;
+			background: color-mix(in oklab, var(--color-ink-950) 88%, transparent);
+			border-top: 1px solid color-mix(in oklab, var(--color-gold-500) 20%, transparent);
+		}
+		.sub-label {
+			display: none;
+		}
+		.sub-text {
+			margin-top: 0;
+			font-size: 0.85rem;
+			display: -webkit-box;
+			-webkit-line-clamp: 1;
+			line-clamp: 1;
+			-webkit-box-orient: vertical;
+			overflow: hidden;
+		}
+		.subtitles[data-open] .sub-text {
+			-webkit-line-clamp: 4;
+			line-clamp: 4;
+		}
+	}
+	/* phones and short landscape screens: tighter header */
+	@media (max-width: 639px), (max-height: 480px) {
+		.overlay {
+			padding: 0.3rem 0.35rem 1.2rem;
+		}
+		.overlay-box {
+			gap: 0.4rem;
+			padding: 0.25rem 0.4rem;
+		}
+		.hall-head {
+			font-size: 0.72rem;
 		}
 		.facts {
-			gap: 0.1rem 0.9rem;
+			gap: 0.05rem 0.8rem;
+			margin-top: 0.15rem;
+		}
+		.facts dt {
+			font-size: 0.66rem;
+		}
+		.facts dd {
+			font-size: 0.8rem;
 		}
 		.status {
-			font-size: 0.85rem;
+			font-size: 0.8rem;
 		}
 	}
 	/* ── ngộ đạo: edge pulse + the teaching on an unrolling scroll ── */

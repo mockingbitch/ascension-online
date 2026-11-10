@@ -324,7 +324,9 @@
 	.r-stage[data-passthrough] {
 		pointer-events: none;
 	}
-	.r-stage[data-passthrough] :global(:where(.ui, [data-ui])) {
+	/* …and so do windows opened by such a page (a local <dialog> lives in the page's DOM: Tử Tiêu Cung's điện picker
+	   and Sổ Đạo Ngộ were unclickable while the stage let the pointer through) */
+	.r-stage[data-passthrough] :global(:where(.ui, [data-ui], dialog)) {
 		pointer-events: auto;
 	}
 	/* nothing a page draws leaves the stage (it scrolls inside instead) */

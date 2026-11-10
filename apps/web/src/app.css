@@ -88,6 +88,32 @@
 	--color-aura-vu-totem: #e98c4f;
 	--color-aura-vu-ancestral: #f6b860;
 
+	/* Realm names in Tử Tiêu Cung (decisions 2026-11-10): text colours per path × effect tier (realms.yaml fx_tier).
+	   a = base, b/c = highlight stops of the shimmer/gradient tiers. Every stop ≥ 4.5:1 on ink-900/950 and the
+	   effect escalates with tier (components/realmName.test.ts). Used by RealmName.svelte only. */
+	--color-rname-tien-1a: #c9d3d6; /* mist */
+	--color-rname-tien-2a: #8fd6c0; /* jade */
+	--color-rname-tien-3a: #8ec5f2; /* azure glow */
+	--color-rname-tien-4a: #bba8f0; /* violet */
+	--color-rname-tien-4b: #ece6ff; /* lightning */
+	--color-rname-tien-5a: #e9b949; /* gold */
+	--color-rname-tien-5b: #fff0b8;
+	--color-rname-tien-5c: #f2c98a;
+	--color-rname-tien-6a: #fff6dc; /* celestial prismatic */
+	--color-rname-tien-6b: #7fd8ff;
+	--color-rname-tien-6c: #d6adff;
+	--color-rname-vu-1a: #b9a394; /* ember: dull ash-brown */
+	--color-rname-vu-2a: #ee7f6f; /* blood red */
+	--color-rname-vu-3a: #ff6f9c; /* crimson-rose glow */
+	--color-rname-vu-4a: #ff9a4a; /* storm orange */
+	--color-rname-vu-4b: #fff0e0; /* lightning */
+	--color-rname-vu-5a: #ffc93d; /* totem amber */
+	--color-rname-vu-5b: #fff3c4;
+	--color-rname-vu-5c: #ff9f5a;
+	--color-rname-vu-6a: #fff1d6; /* ancestral: warm prismatic */
+	--color-rname-vu-6b: #ffb36b;
+	--color-rname-vu-6c: #ff9cc0;
+
 	/* Item rarity — keyed by items.yaml rarity */
 	--color-rarity-pham: #c3baa5;
 	--color-rarity-linh: #5cc7a4;

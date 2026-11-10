@@ -26,6 +26,17 @@ describe('Settings', () => {
 		expect(b.audio.volumes.sfx).toBe(1);
 	});
 
+	it('hall names: default important, persisted per device, junk ignored', () => {
+		const storage = memStorage();
+		const a = new Settings({ storage });
+		expect(a.hallNames).toBe('important');
+		a.setHallNames('off');
+		expect(new Settings({ storage }).hallNames).toBe('off');
+		a.setHallNames('important');
+		expect(JSON.parse(storage.m.get(SETTINGS_KEY)!).hallNames).toBeUndefined(); // default is not written
+		expect(new Settings({ storage: memStorage({ [SETTINGS_KEY]: '{"hallNames":"loud"}' }) }).hallNames).toBe('important');
+	});
+
 	it('survives broken or throwing storage', () => {
 		const bad = new Settings({ storage: memStorage({ [SETTINGS_KEY]: '{not json' }) });
 		expect(bad.fx).toBe('full');

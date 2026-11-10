@@ -3,6 +3,29 @@
 Product/architecture decisions that refine or deviate from the GDD
 ([design/tien-dao-online-gdd-architecture.md](design/tien-dao-online-gdd-architecture.md)). Newest first.
 
+## 2026-11-10 — Tử Tiêu Cung chia điện (scale 10k online), tên theo cảnh giới
+Owner accepted the proposal (shard the hall like MMO channels) with additions.
+- **Điện (hall shards):** the hall is split into numbered điện ("Tử Tiêu Cung · Nhất điện…"). Capacity per điện =
+  number of cushions (lectures.yaml, default **60**): everyone in a điện is seated and drawn — a player **always sees
+  their own character**. Full → the next điện; a new điện opens when all are full. Assignment prefers the đạo lữ, then
+  same faction, then the fullest non-full điện; players may switch to a non-full điện. Empty/near-empty điện merge
+  after a lecture cycle (< 20 listeners).
+- Lecture script, cycle clock and ngộ đạo moments stay **global** (every điện hears the same line at the same time).
+- **Events per điện:** `lecture.enter/leave` and hall chat bubbles go only to clients in the same điện (WS topic per
+  điện); a global listener count is aggregated and pushed every ~5 s. Hall chat (Luận Đạo) is per điện; world chat
+  unchanged.
+- **UI:** the hall shows "<in this điện>/<capacity>" and the global "đạo hữu đang nghe" count; a điện picker.
+- **Names in the hall by realm tier** (fx_tier 1–6): colour/effect escalates with tier, higher = more striking.
+  Realm-tier styling always outranks purchasable Tiên Duyên chat auras (fairness rule).
+- Infra: 2–3 API instances behind nginx with sticky WebSocket; k6 load test at 10k connections before open launch.
+- *Implementation notes (2026-11-10):* presence = Redis Lua per điện (`lecture:hall:d:<n>:seat|fac`, assignment /
+  switch / merge atomic; rewards, accrual, ngộ đạo and caps untouched and global). **Merge** = the API instances'
+  presence loop (every `count_push_seconds`, no per-player timer) runs it after each lecture boundary: smallest điện
+  under `merge_below` folds into the fullest điện that fits it whole (else the fullest with room), once per lecture
+  number, bounded per call. **Hall chat storage** = `chat_messages.hall_id` (server-chosen from the sender's cushion),
+  history `?hall=N`, delivered on WS topic `hall:<n>`. **Fairness rule:** the realm tier owns the name (colour, glow,
+  motion, glints); a chat aura shows only as a thin static underline in its colours (`lib/game/realmName.ts`).
+
 ## 2026-11-09 — Bộ trang phục vẽ sẵn thay cho trộn màu áo + phụ kiện tóc
 Owner choice. Painted art cannot follow free mix-and-match (tiên: 6 hair accessories × 7 robe colours per image),
 so on /create and in Trang phục the picker offered choices that changed nothing on the painted figure.

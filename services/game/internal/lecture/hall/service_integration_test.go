@@ -24,13 +24,26 @@ import (
 type published struct {
 	mu     sync.Mutex
 	events []string
+	topics []string // "<topic>|<type>:<id>"
 }
 
-func (p *published) fn(_ context.Context, typ, id string, _ any) error {
+func (p *published) fn(_ context.Context, topic, typ, id string, _ any) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.events = append(p.events, typ+":"+id)
+	p.topics = append(p.topics, topic+"|"+typ+":"+id)
 	return nil
+}
+
+func (p *published) hasTopic(e string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, x := range p.topics {
+		if x == e {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *published) has(e string) bool {
@@ -102,7 +115,7 @@ func TestLectureFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !st.Me.InHall || st.Me.Seat != 0 || st.Listeners != 1 {
+	if !st.Me.InHall || st.Me.Seat != 0 || st.Me.HallID != 1 || st.GlobalListeners != 1 || st.HallID != 1 || st.Count != 1 || st.Capacity != cfg.Seats {
 		t.Fatalf("alice enter: %+v", st.Me)
 	}
 	if st, _ = svc.Enter(ctx, alice); st.Me.Seat != 0 {
@@ -111,8 +124,8 @@ func TestLectureFlow(t *testing.T) {
 	if st, err = svc.Enter(ctx, bob); err != nil || st.Me.Seat != 1 || len(st.Seated) != 2 {
 		t.Fatalf("bob enter: %+v %v", st, err)
 	}
-	if !pub.has("lecture.enter:" + aliceCh.String()) {
-		t.Fatal("enter not published")
+	if !pub.hasTopic("hall:1|lecture.enter:" + aliceCh.String()) {
+		t.Fatal("enter not published on the điện topic")
 	}
 
 	// Ngộ đạo outside the window is refused.
@@ -146,7 +159,7 @@ func TestLectureFlow(t *testing.T) {
 	if _, err := svc.Beat(ctx, bob); !errors.Is(err, hall.ErrNotPresent) {
 		t.Fatalf("bob should be swept: %v", err)
 	}
-	if !pub.has("lecture.leave:" + bobCh.String()) {
+	if !pub.hasTopic("hall:1|lecture.leave:" + bobCh.String()) {
 		t.Fatal("sweep not published")
 	}
 
@@ -228,7 +241,7 @@ func TestLectureFlow(t *testing.T) {
 	if err := svc.Leave(ctx, alice); err != nil {
 		t.Fatal(err)
 	}
-	if st, _ = svc.State(ctx, alice); st.Me.InHall || st.Listeners != 0 {
+	if st, _ = svc.State(ctx, alice); st.Me.InHall || st.GlobalListeners != 0 || len(st.Halls) != 0 {
 		t.Fatalf("after leave: %+v", st)
 	}
 }

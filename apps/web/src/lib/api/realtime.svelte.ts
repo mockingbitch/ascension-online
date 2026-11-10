@@ -1,7 +1,7 @@
 // Receive-only WebSocket: world announcements (breakthroughs, story milestones), chat and the Tử Tiêu Cung hall. Reconnects with capped exponential backoff + jitter.
 // Delivery is at-most-once, so every (re)connect backfills chat from REST (merged by id).
 import { loadChat, onChatHidden, onChatMessage } from '$lib/game/chat.svelte';
-import { onHallChat, onHallEvent } from '$lib/game/lecture.svelte';
+import { onHallChat, onHallEvent, onHallReconnect } from '$lib/game/lecture.svelte';
 import { loadFactionMe, loadFactions } from '$lib/game/faction.svelte';
 import { loadWorld } from '$lib/game/world.svelte';
 import { fxBus } from '$lib/engine/fx/bus';
@@ -32,6 +32,24 @@ function pushFeed(msg: Announcement) {
 }
 let started = false;
 let chatEnabled = false;
+let socket: WebSocket | null = null;
+/** the one topic this socket follows (Tử Tiêu Cung điện: `hall:<n>`), re-sent on every (re)connect */
+let topic: string | null = null;
+
+function sendTopic() {
+	if (socket?.readyState !== WebSocket.OPEN) return;
+	socket.send(JSON.stringify(topic ? { op: 'sub', topic } : { op: 'unsub' }));
+}
+
+/**
+ * Follow a topic (`hall:<n>`, decisions 2026-11-10: hall seats, counts and hall chat arrive only for the điện one sits
+ * in) or none (`null`). Idempotent; survives reconnects.
+ */
+export function setRealtimeTopic(t: string | null) {
+	if (t === topic) return;
+	topic = t;
+	sendTopic();
+}
 
 /** Start the socket. `withChat` (game shell, signed in) also backfills chat history on every (re)connect. */
 export function startRealtime(withChat = false) {
@@ -45,10 +63,13 @@ export function startRealtime(withChat = false) {
 	const connect = () => {
 		const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
 		const ws = new WebSocket(`${proto}//${location.host}/ws`);
+		socket = ws;
 		ws.onopen = () => {
 			attempt = 0;
 			feed.connected = true;
+			sendTopic();
 			if (chatEnabled) void loadChat();
+			onHallReconnect(); // hall seats + hall chat missed while disconnected (at-most-once delivery)
 			void news.load(); // backfill the news missed while disconnected (at-most-once delivery)
 		};
 		ws.onmessage = (e) => {
@@ -86,11 +107,13 @@ export function startRealtime(withChat = false) {
 					break;
 				case 'lecture.enter':
 				case 'lecture.leave':
+				case 'lecture.count':
 					onHallEvent(msg);
 					break;
 			}
 		};
 		ws.onclose = () => {
+			if (socket === ws) socket = null;
 			feed.connected = false;
 			const delay = Math.min(30_000, 1000 * 2 ** attempt++) * (0.5 + Math.random() / 2);
 			setTimeout(connect, delay);

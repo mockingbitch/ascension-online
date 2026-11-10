@@ -13,6 +13,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getLectureAffinity = `-- name: GetLectureAffinity :one
+SELECT COALESCE((SELECT f.faction_id FROM character_faction f WHERE f.character_id = $1), '')::TEXT AS faction_id,
+       COALESCE((SELECT (CASE WHEN b.character_a = $1 THEN b.character_b ELSE b.character_a END)::TEXT
+                 FROM dao_lu_members m JOIN dao_lu_bonds b ON b.id = m.bond_id
+                 WHERE m.character_id = $1 AND m.active AND b.ended_at IS NULL LIMIT 1), '')::TEXT AS partner_id
+`
+
+type GetLectureAffinityRow struct {
+	FactionID string `json:"faction_id"`
+	PartnerID string `json:"partner_id"`
+}
+
+// Hall assignment hints (decisions 2026-11-10): the character's faction and active đạo lữ (” when none).
+func (q *Queries) GetLectureAffinity(ctx context.Context, characterID uuid.UUID) (GetLectureAffinityRow, error) {
+	row := q.db.QueryRow(ctx, getLectureAffinity, characterID)
+	var i GetLectureAffinityRow
+	err := row.Scan(&i.FactionID, &i.PartnerID)
+	return i, err
+}
+
 const getLectureInsight = `-- name: GetLectureInsight :one
 SELECT character_id, slot_no, game_day, lecture_id, presence_seconds, raw_milli, credited_milli, vip_points, created_at FROM lecture_insights WHERE character_id = $1 AND slot_no = $2
 `

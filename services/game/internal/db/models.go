@@ -135,6 +135,7 @@ type ChatMessage struct {
 	CreatedAt      time.Time   `json:"created_at"`
 	NameFx         pgtype.Text `json:"name_fx"`
 	Look           []byte      `json:"look"`
+	HallID         pgtype.Int4 `json:"hall_id"`
 }
 
 type ChatMute struct {

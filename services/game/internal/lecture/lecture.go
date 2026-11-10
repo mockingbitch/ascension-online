@@ -23,8 +23,13 @@ import (
 
 // Config is lectures.yaml, converted to server units.
 type Config struct {
-	Seats                int
+	Seats                int // cushions per điện = its capacity (decision 2026-11-10: everyone in a điện is seated)
 	ChatChannel          string
+	MergeBelow           int           // after each lecture, a điện with fewer listeners is merged into others (0 = never)
+	CountPush            time.Duration // global listener count pushed to hall sockets this often
+	MaxHalls             int           // safety bound on open điện (enter answers ErrHallsFull beyond it)
+	SwitchEvery          time.Duration // POST /lecture/hall rate per player: one per SwitchEvery …
+	SwitchBurst          int           // … with this burst
 	Epoch                time.Time
 	Heartbeat            time.Duration
 	MaxGap               time.Duration
@@ -40,8 +45,15 @@ type Config struct {
 type fileConfig struct {
 	Version int `yaml:"version"`
 	Hall    struct {
-		Seats       int    `yaml:"seats"`
-		ChatChannel string `yaml:"chat_channel"`
+		Seats            int    `yaml:"seats"`
+		ChatChannel      string `yaml:"chat_channel"`
+		MergeBelow       int    `yaml:"merge_below"`
+		CountPushSeconds int    `yaml:"count_push_seconds"`
+		MaxHalls         int    `yaml:"max_halls"`
+		Switch           struct {
+			PerSeconds int `yaml:"per_seconds"`
+			Burst      int `yaml:"burst"`
+		} `yaml:"switch"`
 	} `yaml:"hall"`
 	Cycle struct {
 		Epoch string `yaml:"epoch"`
@@ -101,6 +113,18 @@ func Load(r io.Reader) (*Config, error) {
 	if raw.Hall.ChatChannel == "" {
 		fail("hall.chat_channel required")
 	}
+	if raw.Hall.MergeBelow < 0 || raw.Hall.MergeBelow >= raw.Hall.Seats {
+		fail("hall.merge_below must be within 0..seats-1")
+	}
+	if raw.Hall.CountPushSeconds < 1 || raw.Hall.CountPushSeconds > 60 {
+		fail("hall.count_push_seconds must be 1..60")
+	}
+	if raw.Hall.MaxHalls < 1 || raw.Hall.MaxHalls > 2000 {
+		fail("hall.max_halls must be 1..2000")
+	}
+	if raw.Hall.Switch.PerSeconds < 1 || raw.Hall.Switch.Burst < 1 || raw.Hall.Switch.Burst > 20 {
+		fail("hall.switch: per_seconds ≥ 1, burst 1..20")
+	}
 	if h.HeartbeatSeconds < 5 || h.MaxGapSeconds < h.HeartbeatSeconds*2 {
 		fail("presence: heartbeat_seconds ≥ 5 and max_gap_seconds ≥ 2 × heartbeat_seconds")
 	}
@@ -128,6 +152,8 @@ func Load(r io.Reader) (*Config, error) {
 	}
 	return &Config{
 		Seats: raw.Hall.Seats, ChatChannel: raw.Hall.ChatChannel, Epoch: epoch,
+		MergeBelow: raw.Hall.MergeBelow, CountPush: time.Duration(raw.Hall.CountPushSeconds) * time.Second,
+		MaxHalls: raw.Hall.MaxHalls, SwitchEvery: time.Duration(raw.Hall.Switch.PerSeconds) * time.Second, SwitchBurst: raw.Hall.Switch.Burst,
 		Heartbeat: time.Duration(h.HeartbeatSeconds) * time.Second, MaxGap: time.Duration(h.MaxGapSeconds) * time.Second,
 		InsightEvery: time.Duration(ins.EverySeconds) * time.Second, InsightWindow: time.Duration(ins.WindowSeconds) * time.Second,
 		RateMilliPerHour: rw.PointsPerHour * fixedpoint.MilliScale, DailyCapMilli: rw.DailyCapPoints * fixedpoint.MilliScale,
@@ -234,6 +260,29 @@ func (s *Scripts) At(epoch, now time.Time) (*Script, time.Duration) {
 		off -= d
 	}
 	return &s.List[len(s.List)-1], 0 // unreachable: off < Total
+}
+
+// Index is the running number of the lecture being taught at now (loop × len + position): it changes exactly
+// when one lecture ends and the next begins (used to merge near-empty điện between lectures). Nil scripts → -1.
+func (s *Scripts) Index(epoch, now time.Time) int64 {
+	if s == nil || len(s.List) == 0 || s.Total <= 0 {
+		return -1
+	}
+	d := now.Sub(epoch)
+	loops := int64(d / s.Total)
+	off := d % s.Total
+	if off < 0 {
+		off += s.Total
+		loops--
+	}
+	for i := range s.List {
+		l := time.Duration(s.List[i].Seconds) * time.Second
+		if off < l {
+			return loops*int64(len(s.List)) + int64(i)
+		}
+		off -= l
+	}
+	return loops*int64(len(s.List)) + int64(len(s.List)-1)
 }
 
 // LoadScripts reads every *.yaml in dir (README and other files are ignored).

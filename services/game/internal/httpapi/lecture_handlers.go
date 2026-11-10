@@ -37,6 +37,27 @@ func (d Deps) lectureEnter(w http.ResponseWriter, r *http.Request) {
 	d.lectureReply(w, r, "lecture enter", st, err)
 }
 
+// lectureSwitch: POST /lecture/hall {hallId} — move to another open điện with a free cushion. Idempotency-Key is
+// required for client retries; the move itself is idempotent by its target (moving where one already sits is a
+// no-op). Rate-limited per player (lectures.yaml hall.switch).
+func (d Deps) lectureSwitch(w http.ResponseWriter, r *http.Request) {
+	if d.Lectures == nil {
+		unavailable(w)
+		return
+	}
+	if _, ok := idempotencyKey(w, r); !ok {
+		return
+	}
+	var body struct {
+		HallID int `json:"hallId"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	st, err := d.Lectures.Switch(r.Context(), userFrom(r.Context()), body.HallID)
+	d.lectureReply(w, r, "lecture switch", st, err)
+}
+
 // lectureLeave: POST /lecture/leave.
 func (d Deps) lectureLeave(w http.ResponseWriter, r *http.Request) {
 	if d.Lectures == nil {
@@ -93,6 +114,12 @@ func (d Deps) lectureReply(w http.ResponseWriter, r *http.Request, op string, v 
 		writeError(w, 404, "no_character", "Cần tạo nhân vật trước")
 	case errors.Is(err, hall.ErrNotPresent):
 		writeError(w, 409, "not_in_hall", "Bạn chưa ngồi trong Tử Tiêu Cung")
+	case errors.Is(err, hall.ErrHallUnknown):
+		writeError(w, 404, "hall_not_found", "Điện này không mở")
+	case errors.Is(err, hall.ErrHallFull):
+		writeError(w, 409, "hall_full", "Điện này đã kín chỗ")
+	case errors.Is(err, hall.ErrHallsFull):
+		writeError(w, 503, "halls_full", "Tử Tiêu Cung đã kín mọi điện, thử lại sau")
 	case errors.Is(err, hall.ErrInsightClosed):
 		writeError(w, 409, "insight_closed", "Chưa tới lúc ngộ đạo")
 	case errors.Is(err, hall.ErrNothingToPay):

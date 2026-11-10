@@ -9,11 +9,16 @@
 \else
   \set n 4000
 \endif
+-- offset: first user number - 1 (hall.js ID_OFFSET), e.g. -v offset=2000 next to other fixtures. Default 0.
+\if :{?offset}
+\else
+  \set offset 0
+\endif
 
 BEGIN;
 INSERT INTO users (id, email)
 SELECT ('00000000-0000-4000-8000-' || lpad(to_hex(i), 12, '0'))::uuid, 'lt' || i || '@loadtest.invalid'
-FROM generate_series(1, :n) AS i
+FROM generate_series(:offset + 1, :offset + :n) AS i
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO characters (user_id, name)

@@ -50,6 +50,19 @@
 		border-radius: 50% 50% 35% 35%;
 		background: var(--color-ink-800);
 	}
+	.sitter {
+		transform-origin: 50% 100%;
+	}
+	:global(:root[data-fx='full']) .sitter,
+	:global(:root[data-fx='lite'] .seat.is-mine) .sitter {
+		animation: sit-breathe 5.2s var(--ease-in-out-sine) infinite;
+		animation-delay: calc(var(--seat-i, 0) * -0.7s);
+	}
+	@keyframes sit-breathe {
+		50% {
+			transform: scale(1.01, 1.018);
+		}
+	}
 	:global(.seat.is-mine) .sitter {
 		filter: drop-shadow(0 0 5px var(--color-gold-300));
 	}

@@ -9,9 +9,17 @@
 # of the activity bucket (balance-the-gioi-chung.md §3) — continuous listening only spreads it over the day.
 version: 1
 
+# Điện (decision 2026-11-10): the hall is split into numbered điện of `seats` cushions each — everyone in a điện is
+# seated and drawn; nobody listens "outside". Assignment (server, atomic): the đạo lữ's điện if not full → the điện with
+# most same-faction listeners → the fullest non-full → open the next. Script, cycle clock, ngộ đạo and rewards stay
+# global (identical in every điện); only presence, seat events and hall chat are per điện.
 hall:
-  seats: 36                       # cushions drawn in the hall; later arrivals listen "ngoài điện" (same reward)
-  chat_channel: tu_tieu_cung      # chat.yaml channel shown as speech bubbles over seated listeners
+  seats: 60                       # cushions per điện = its capacity
+  chat_channel: tu_tieu_cung      # chat.yaml channel shown as speech bubbles over seated listeners (per điện)
+  merge_below: 20                 # when a lecture ends, a điện with fewer listeners moves into others that have room
+  count_push_seconds: 5           # "đạo hữu đang nghe khắp Hồng Hoang" pushed to hall sockets this often
+  max_halls: 500                  # safety bound (500 × 60 = 30,000 listeners); beyond it entering answers 503
+  switch: { per_seconds: 10, burst: 3 }   # POST /lecture/hall (move to another điện), per player
 
 cycle:
   epoch: "2026-11-01T00:00:00+07:00"   # lecture loop position = (now − epoch) mod Σ script length

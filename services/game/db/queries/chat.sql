@@ -23,8 +23,8 @@ SELECT EXISTS (
 ) AS dup;
 
 -- name: InsertChatMessage :one
-INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at, name_fx, look)
-VALUES (@channel, @user_id, @character_id, @character_name, @stage_id, @body, @raw_body, @idempotency_key, @now, @name_fx, @look)
+INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at, name_fx, look, hall_id)
+VALUES (@channel, @user_id, @character_id, @character_name, @stage_id, @body, @raw_body, @idempotency_key, @now, @name_fx, @look, sqlc.narg(hall_id))
 RETURNING *;
 
 -- name: ListChatMessages :many
@@ -32,6 +32,14 @@ RETURNING *;
 SELECT id, channel, character_id, character_name, stage_id, body, created_at, name_fx, look
 FROM chat_messages
 WHERE channel = @channel AND hidden_at IS NULL AND (@before_id::bigint = 0 OR id < @before_id::bigint)
+ORDER BY id DESC
+LIMIT @lim;
+
+-- name: ListChatHallMessages :many
+-- Hall chat of one điện (decisions 2026-11-10), newest first; @before_id = 0 means "from the newest".
+SELECT id, channel, character_id, character_name, stage_id, body, created_at, name_fx, look, hall_id
+FROM chat_messages
+WHERE channel = @channel AND hall_id = @hall_id::int AND hidden_at IS NULL AND (@before_id::bigint = 0 OR id < @before_id::bigint)
 ORDER BY id DESC
 LIMIT @lim;
 

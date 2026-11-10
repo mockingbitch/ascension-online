@@ -130,9 +130,30 @@ func TestLoadRejects(t *testing.T) {
 			t.Fatalf("%s accepted: %v", v, err)
 		}
 	}
-	bad = strings.Replace(string(b), "seats: 36", "seats: 36\n  extra: 1", 1)
+	bad = strings.Replace(string(b), "seats: 60", "seats: 60\n  extra: 1", 1)
 	if _, err := Load(strings.NewReader(bad)); err == nil {
 		t.Fatal("unknown key accepted")
+	}
+	for _, tc := range []struct{ from, to, want string }{
+		{"merge_below: 20", "merge_below: 60", "merge_below"},
+		{"count_push_seconds: 5", "count_push_seconds: 0", "count_push_seconds"},
+		{"max_halls: 500", "max_halls: 0", "max_halls"},
+		{"burst: 3 }", "burst: 0 }", "hall.switch"},
+	} {
+		bad = strings.Replace(string(b), tc.from, tc.to, 1)
+		if bad == string(b) {
+			t.Fatalf("shipped file has no %q", tc.from)
+		}
+		if _, err := Load(strings.NewReader(bad)); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Fatalf("%s accepted: %v", tc.to, err)
+		}
+	}
+}
+
+func TestShippedHallConfig(t *testing.T) {
+	c := cfg(t)
+	if c.Seats != 60 || c.MergeBelow != 20 || c.CountPush != 5*time.Second || c.MaxHalls < 1 || c.SwitchBurst < 1 {
+		t.Fatalf("hall config %+v", c)
 	}
 }
 
@@ -176,6 +197,15 @@ func TestScriptsAt(t *testing.T) {
 	}
 	if _, ok := sc.Get("b"); !ok {
 		t.Fatal("get b")
+	}
+	// Index: the running lecture number changes exactly at each lecture boundary, monotonic across loops.
+	for _, tt := range []struct {
+		off time.Duration
+		n   int64
+	}{{0, 0}, {49 * time.Second, 0}, {50 * time.Second, 1}, {109 * time.Second, 1}, {110 * time.Second, 2}, {-10 * time.Second, -1}, {-70 * time.Second, -2}} {
+		if got := sc.Index(epoch, epoch.Add(tt.off)); got != tt.n {
+			t.Fatalf("index at %v = %d, want %d", tt.off, got, tt.n)
+		}
 	}
 	var nilScripts *Scripts
 	if s, _ := nilScripts.At(epoch, epoch); s != nil {

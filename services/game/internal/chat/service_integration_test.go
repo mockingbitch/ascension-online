@@ -20,12 +20,14 @@ import (
 type published struct {
 	mu     sync.Mutex
 	events []string
+	topics []string // topic of each event ("" = broadcast)
 }
 
-func (p *published) fn(_ context.Context, typ, id string, _ any) error {
+func (p *published) fn(_ context.Context, topic, typ, id string, _ any) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.events = append(p.events, typ+":"+id)
+	p.topics = append(p.topics, topic)
 	return nil
 }
 
@@ -110,11 +112,11 @@ func TestChatFlow(t *testing.T) {
 	}
 
 	// History: oldest first, paging by id.
-	h, err := svc.History(ctx, "world", 0)
+	h, err := svc.History(ctx, "world", 0, 0)
 	if err != nil || len(h) != 3 || h[0].ID != m1.ID || h[2].ID != m3.ID {
 		t.Fatalf("history %+v %v", h, err)
 	}
-	if older, _ := svc.History(ctx, "world", m3.ID); len(older) != 2 {
+	if older, _ := svc.History(ctx, "world", 0, m3.ID); len(older) != 2 {
 		t.Fatalf("paged %+v", older)
 	}
 
@@ -139,7 +141,7 @@ func TestChatFlow(t *testing.T) {
 	if err := svc.Hide(ctx, admin, m1.ID, "tục"); err != nil {
 		t.Fatal(err)
 	}
-	if h, _ := svc.History(ctx, "world", 0); len(h) != 2 {
+	if h, _ := svc.History(ctx, "world", 0, 0); len(h) != 2 {
 		t.Fatalf("hidden still listed: %+v", h)
 	}
 	if _, err := svc.Mute(ctx, admin, alice, 24, "spam"); err != nil {
@@ -215,8 +217,93 @@ func TestChatNameEffectSnapshot(t *testing.T) {
 	if err != nil || m2.NameFx != "" {
 		t.Fatalf("send 2: %+v %v", m2, err)
 	}
-	hist, err := svc.History(ctx, "world", 0)
+	hist, err := svc.History(ctx, "world", 0, 0)
 	if err != nil || len(hist) != 2 || hist[0].NameFx != "chat_aura:mac_huong" || hist[1].NameFx != "" {
 		t.Fatalf("history: %+v %v", hist, err)
+	}
+}
+
+// Hall chat (decisions 2026-11-10): stored with the sender's điện, delivered on that điện's topic, back-filled per
+// điện; posting needs a cushion; world chat is still broadcast.
+func TestHallChatPerDien(t *testing.T) {
+	ctx := context.Background()
+	pool := testdb.New(t)
+	cb, err := content.LoadAll("../../../../content/catalog")
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 11, 10, 5, 0, 0, 0, time.UTC)
+	pub := &published{}
+	halls := map[uuid.UUID]int{}
+	svc := &chat.Service{Pool: pool, Cat: cb.Chat, Realms: cb.Realms, Mod: cb.Moderation, Now: func() time.Time { return now }, Publish: pub.fn,
+		HallChannel: cb.Lectures.ChatChannel,
+		HallOf: func(_ context.Context, id uuid.UUID) (int, bool, error) {
+			h, ok := halls[id]
+			return h, ok, nil
+		},
+		HallTopic: func(h int) string { return "hall:" + string(rune('0'+h)) },
+	}
+	mk := func(name string) (uuid.UUID, uuid.UUID) {
+		t.Helper()
+		u, ch := uuid.New(), uuid.New()
+		for _, q := range []string{
+			"INSERT INTO users (id, email) VALUES ($1, $2::text || '@t' || md5($3))",
+			"INSERT INTO characters (id, user_id, name) VALUES ($2, $1, $3)",
+			"INSERT INTO character_progressions (character_id, realm_id, stage_id) SELECT $2, 'luyen_khi', 'luyen_khi.tang_3' WHERE $1::uuid IS NOT NULL AND $3::text IS NOT NULL",
+		} {
+			if _, err := pool.Exec(ctx, q, u, ch, name); err != nil {
+				t.Fatal(q, err)
+			}
+		}
+		return u, ch
+	}
+	a, aCh := mk("Điện Nhất")
+	b, bCh := mk("Điện Nhị")
+	c, _ := mk("Ngoài Cung")
+	halls[aCh], halls[bCh] = 1, 2
+	hc := cb.Lectures.ChatChannel
+
+	if _, err := svc.Send(ctx, c, hc, "cho vào với", "k-c-1"); !errors.Is(err, chat.ErrNotInHall) {
+		t.Fatalf("no cushion: %v", err)
+	}
+	m1, err := svc.Send(ctx, a, hc, "điện một", "k-a-1")
+	if err != nil || m1.HallID != 1 {
+		t.Fatalf("a: %+v %v", m1, err)
+	}
+	m2, err := svc.Send(ctx, b, hc, "điện hai", "k-b-1")
+	if err != nil || m2.HallID != 2 {
+		t.Fatalf("b: %+v %v", m2, err)
+	}
+	if _, err := svc.Send(ctx, a, "world", "thế giới", "k-a-2"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pub.topics; len(got) != 3 || got[0] != "hall:1" || got[1] != "hall:2" || got[2] != "" {
+		t.Fatalf("topics %v", got)
+	}
+	// A replay after leaving the hall still answers with the stored message (and does not re-publish).
+	delete(halls, aCh)
+	if again, err := svc.Send(ctx, a, hc, "điện một", "k-a-1"); err != nil || again.ID != m1.ID {
+		t.Fatalf("replay: %+v %v", again, err)
+	}
+	if len(pub.topics) != 3 {
+		t.Fatal("replay re-published")
+	}
+	h1, err := svc.History(ctx, hc, 1, 0)
+	if err != nil || len(h1) != 1 || h1[0].ID != m1.ID {
+		t.Fatalf("history 1: %+v %v", h1, err)
+	}
+	if h2, _ := svc.History(ctx, hc, 2, 0); len(h2) != 1 || h2[0].ID != m2.ID {
+		t.Fatalf("history 2: %+v", h2)
+	}
+	if _, err := svc.History(ctx, hc, 0, 0); !errors.Is(err, chat.ErrHallRequired) {
+		t.Fatalf("hall required: %v", err)
+	}
+	// Hiding a hall message is broadcast (a client may show another điện's backfill).
+	adm, _ := mk("Quản Sự")
+	if err := svc.Hide(ctx, adm, m2.ID, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if last := pub.topics[len(pub.topics)-1]; last != "" {
+		t.Fatalf("hide topic %q", last)
 	}
 }

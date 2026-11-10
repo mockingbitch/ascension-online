@@ -20,7 +20,7 @@ export const HALL = {
 	facade: { z: -17.2, halfW: 13, height: 5.2 },
 	/** pillar rows at ±x, these z */
 	pillars: { x: 6.6, z: [-14, -9, -4, 1, 6], height: 8, radius: 0.42 },
-	cushion: { radius: 0.36, height: 0.18 },
+	cushion: { radius: 0.3, height: 0.18 }, // 60 per điện (decisions 2026-11-10): neighbours in a row never touch
 	/** idle drift amplitude (hall units) at quality full / lite */
 	drift: { full: 0.35, lite: 0.2 },
 	/** cloud sprites at quality full / lite / off */

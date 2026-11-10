@@ -38,7 +38,9 @@ export const help: Record<HelpTopic, HelpEntry> = {
 			'Ngồi trong điện là đang nghe giảng: máy chủ tự đo thời gian bạn có mặt.',
 			'Khi Hồng Quân đặt câu hỏi, thời khắc ngộ đạo mở trong ít phút — bấm "Ngộ đạo" để nhận tu vi theo thời gian đã nghe.',
 			'Sau mỗi lần ngộ đạo cần chờ tới thời khắc kế tiếp. Tu vi từ giảng đạo có hạn mức riêng mỗi ngày; khi đã đủ, lời dạy vẫn được ghi vào Sổ Đạo Ngộ.',
-			'Tin nhắn Luận Đạo hiện thành bong bóng trên đầu đạo hữu trong điện.'
+			'Tử Tiêu Cung chia thành nhiều điện, mỗi điện đủ bồ đoàn cho mọi người ngồi. Bạn được xếp gần đạo lữ, rồi đồng môn; có thể đổi sang điện còn chỗ. Lời giảng và ngộ đạo giống nhau ở mọi điện.',
+			'Tin nhắn Luận Đạo chỉ đạo hữu cùng điện thấy, hiện thành bong bóng trên đầu họ.',
+			'Tên đạo hữu sáng dần theo cảnh giới; hiệu ứng tên mua bằng Tiên Duyên chỉ là nét gạch chân, không lấn cảnh giới.'
 		]
 	},
 	breakthrough: {

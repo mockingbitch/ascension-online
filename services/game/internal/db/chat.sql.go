@@ -34,7 +34,7 @@ func (q *Queries) DeleteOldChatMessages(ctx context.Context, arg DeleteOldChatMe
 }
 
 const getChatMessage = `-- name: GetChatMessage :one
-SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look FROM chat_messages WHERE id = $1
+SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look, hall_id FROM chat_messages WHERE id = $1
 `
 
 func (q *Queries) GetChatMessage(ctx context.Context, id int64) (ChatMessage, error) {
@@ -55,12 +55,13 @@ func (q *Queries) GetChatMessage(ctx context.Context, id int64) (ChatMessage, er
 		&i.CreatedAt,
 		&i.NameFx,
 		&i.Look,
+		&i.HallID,
 	)
 	return i, err
 }
 
 const getChatMessageByKey = `-- name: GetChatMessageByKey :one
-SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look FROM chat_messages WHERE user_id = $1 AND idempotency_key = $2
+SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look, hall_id FROM chat_messages WHERE user_id = $1 AND idempotency_key = $2
 `
 
 type GetChatMessageByKeyParams struct {
@@ -86,12 +87,13 @@ func (q *Queries) GetChatMessageByKey(ctx context.Context, arg GetChatMessageByK
 		&i.CreatedAt,
 		&i.NameFx,
 		&i.Look,
+		&i.HallID,
 	)
 	return i, err
 }
 
 const getChatMessageForUpdate = `-- name: GetChatMessageForUpdate :one
-SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look FROM chat_messages WHERE id = $1 FOR UPDATE
+SELECT id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look, hall_id FROM chat_messages WHERE id = $1 FOR UPDATE
 `
 
 func (q *Queries) GetChatMessageForUpdate(ctx context.Context, id int64) (ChatMessage, error) {
@@ -112,6 +114,7 @@ func (q *Queries) GetChatMessageForUpdate(ctx context.Context, id int64) (ChatMe
 		&i.CreatedAt,
 		&i.NameFx,
 		&i.Look,
+		&i.HallID,
 	)
 	return i, err
 }
@@ -202,9 +205,9 @@ func (q *Queries) HideChatMessage(ctx context.Context, arg HideChatMessageParams
 }
 
 const insertChatMessage = `-- name: InsertChatMessage :one
-INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at, name_fx, look)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look
+INSERT INTO chat_messages (channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, created_at, name_fx, look, hall_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+RETURNING id, channel, user_id, character_id, character_name, stage_id, body, raw_body, idempotency_key, hidden_at, hidden_by, created_at, name_fx, look, hall_id
 `
 
 type InsertChatMessageParams struct {
@@ -219,6 +222,7 @@ type InsertChatMessageParams struct {
 	Now            time.Time   `json:"now"`
 	NameFx         pgtype.Text `json:"name_fx"`
 	Look           []byte      `json:"look"`
+	HallID         pgtype.Int4 `json:"hall_id"`
 }
 
 func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessageParams) (ChatMessage, error) {
@@ -234,6 +238,7 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 		arg.Now,
 		arg.NameFx,
 		arg.Look,
+		arg.HallID,
 	)
 	var i ChatMessage
 	err := row.Scan(
@@ -251,8 +256,74 @@ func (q *Queries) InsertChatMessage(ctx context.Context, arg InsertChatMessagePa
 		&i.CreatedAt,
 		&i.NameFx,
 		&i.Look,
+		&i.HallID,
 	)
 	return i, err
+}
+
+const listChatHallMessages = `-- name: ListChatHallMessages :many
+SELECT id, channel, character_id, character_name, stage_id, body, created_at, name_fx, look, hall_id
+FROM chat_messages
+WHERE channel = $1 AND hall_id = $2::int AND hidden_at IS NULL AND ($3::bigint = 0 OR id < $3::bigint)
+ORDER BY id DESC
+LIMIT $4
+`
+
+type ListChatHallMessagesParams struct {
+	Channel  string `json:"channel"`
+	HallID   int32  `json:"hall_id"`
+	BeforeID int64  `json:"before_id"`
+	Lim      int32  `json:"lim"`
+}
+
+type ListChatHallMessagesRow struct {
+	ID            int64       `json:"id"`
+	Channel       string      `json:"channel"`
+	CharacterID   uuid.UUID   `json:"character_id"`
+	CharacterName string      `json:"character_name"`
+	StageID       string      `json:"stage_id"`
+	Body          string      `json:"body"`
+	CreatedAt     time.Time   `json:"created_at"`
+	NameFx        pgtype.Text `json:"name_fx"`
+	Look          []byte      `json:"look"`
+	HallID        pgtype.Int4 `json:"hall_id"`
+}
+
+// Hall chat of one điện (decisions 2026-11-10), newest first; @before_id = 0 means "from the newest".
+func (q *Queries) ListChatHallMessages(ctx context.Context, arg ListChatHallMessagesParams) ([]ListChatHallMessagesRow, error) {
+	rows, err := q.db.Query(ctx, listChatHallMessages,
+		arg.Channel,
+		arg.HallID,
+		arg.BeforeID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChatHallMessagesRow{}
+	for rows.Next() {
+		var i ListChatHallMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Channel,
+			&i.CharacterID,
+			&i.CharacterName,
+			&i.StageID,
+			&i.Body,
+			&i.CreatedAt,
+			&i.NameFx,
+			&i.Look,
+			&i.HallID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listChatMessages = `-- name: ListChatMessages :many

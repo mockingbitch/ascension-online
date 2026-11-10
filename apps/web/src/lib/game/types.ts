@@ -641,6 +641,8 @@ export interface ChatMessage {
 	nameFx?: string;
 	/** sender look at send time (display only; absent on old messages) */
 	look?: Look;
+	/** điện of a Tử Tiêu Cung message (server-chosen from the sender's cushion); absent elsewhere */
+	hallId?: number;
 }
 export interface ChatHistory {
 	channel: ChatChannel;
@@ -677,8 +679,12 @@ export interface Listener {
 	characterId: string;
 	name: string;
 	stageId: string;
-	/** -1 = listening outside the hall */
+	/** điện (≥ 1) */
+	hallId: number;
+	/** cushion 0…capacity-1 (everyone in a điện is seated) */
 	seat: number;
+	/** listener's faction (display only) */
+	factionId?: string;
 	/** listener look (display only) */
 	look?: Look;
 }
@@ -692,18 +698,38 @@ export interface LectureToday {
 	milli: number;
 	capMilli: number;
 }
+/** one open điện in the picker */
+export interface HallCount {
+	id: number;
+	count: number;
+}
 export interface LectureMe {
 	inHall: boolean;
+	/** the viewer's điện (0 when not in the hall) */
+	hallId: number;
+	/** -1 when not in the hall */
 	seat: number;
 	/** unpaid listening (server clock), paid at the next ngộ đạo */
 	accruedSeconds: number;
+	/** display hints for the hall: my đạo lữ's character id and my faction */
+	partnerId?: string;
+	factionId?: string;
 }
 export interface LectureState {
 	serverNow: string;
 	cycleEpoch: string;
 	cycleSeconds: number;
-	seats: number;
-	listeners: number;
+	/** the điện shown = the viewer's (0 when not in the hall) */
+	hallId: number;
+	/** cushions per điện */
+	capacity: number;
+	/** listeners in this điện */
+	count: number;
+	/** listeners in every điện */
+	globalListeners: number;
+	/** open điện with counts, by number (picker) */
+	halls: HallCount[];
+	/** this điện only */
 	seated: Listener[];
 	chatChannel: string;
 	heartbeatSeconds: number;
@@ -739,15 +765,25 @@ export interface NoteEntry {
 	firstAt: string;
 	times: number;
 }
+/** lecture.leave: `movedTo` > 0 = moved to that điện (switch or merge) */
+export interface LeaveEvent {
+	characterId: string;
+	hallId: number;
+	seat: number;
+	movedTo?: number;
+}
+/** lecture.count, pushed every few seconds to a điện's sockets */
+export interface HallCountEvent {
+	listeners: number;
+	halls: number;
+	hallId: number;
+	count: number;
+}
+/** WS events on topic hall:<n> (packages/contracts/ws-messages.md) */
 export type LectureEvent =
 	| { v: number; type: 'lecture.enter'; id: string; ts: string; data: Listener }
-	| {
-			v: number;
-			type: 'lecture.leave';
-			id: string;
-			ts: string;
-			data: Listener;
-	  };
+	| { v: number; type: 'lecture.leave'; id: string; ts: string; data: LeaveEvent }
+	| { v: number; type: 'lecture.count'; id: string; ts: string; data: HallCountEvent };
 
 // ───── leaderboard ─────
 export interface LeaderboardEntry {

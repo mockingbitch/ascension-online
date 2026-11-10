@@ -1,9 +1,13 @@
 // Tử Tiêu Cung hall state. The server owns presence, listening time and every reward; this store only
 //  - replays Hồng Quân's script on the SERVER clock (offset measured from serverNow), display only,
 //  - heartbeats while the hall screen is open (one interval per open tab — the server measures time itself),
-//  - mirrors seats from GET /lecture/state + WS `lecture.enter/leave`, and hall chat as speech bubbles.
+//  - mirrors the seats of the player's điện from GET /lecture/state + WS `lecture.enter/leave/count` on topic
+//    `hall:<n>` (decisions 2026-11-10: the hall is split into điện; the server picks and moves the điện), and that
+//    điện's hall chat as speech bubbles.
 import { api, ApiError, newIdempotencyKey } from '$lib/api/client';
+import { setRealtimeTopic } from '$lib/api/realtime.svelte';
 import { fxBus } from '$lib/engine/fx/bus';
+import { game } from './store.svelte';
 import type {
 	ChatChannel,
 	ChatMessage,
@@ -16,6 +20,9 @@ import type {
 	NoteEntry
 } from './types';
 
+/** WS topic of a điện (server: hall.Topic). */
+export const hallTopic = (id: number) => `hall:${id}`;
+
 const BUBBLE_MS = 7000;
 const KEEP_MESSAGES = 40;
 const REFRESH_EVERY_BEATS = 4; // full state refresh (seats/counts) every N heartbeats
@@ -25,6 +32,10 @@ export interface Bubble {
 	id: number;
 	text: string;
 	until: number;
+	/** sender's chat aura at send time (shown as the name's accent only) */
+	nameFx?: string;
+	/** local ms time the line arrived (newest bubbles win the limited room) */
+	at: number;
 }
 
 /**
@@ -51,9 +62,18 @@ class Hall {
 	scripts = $state<LectureScripts | null>(null);
 	state = $state<LectureState | null>(null);
 	seats = $state<Record<number, Listener>>({});
-	listeners = $state(0);
+	/** listeners in every điện ("đạo hữu đang nghe khắp Hồng Hoang"): state, then WS lecture.count */
+	globalListeners = $state(0);
+	/** the điện shown (the player's); 0 before entering */
+	hallId = $state(0);
+	switching = $state(false);
+	switchError = $state<string | null>(null);
 	messages = $state<ChatMessage[]>([]);
 	bubbles = $state<Record<string, Bubble>>({});
+	/** the seat squeeze HallView measured on short screens (display only; the fx director projects seats with it) */
+	seatFit = $state<import('$lib/engine/scene/defs/tu_tieu_cung').SeatFit | null>(null);
+	/** characterId → local ms of their last hall chat line (phones show recent speakers' names) */
+	spoke = $state<Record<string, number>>({});
 	notebook = $state<NoteEntry[] | null>(null);
 	lastInsight = $state<InsightResult | null>(null);
 	busy = $state(false);
@@ -78,6 +98,7 @@ class Hall {
 	unread = $state(0);
 	chatVisible = false;
 	#insightKey: string | null = null;
+	#switchKey: { hall: number; key: string } | null = null;
 	#beatTimer: ReturnType<typeof setInterval> | null = null;
 	#tickTimer: ReturnType<typeof setInterval> | null = null;
 	#beats = 0;
@@ -144,12 +165,31 @@ class Hall {
 		return Math.min(live, st.maxSecondsPerInsight);
 	}
 
+	/** listeners in this điện (from the seats we mirror) */
+	get count() {
+		return Object.keys(this.seats).length;
+	}
+	get capacity() {
+		return this.state?.capacity ?? 0;
+	}
+
 	#apply(st: LectureState) {
 		this.#offset = Date.parse(st.serverNow) - Date.now();
 		this.#accruedAt = Date.now();
+		const moved = st.hallId !== this.hallId;
 		this.state = st;
 		this.seats = Object.fromEntries(st.seated.map((l) => [l.seat, l]));
-		this.listeners = st.listeners;
+		this.globalListeners = st.globalListeners;
+		this.hallId = st.hallId;
+		// follow this điện's topic while the hall screen is open (seats, counts, hall chat)
+		setRealtimeTopic(this.active && st.hallId > 0 ? hallTopic(st.hallId) : null);
+		if (moved && this.active && st.hallId > 0) {
+			// another điện = another room: its own chat backlog, no stale bubbles
+			this.messages = [];
+			this.bubbles = {};
+			this.chatLoaded = false;
+			void this.loadChat();
+		}
 		// `current` is the latest moment that opened (even if already closed): claimed → cooldown until the next one.
 		if (st.insight.claimed && !this.claimed.includes(st.insight.current.no)) this.claimed = [...this.claimed, st.insight.current.no];
 	}
@@ -166,8 +206,8 @@ class Hall {
 			]);
 			if (!this.active) return void api.lectureLeave().catch(() => {});
 			this.scripts = sc;
+			this.hallId = 0; // force the chat (re)load for the điện we were given
 			this.#apply(st);
-			void this.loadChat();
 		} catch (e) {
 			this.error = e instanceof ApiError ? e.message : 'Không vào được Tử Tiêu Cung. Thử lại sau.';
 			this.active = false;
@@ -186,11 +226,12 @@ class Hall {
 		if (this.#tickTimer) clearInterval(this.#tickTimer);
 		this.#beatTimer = this.#tickTimer = null;
 		removeEventListener('pagehide', this.#onPageHide);
+		setRealtimeTopic(null);
 		void api.lectureLeave().catch(() => {});
 		if (this.state)
 			this.state = {
 				...this.state,
-				me: { inHall: false, seat: -1, accruedSeconds: 0 }
+				me: { inHall: false, hallId: 0, seat: -1, accruedSeconds: 0 }
 			};
 	}
 
@@ -243,13 +284,47 @@ class Hall {
 		}
 	}
 
+	/** Move to another điện (the picker). The server checks it is open and has a free cushion. */
+	async switchHall(id: number): Promise<boolean> {
+		if (this.switching || id === this.hallId) return false;
+		this.switching = true;
+		this.switchError = null;
+		if (this.#switchKey?.hall !== id) this.#switchKey = { hall: id, key: newIdempotencyKey() };
+		try {
+			this.#apply(await api.lectureSwitch(id, this.#switchKey.key));
+			this.#switchKey = null;
+			return true;
+		} catch (e) {
+			if (e instanceof ApiError && e.status < 500) this.#switchKey = null;
+			this.switchError = e instanceof ApiError ? e.message : 'Mất kết nối, thử lại.';
+			// the list may be stale (the điện filled up or closed): refresh it
+			if (e instanceof ApiError && (e.code === 'hall_full' || e.code === 'hall_not_found')) void this.refresh();
+			return false;
+		} finally {
+			this.switching = false;
+		}
+	}
+
+	/** Re-read the hall (counts, picker list, seats). */
+	async refresh() {
+		if (!this.active) return;
+		try {
+			this.#apply(await api.lectureState());
+		} catch {
+			/* next heartbeat refresh */
+		}
+	}
+
 	async loadNotebook() {
 		this.notebook = (await api.lectureNotebook()).entries;
 	}
 
 	async loadChat() {
+		const hallId = this.hallId;
+		if (hallId <= 0) return;
 		try {
-			const h = await api.chatHistory(this.channel);
+			const h = await api.chatHistory(this.channel, 0, fetch, hallId);
+			if (hallId !== this.hallId) return; // moved meanwhile
 			this.messages = h.messages.slice(-KEEP_MESSAGES);
 			this.chatChannel = h.channel;
 			this.maxChars = h.maxChars;
@@ -280,9 +355,10 @@ class Hall {
 		this.messages = [...this.messages, m].slice(-KEEP_MESSAGES);
 		if (!this.chatVisible) this.unread = Math.min(99, this.unread + 1);
 		const until = Date.now() + BUBBLE_MS;
+		this.spoke = { ...this.spoke, [m.characterId]: Date.now() };
 		this.bubbles = {
 			...this.bubbles,
-			[m.characterId]: { id: m.id, text: m.text, until }
+			[m.characterId]: { id: m.id, text: m.text, until, nameFx: m.nameFx, at: Date.now() }
 		};
 		setTimeout(() => {
 			if (this.bubbles[m.characterId]?.id === m.id) {
@@ -295,7 +371,7 @@ class Hall {
 	// ── realtime hooks ──
 	onChat(m: ChatMessage | null, hiddenId?: number) {
 		if (m) {
-			if (this.active && m.channel === this.channel) this.#addMessage(m);
+			if (this.active && m.channel === this.channel && m.hallId === this.hallId) this.#addMessage(m);
 		} else if (hiddenId !== undefined) {
 			this.messages = this.messages.filter((x) => x.id !== hiddenId);
 			for (const [k, b] of Object.entries(this.bubbles)) {
@@ -309,17 +385,32 @@ class Hall {
 
 	onEvent(e: LectureEvent) {
 		if (!this.active) return;
-		const l = e.data;
-		const known = Object.values(this.seats).some((s) => s.characterId === l.characterId);
-		if (e.type === 'lecture.enter') {
-			if (l.seat >= 0) this.seats = { ...this.seats, [l.seat]: l };
-			if (!known) this.listeners += 1;
-		} else {
-			const seats = { ...this.seats };
-			for (const [k, s] of Object.entries(seats)) if (s.characterId === l.characterId) delete seats[Number(k)];
-			this.seats = seats;
-			this.listeners = Math.max(Object.keys(seats).length, this.listeners - 1);
+		if (e.type === 'lecture.count') {
+			if (e.data.hallId === this.hallId) this.globalListeners = e.data.listeners;
+			return;
 		}
+		const l = e.data;
+		if (l.hallId !== this.hallId) return; // a late event of the điện we just left
+		const seats = { ...this.seats };
+		for (const [k, s] of Object.entries(seats)) if (s.characterId === l.characterId) delete seats[Number(k)];
+		if (e.type === 'lecture.enter') {
+			seats[e.data.seat] = e.data;
+			if (!this.seats[e.data.seat] && !Object.values(this.seats).some((s) => s.characterId === l.characterId)) this.globalListeners += 1;
+		} else if (!e.data.movedTo) {
+			this.globalListeners = Math.max(Object.keys(seats).length, this.globalListeners - 1);
+		}
+		this.seats = seats;
+		// I was moved (merge, or my own switch from another tab): follow the server to the new điện
+		if (e.type === 'lecture.leave' && e.data.movedTo && this.state?.me.inHall && l.characterId === this.myId) void this.refresh();
+	}
+
+	get myId() {
+		return game.character?.id ?? null;
+	}
+
+	onReconnect() {
+		if (!this.active) return;
+		void this.refresh().then(() => this.loadChat());
 	}
 }
 
@@ -333,3 +424,4 @@ export function markHallChatVisible(v: boolean) {
 
 export const onHallChat = (m: ChatMessage | null, hiddenId?: number) => hall.onChat(m, hiddenId);
 export const onHallEvent = (e: LectureEvent) => hall.onEvent(e);
+export const onHallReconnect = () => hall.onReconnect();
