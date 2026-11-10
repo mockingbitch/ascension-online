@@ -8,6 +8,19 @@ make up                 # full stack, app at http://localhost:2000
 make monitoring-up      # same + Prometheus + Grafana (docker compose --profile monitoring up -d --build)
 ```
 
+## Ảnh game dùng Git LFS (bắt buộc trên máy chủ)
+
+Ảnh trong `apps/web/src/lib/assets/art/` được lưu bằng Git LFS. Máy chủ phải cài LFS **trước** khi build, nếu không
+mỗi ảnh chỉ là file trỏ ~130 byte và game không hiện ảnh. `npm run build` (cả trong `web.Dockerfile`) sẽ dừng với
+thông báo nếu còn file trỏ.
+
+```bash
+sudo apt-get install -y git-lfs     # một lần
+git lfs install                     # một lần cho user
+git pull && git lfs pull            # mỗi lần cập nhật
+docker compose --env-file .env -f deployments/docker-compose.yml up -d --build web
+```
+
 ## Client IP behind Cloudflare (rate limits, salted IP hash)
 
 Prod runs behind Cloudflare, so every TCP peer nginx sees is a Cloudflare edge. The chain that keeps the real client:
@@ -120,6 +133,26 @@ api port is reachable; in prod the api is only behind nginx, which overwrites th
 (`/world`, `/realms`, leaderboard), settle, breakthrough preview, lecture enter + heartbeat, WS connections, world chat
 inside its rate limit. Thresholds follow GDD §26 (p95 < 200 ms REST, < 300 ms public reads/leaderboard, < 1 % errors,
 no 429). Watch the Grafana dashboard while it runs.
+
+### Tử Tiêu Cung điện at 10k (`loadtest/hall.js`, decisions 2026-11-10)
+
+N players enter the hall over REST (the server picks the điện), each opens a WebSocket, follows `hall:<điện>`, beats
+every 30 s and 10 % post hall chat every ~20 s. Thresholds: `hall_leaks == 0` (no socket ever gets another điện's
+seat/count/chat event), REST p95 < 200 ms, WS connect p95 < 500 ms, < 1 % errors, no 429.
+
+```bash
+# local smoke (any dev api with AUTH_DEV_HEADER=true + TRUST_PROXY=true; users from seed.sql, offset optional)
+docker compose -f deployments/docker-compose.yml exec -T postgres psql -U tiendao -d tiendao -v n=300 -v offset=0 < loadtest/seed.sql
+docker run --rm -i --network host -v $PWD/loadtest:/scripts:ro -e BASE_URL=http://127.0.0.1:2080 \
+  -e VUS=300 -e RAMP=30s -e HOLD=60s grafana/k6:1.1.0 run /scripts/hall.js
+```
+
+**The 10k launch gate:** staging (never prod data) with 2–3 api instances behind nginx (sticky WebSocket: `hash
+$remote_addr consistent` or a cookie), `WS_MAX_CLIENTS` ≥ 6000 per instance, `ulimit -n` ≥ 65535 on api and nginx,
+Redis on its own host. Seed 10,000 users (`-v n=10000`), then run `VUS=10000 RAMP=3m HOLD=5m` split over ≥ 2 load
+machines (`-e VUS=5000 -e ID_OFFSET=0` and `-e VUS=5000 -e ID_OFFSET=5000`; one k6 box tops out around 5k sockets).
+Watch Grafana: api CPU/heap, `ws_clients`, Redis CPU (the hall Lua scripts) and p95s; expect ~167 điện. Pass =
+thresholds green on every load machine + no api restart. Clean up with `make loadtest-clean`.
 
 ## Launch / reset (`opsctl`)
 
